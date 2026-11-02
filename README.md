@@ -69,7 +69,7 @@ Güvenlik duvarı açıksa portu izin verin, örneğin: `sudo ufw allow 80/tcp`.
    Kurulumda "Use WSL 2 instead of Hyper-V" seçili kalsın. Bitince bilgisayarı yeniden başlatın.
    Docker Desktop ayarlarında "Start Docker Desktop when you sign in" seçili olsun.
 2. Projeyi indirin:
-   - Git varsa: `git clone https://github.com/KULLANICI/parca-takip-erp.git C:\ParcaTakip`
+   - Git varsa: `git clone https://github.com/serdevir91/parca-takip-erp.git C:\ParcaTakip`
    - Git yoksa: GitHub sayfasında **Code > Download ZIP**, ZIP'i `C:\ParcaTakip` klasörüne açın.
    Klasör yolunda Türkçe karakter ve boşluk olmaması önerilir.
 3. `C:\ParcaTakip\KURULUM.bat` dosyasına çift tıklayın ve yönetici iznini onaylayın.
