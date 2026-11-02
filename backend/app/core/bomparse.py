@@ -1,0 +1,219 @@
+"""SolidWorks BOM CSV parser (';' separated, utf-8-sig).
+
+Header: Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+"""
+from __future__ import annotations
+
+import csv
+import io
+import re
+from dataclasses import dataclass, field
+from typing import Iterable
+
+from .fastener import FastenerMatch, FastenerMatcher
+from .normalize import strip_cad_ext
+
+EXPECTED_HEADER = ["Level", "Dosya Adı", "Reference Count", "Malzeme", "Ağırlık", "Revizyon", "TeminSekli", "Kaplama Bilgisi"]
+
+ROW_PART = "Parça"
+ROW_ASSEMBLY = "Montaj"
+ROW_FASTENER = "Bağlantı Elemanı"
+ROW_IN_PURCHASED = "Satın alınan montajın içi"
+
+TEMIN_IMALAT = "İmalat"
+TEMIN_HAZIR = "Hazır Alım"
+TEMIN_NONE = "Belirtilmemiş"
+TEMIN_CHOICES = [TEMIN_IMALAT, TEMIN_HAZIR, TEMIN_NONE]
+
+ROOT_GROUP = "(Ana montaj)"
+
+DEFAULT_PART_NO_PATTERNS = [
+    r"^T\d{2}_\d{4}_\d{4}(?:-[A-Za-z0-9]{1,3}|_\d{1,2})?$",   # in-house part numbers
+    r"^\d+(?:\.\d+)+(?:\.R\d+)?(?:_\d+)?$",                    # supplier catalogue codes
+]
+
+_UNSPECIFIED = ("not specified", "belirli değil")
+
+
+class BomParseError(ValueError):
+    pass
+
+
+@dataclass
+class BomRow:
+    seq: int
+    level: str
+    depth: int
+    parent_level: str | None
+    file_name: str
+    part_no: str
+    ext: str
+    qty: int
+    multiplier: int
+    total_qty: int
+    material: str
+    weight: float | None
+    rev: str
+    procurement: str
+    coating: str
+    parent_part_no: str
+    main_group: str
+    in_purchased: bool
+    is_purchased_assembly: bool
+    fastener: FastenerMatch | None
+    nonstandard: bool
+    row_type: str = ""
+
+    @property
+    def is_assembly(self) -> bool:
+        return self.ext == "SLDASM"
+
+
+@dataclass
+class ParsedBom:
+    rows: list[BomRow]
+    root_part_no: str
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def fastener_rows(self) -> list[BomRow]:
+        return [r for r in self.rows if r.fastener and not r.in_purchased]
+
+    @property
+    def non_fastener_rows(self) -> list[BomRow]:
+        return [r for r in self.rows if not r.fastener]
+
+    def fastener_totals(self) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for r in self.fastener_rows:
+            out[r.fastener.key] = out.get(r.fastener.key, 0) + r.total_qty
+        return out
+
+    def part_totals(self, include_in_purchased: bool = False) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for r in self.rows:
+            if r.fastener or (r.in_purchased and not include_in_purchased):
+                continue
+            out[r.part_no] = out.get(r.part_no, 0) + r.total_qty
+        return out
+
+
+def clean_material(mat: str) -> str:
+    m = (mat or "").strip()
+    if not m:
+        return ""
+    low = m.lower()
+    if any(u in low for u in _UNSPECIFIED):
+        return ""
+    return m
+
+
+def _parse_weight(w: str) -> float | None:
+    w = (w or "").strip()
+    if not w:
+        return None
+    try:
+        return float(w.replace(",", ".")) if w.count(",") == 1 and "." not in w else float(w)
+    except ValueError:
+        return None
+
+
+def decode_csv(data: bytes) -> str:
+    for enc in ("utf-8-sig", "cp1254", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    raise BomParseError("CSV kodlaması çözülemedi")
+
+
+def read_rows(text: str) -> list[list[str]]:
+    reader = csv.reader(io.StringIO(text), delimiter=";")
+    try:
+        header = next(reader)
+    except StopIteration as e:
+        raise BomParseError("CSV boş") from e
+    header = [h.strip().lstrip("﻿") for h in header]
+    if [h.lower() for h in header[:8]] != [h.lower() for h in EXPECTED_HEADER]:
+        raise BomParseError("Beklenmeyen başlık: " + ";".join(header))
+    rows = []
+    for x in reader:
+        if x and x[0].strip():
+            cells = [c.strip() for c in x] + [""] * 8
+            rows.append(cells[:8])
+    if not rows:
+        raise BomParseError("CSV satır içermiyor")
+    return rows
+
+
+def parse_bom(
+    data: bytes | str,
+    purchased_assemblies: Iterable[str] = (),
+    matcher: FastenerMatcher | None = None,
+    part_no_patterns: Iterable[str] = DEFAULT_PART_NO_PATTERNS,
+) -> ParsedBom:
+    """Parse a BOM. `purchased_assemblies` are part numbers the user flagged as a single purchased item
+    (their effective temin becomes 'Hazır Alım'); their children become 'Satın alınan montajın içi'."""
+    text = decode_csv(data) if isinstance(data, bytes) else data
+    raw = read_rows(text)
+    matcher = matcher or FastenerMatcher()
+    flagged = set(purchased_assemblies)
+    pn_rx = [re.compile(p) for p in part_no_patterns]
+
+    out: list[BomRow] = []
+    qty_at: dict[str, int] = {}
+    name_at: dict[str, str] = {}
+    hazir_at: list[str] = []
+    warnings: list[str] = []
+    seen_levels: set[str] = set()
+
+    for seq, (lvl, name, cnt, mat, w, rev, temin, kap) in enumerate(raw):
+        if not re.fullmatch(r"\d+(?:\.\d+)*", lvl):
+            raise BomParseError(f"Satır {seq + 2}: geçersiz seviye '{lvl}'")
+        if lvl in seen_levels:
+            raise BomParseError(f"Satır {seq + 2}: tekrarlanan seviye '{lvl}'")
+        seen_levels.add(lvl)
+        depth = lvl.count(".")
+        par = lvl.rsplit(".", 1)[0] if depth else None
+        if par is not None and par not in qty_at:
+            raise BomParseError(f"Satır {seq + 2}: üst seviye '{par}' bulunamadı")
+        mult = qty_at.get(par, 1) if par else 1
+        try:
+            q = int(float(cnt.replace(",", "."))) if cnt else 0
+        except ValueError as e:
+            raise BomParseError(f"Satır {seq + 2}: geçersiz adet '{cnt}'") from e
+        tot = q * mult
+        qty_at[lvl] = tot
+        base = strip_cad_ext(name)
+        name_at[lvl] = base
+        ext = name.rsplit(".", 1)[-1].upper() if "." in name else ""
+        if ext not in ("SLDPRT", "SLDASM"):
+            ext = "SLDPRT"
+        in_hazir = par is not None and any(par == h or par.startswith(h + ".") for h in hazir_at)
+        eff_temin = temin
+        if ext == "SLDASM" and base in flagged:
+            eff_temin = TEMIN_HAZIR
+        is_purch = ext == "SLDASM" and eff_temin == TEMIN_HAZIR and not in_hazir
+        if is_purch:
+            hazir_at.append(lvl)
+        top = name_at.get(".".join(lvl.split(".")[:2])) if depth >= 1 else base
+        fx = matcher.match(name) if ext == "SLDPRT" else None
+        nonstd = not fx and not in_hazir and depth > 0 and not any(rx.match(base) for rx in pn_rx)
+        row = BomRow(
+            seq=seq, level=lvl, depth=depth, parent_level=par, file_name=name, part_no=base, ext=ext, qty=q,
+            multiplier=mult, total_qty=tot, material=clean_material(mat), weight=_parse_weight(w), rev=rev,
+            procurement=eff_temin, coating=kap, parent_part_no=name_at.get(par, "") if par else "",
+            main_group=top if depth > 1 else ROOT_GROUP, in_purchased=in_hazir,
+            is_purchased_assembly=is_purch, fastener=fx, nonstandard=nonstd)
+        if in_hazir:
+            row.row_type = ROW_IN_PURCHASED
+        elif fx:
+            row.row_type = ROW_FASTENER
+        elif ext == "SLDASM":
+            row.row_type = ROW_ASSEMBLY
+        else:
+            row.row_type = ROW_PART
+        out.append(row)
+
+    root = out[0].part_no if out and out[0].depth == 0 else ""
+    return ParsedBom(rows=out, root_part_no=root, warnings=warnings)

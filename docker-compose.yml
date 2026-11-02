@@ -1,0 +1,79 @@
+# Parça Takip ERP - offline LAN deployment.
+# Start:  docker compose up -d        (settings come from .env, see .env.example)
+# No internet is needed at runtime: images are built once (or loaded with deploy/offline_import.*).
+name: parca-takip
+
+x-backend-env: &backend-env
+  ERP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD:-erp}@db:5432/${POSTGRES_DB:-erp}
+  ERP_JWT_SECRET: ${ERP_JWT_SECRET:-change-me}
+  ERP_ADMIN_USER: ${ERP_ADMIN_USER:-admin}
+  ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD:-admin}
+  ERP_DATA_DIR: /data
+  ERP_BACKUP_DIR: /backups
+  ERP_BACKUP_KEEP_DAYS: ${ERP_BACKUP_KEEP_DAYS:-14}
+  ERP_MAX_UPLOAD_MB: ${ERP_MAX_UPLOAD_MB:-2048}
+  ERP_UPDATE_FEED_URL: ${ERP_UPDATE_FEED_URL:-}
+  TZ: ${TZ:-Europe/Istanbul}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp}
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+      TZ: ${TZ:-Europe/Istanbul}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    image: ${ERP_IMAGE_PREFIX:-parca-takip}-backend:${ERP_TAG:-latest}
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+    volumes:
+      - erpdata:/data
+      - ${ERP_BACKUP_PATH:-erpbackups}:/backups
+
+  backup:
+    image: ${ERP_IMAGE_PREFIX:-parca-takip}-backend:${ERP_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      <<: *backend-env
+      ERP_BACKUP_TIME: ${ERP_BACKUP_TIME:-02:00}
+    command: ["python", "-m", "app.cli", "backup", "--daemon"]
+    healthcheck:
+      disable: true
+    volumes:
+      - erpdata:/data:ro
+      - ${ERP_BACKUP_PATH:-erpbackups}:/backups
+
+  frontend:
+    image: ${ERP_IMAGE_PREFIX:-parca-takip}-frontend:${ERP_TAG:-latest}
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${ERP_HTTP_PORT:-80}:80"
+
+volumes:
+  pgdata:
+  erpdata:
+  erpbackups:

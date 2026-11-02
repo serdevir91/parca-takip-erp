@@ -1,0 +1,437 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { api, download } from "../api/client";
+import { useAuth } from "../api/auth";
+import BulkEdit from "../components/BulkEdit";
+import DataGrid, { type GridColumn } from "../components/DataGrid";
+import ExcelImportModal from "../components/ExcelImportModal";
+import { Page, useProject } from "../components/Layout";
+import PartDetail, { type PartChoices, type PartRow } from "../components/PartDetail";
+import T35ImportModal from "../components/T35ImportModal";
+import { errText, useToast } from "../components/Toast";
+import { statusStyle } from "../theme/theme";
+
+// backend/app/api/excel.py: GET /excel/{project_id}/parca-takip and /takip-listesi
+const EXPORT_PARCA_TAKIP = (pid: number) => `/excel/${pid}/parca-takip`;
+const EXPORT_TAKIP_LISTESI = (pid: number) => `/excel/${pid}/takip-listesi`;
+
+type View = "tree" | "flat";
+type PartsResp = { version_id: number | null; view: string; total: number; count: number; total_qty: number; rows: PartRow[] };
+type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean };
+type EditVars = { partNo: string; changes: Record<string, unknown> };
+
+const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived" };
+const RESET_PROC = "(BOM değerine dön)";
+const NEW_COLOR = "D9EAD3";
+const IMALAT = "İmalat";
+const HAZIR = "Hazır Alım";
+const NONE = "Belirtilmemiş";
+const STATUS_MAP: Record<string, Record<string, string>> = {
+  [IMALAT]: { Bekliyor: "Üretilmedi", "Devam ediyor": "Üretilmedi", "Tamamlandı": "Üretildi" },
+  [HAZIR]: { Bekliyor: "Sipariş Verilmedi", "Devam ediyor": "Sipariş Verildi", "Tamamlandı": "Sipariş Teslim Edildi" },
+  Montaj: { Bekliyor: "Montajlanmadı", "Devam ediyor": "Montajlanmadı", "Tamamlandı": "Montajlandı" },
+};
+const SERVER_FIELDS = ["progress", "procurement_override", "note", "t35_note", "manufacturer", "material_status",
+  "is_new", "updated_at", "updated_by"] as const;
+
+function load<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : (JSON.parse(v) as T);
+  } catch {
+    return fallback;
+  }
+}
+function save(key: string, v: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ }
+}
+
+const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("tr-TR"));
+const getRowId = (r: GridRow) => r._key;
+const rowStyle = (r: GridRow): CSSProperties | undefined => (r.archived ? { opacity: 0.55 } : undefined);
+const tracked = (r: PartRow) => !r.fastener && !r.archived && (r.depth ?? 1) > 0;
+
+function drawingText(r: PartRow): string {
+  if (r.archived || r.fastener) return "";
+  if (r.has_drawing) return `Var${r.drawing_rev ? ` (Rev ${r.drawing_rev})` : ""}${r.drawing_rev_mismatch ? " · Rev farkı" : ""}`;
+  if (r.procurement === IMALAT && !r.is_assembly && !r.in_purchased) return "Resim yok";
+  return "";
+}
+
+/** Local copy of backend derive_status, used only for the optimistic cell colour until the server answers. */
+function patchRow(r: PartRow, ch: Record<string, unknown>, colors: Record<string, string>): PartRow {
+  const n: PartRow = { ...r, ...(ch as Partial<PartRow>) };
+  if ("procurement_override" in ch && !r.is_purchased_assembly && !r.archived) {
+    const o = ch.procurement_override as string | null;
+    n.procurement = o || r.procurement_csv || (r.is_assembly ? "" : NONE);
+  }
+  if (!r.fastener && !r.in_purchased && !r.archived) {
+    const proc = n.procurement ?? "";
+    const kind = proc === HAZIR ? HAZIR : r.is_assembly && !r.is_purchased_assembly ? "Montaj" : proc === IMALAT ? IMALAT : null;
+    n.status = kind ? STATUS_MAP[kind][n.progress] ?? STATUS_MAP[kind].Bekliyor : "Temin seçilmedi";
+    n.status_color = colors[n.status] ?? r.status_color;
+  }
+  return n;
+}
+
+function mergeServer(r: PartRow, s: PartRow): PartRow {
+  const n: PartRow = { ...r };
+  for (const f of SERVER_FIELDS) if (f in s) (n as Record<string, unknown>)[f] = s[f];
+  if (!r.fastener && !r.in_purchased && !r.archived && s.status !== undefined) {
+    n.status = s.status;
+    n.status_color = s.status_color;
+    n.status_kind = s.status_kind;
+    if (s.procurement !== undefined) n.procurement = s.procurement;
+  }
+  return n;
+}
+
+export default function Parts() {
+  const { pid, project } = useProject();
+  const { canEdit } = useAuth();
+  const toast = useToast();
+  const qc = useQueryClient();
+
+  const [view, setView] = useState<View>(() => (load<string>(LS.view, "tree") === "flat" ? "flat" : "tree"));
+  const [inPurchased, setInPurchased] = useState<boolean>(() => load(LS.inPurchased, false));
+  const [showArchived, setShowArchived] = useState<boolean>(() => load(LS.archived, false));
+  const [widths] = useState<Record<string, number>>(() => load(LS.widths, {}));
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [selection, setSelection] = useState<RowSelectionState>({});
+  const [detail, setDetail] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [imp, setImp] = useState<"t35" | "excel" | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [visibleQty, setVisibleQty] = useState(0);
+
+  useEffect(() => save(LS.view, view), [view]);
+  useEffect(() => save(LS.inPurchased, inPurchased), [inPurchased]);
+  useEffect(() => save(LS.archived, showArchived), [showArchived]);
+  useEffect(() => setSelection({}), [view, inPurchased, showArchived]);
+
+  const choicesQ = useQuery({
+    queryKey: ["partChoices", pid],
+    queryFn: () => api.get<PartChoices>(`/projects/${pid}/parts/choices`),
+    enabled: !!pid, staleTime: 60_000,
+  });
+  const choices = choicesQ.data;
+  const colors = useMemo(() => choices?.colors ?? {}, [choices]);
+
+  const mainQ = useQuery({
+    queryKey: ["parts", pid, view, inPurchased],
+    queryFn: () => api.get<PartsResp>(`/projects/${pid}/parts?view=${view}${inPurchased ? "" : "&in_purchased=false"}`),
+    enabled: !!pid,
+  });
+  const archQ = useQuery({
+    queryKey: ["parts", pid, "archived"],
+    queryFn: () => api.get<PartsResp>(`/projects/${pid}/parts?archived=true`),
+    enabled: !!pid && showArchived,
+  });
+
+  // Tree: mark rows with children, then drop descendants of collapsed rows (rows come in BOM/DFS order).
+  const baseRows = useMemo<GridRow[]>(() => {
+    const rows = mainQ.data?.rows ?? [];
+    if (view === "flat") {
+      return rows.filter((r) => !r.is_assembly || r.is_purchased_assembly).map((r) => ({ ...r, _key: `p${r.part_no}` }));
+    }
+    const parents = new Set<string>();
+    for (const r of rows) if (r.parent_level) parents.add(r.parent_level);
+    const out: GridRow[] = [];
+    let skip = Infinity;
+    for (const r of rows) {
+      const d = r.depth ?? 0;
+      if (d > skip) continue;
+      skip = Infinity;
+      const key = `t${r.id}`;
+      const kids = !!r.level && parents.has(r.level);
+      const open = !collapsed.has(key);
+      out.push({ ...r, _key: key, _kids: kids, _open: open });
+      if (kids && !open) skip = d;
+    }
+    return out;
+  }, [mainQ.data, view, collapsed]);
+
+  const data = useMemo<GridRow[]>(() => {
+    if (!showArchived || !archQ.data) return baseRows;
+    return [...baseRows, ...archQ.data.rows.map((r) => ({ ...r, archived: true, _key: `a${r.part_no}` }))];
+  }, [baseRows, showArchived, archQ.data]);
+
+  const toggleRef = useRef<(key: string) => void>(() => {});
+  toggleRef.current = (key: string) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
+  const collapseAll = () => {
+    const rows = mainQ.data?.rows ?? [];
+    const parents = new Set<string>();
+    for (const r of rows) if (r.parent_level) parents.add(r.parent_level);
+    setCollapsed(new Set(rows.filter((r) => (r.depth ?? 0) >= 1 && r.level && parents.has(r.level)).map((r) => `t${r.id}`)));
+  };
+
+  // ---------- inline edit (optimistic) ----------
+  const updateRows = useCallback((partNo: string, fn: (r: PartRow) => PartRow) => {
+    qc.setQueriesData<unknown>({ queryKey: ["parts", pid] }, (d: unknown) => {
+      const resp = d as PartsResp | undefined;
+      if (!resp || !Array.isArray(resp.rows)) return d;
+      return { ...resp, rows: resp.rows.map((r) => (r.part_no === partNo ? fn(r) : r)) };
+    });
+  }, [qc, pid]);
+
+  const edit = useMutation({
+    mutationFn: ({ partNo, changes }: EditVars) =>
+      api.patch<{ changed: number; part: PartRow }>(`/projects/${pid}/parts/${encodeURIComponent(partNo)}`, changes),
+    onMutate: async ({ partNo, changes }: EditVars) => {
+      await qc.cancelQueries({ queryKey: ["parts", pid] });
+      const snap = qc.getQueriesData<unknown>({ queryKey: ["parts", pid] });
+      updateRows(partNo, (r) => patchRow(r, changes, colors));
+      return { snap };
+    },
+    onError: (e, _v, ctx) => {
+      ctx?.snap.forEach(([k, d]) => qc.setQueryData(k, d));
+      toast(errText(e), true);
+    },
+    onSuccess: (res, { partNo }) => {
+      if (res?.part) updateRows(partNo, (r) => mergeServer(r, res.part));
+      qc.invalidateQueries({ queryKey: ["parts", pid, "detail", partNo] });
+      qc.invalidateQueries({ queryKey: ["dashboard", pid] });
+    },
+  });
+  const mutate = edit.mutate;
+
+  const onEdit = useCallback((r: GridRow, col: string, v: string) => {
+    let changes: Record<string, unknown>;
+    switch (col) {
+      case "procurement": changes = { procurement_override: v === RESET_PROC ? null : v }; break;
+      case "is_new": changes = { is_new: v === "Yeni" }; break;
+      case "progress": case "manufacturer": case "material_status": case "note": case "t35_note":
+        changes = { [col]: v }; break;
+      default: return;
+    }
+    mutate({ partNo: r.part_no, changes });
+  }, [mutate]);
+
+  // ---------- columns ----------
+  const columns = useMemo<GridColumn<GridRow>[]>(() => {
+    const w = (id: string, d: number) => widths[id] ?? d;
+    const can = (r: GridRow) => tracked(r);
+    const mans = choices?.manufacturers ?? [];
+    return [
+      {
+        id: "level", header: "Seviye", size: w("level", view === "tree" ? 170 : 110),
+        accessorFn: (r) => (r.levels && r.levels.length > 1 ? `${r.levels[0]} (+${r.levels.length - 1})` : r.level ?? ""),
+        cell: ({ row, getValue }) => {
+          const r = row.original;
+          if (view !== "tree" || r.archived) return getValue() as string;
+          return (
+            <span style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
+              {r._kids ? (
+                <button className="tree-toggle" aria-label={r._open ? "Daralt" : "Genişlet"} aria-expanded={r._open}
+                  onClick={(e) => { e.stopPropagation(); toggleRef.current(r._key); }}>{r._open ? "▾" : "▸"}</button>
+              ) : <span className="tree-spacer" />}
+              {r.level}
+            </span>
+          );
+        },
+      },
+      {
+        id: "part_no", accessorKey: "part_no", header: "Parça No", size: w("part_no", 200),
+        cellStyle: (r) => (r.is_new ? statusStyle(colors.new || NEW_COLOR) : undefined),
+        cell: ({ row }) => <span style={{ fontWeight: row.original.is_assembly ? 600 : 400 }}>{row.original.part_no}</span>,
+      },
+      { id: "row_type", header: "Tip", size: w("row_type", 120), accessorFn: (r) => (r.archived ? "Arşivlenmiş" : r.row_type ?? "") },
+      { id: "main_group", accessorKey: "main_group", header: "Ana Grup", size: w("main_group", 150) },
+      { id: "parent_part_no", accessorKey: "parent_part_no", header: "Üst Montaj", size: w("parent_part_no", 170) },
+      { id: "qty", accessorKey: "qty", header: "Adet", size: w("qty", 70), cell: ({ getValue }) => fmt(getValue() as number) },
+      { id: "total_qty", accessorKey: "total_qty", header: "Toplam Adet", size: w("total_qty", 95), cell: ({ getValue }) => fmt(getValue() as number) },
+      { id: "material", accessorKey: "material", header: "Malzeme", size: w("material", 130) },
+      { id: "weight", accessorKey: "weight", header: "Ağırlık", size: w("weight", 80), cell: ({ getValue }) => fmt(getValue() as number | null) },
+      {
+        id: "procurement", header: "Temin Şekli", size: w("procurement", 120),
+        accessorFn: (r) => r.procurement ?? r.procurement_override ?? "",
+        cellStyle: (r) => (r.procurement === NONE ? { color: "var(--danger)", fontWeight: 600 } : undefined),
+        cell: ({ row, getValue }) => (
+          <>{getValue() as string}{row.original.procurement_override ? <span className="muted" title="Elle değiştirildi"> *</span> : null}</>
+        ),
+        edit: { type: "select", options: [...(choices?.temin_choices ?? []), RESET_PROC], canEdit: (r) => can(r) && !r.is_purchased_assembly },
+      },
+      { id: "coating", accessorKey: "coating", header: "Kaplama", size: w("coating", 100) },
+      { id: "rev", accessorKey: "rev", header: "Rev", size: w("rev", 60) },
+      {
+        id: "progress", accessorKey: "progress", header: "İlerleme", size: w("progress", 115),
+        edit: { type: "select", options: choices?.progress_choices ?? [], canEdit: can },
+      },
+      {
+        id: "status", accessorKey: "status", header: "Durum", size: w("status", 160),
+        cellStyle: (r) => statusStyle(r.status_color),
+      },
+      {
+        id: "manufacturer", accessorKey: "manufacturer", header: "Üretici", size: w("manufacturer", 120),
+        edit: mans.length ? { type: "select", options: ["", ...mans], canEdit: can } : { type: "text", canEdit: can },
+      },
+      { id: "t35_note", accessorKey: "t35_note", header: "T-35 Notu", size: w("t35_note", 210), edit: { type: "text", canEdit: can } },
+      { id: "note", accessorKey: "note", header: "Not", size: w("note", 210), edit: { type: "text", canEdit: can } },
+      {
+        id: "drawing", header: "Teknik Resim", size: w("drawing", 140), accessorFn: drawingText,
+        cell: ({ getValue, row }) => {
+          const t = getValue() as string;
+          if (t === "Resim yok") return <span className="badge warn">Resim yok</span>;
+          if (row.original.drawing_rev_mismatch) return <span className="warn" title="Resim revizyonu BOM revizyonundan farklı">{t}</span>;
+          return t;
+        },
+      },
+      {
+        id: "material_status", accessorKey: "material_status", header: "Malzeme Durumu", size: w("material_status", 140),
+        edit: { type: "select", options: ["", ...(choices?.material_status_choices ?? [])], canEdit: can },
+      },
+      {
+        id: "is_new", header: "Yeni", size: w("is_new", 70), accessorFn: (r) => (r.is_new ? "Yeni" : ""),
+        cell: ({ getValue }) => (getValue() ? <span className="badge new">Yeni</span> : null),
+        edit: { type: "select", options: ["Yeni", ""], canEdit: can },
+      },
+    ];
+  }, [view, choices, colors, widths]);
+
+  // ---------- column width persistence (DataGrid keeps sizing internally, so read it back from the header cells) ----------
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const colIdsRef = useRef<string[]>([]);
+  colIdsRef.current = [...(canEdit ? ["_sel"] : []), ...columns.map((c) => c.id as string)];
+  const saveWidths = useCallback(() => {
+    requestAnimationFrame(() => {
+      const ths = wrapRef.current?.querySelectorAll<HTMLTableCellElement>(".dg thead th");
+      if (!ths) return;
+      const next: Record<string, number> = { ...load<Record<string, number>>(LS.widths, {}) };
+      ths.forEach((th, i) => {
+        const id = colIdsRef.current[i];
+        if (id && id !== "_sel") next[id] = Math.round(th.getBoundingClientRect().width);
+      });
+      save(LS.widths, next);
+    });
+  }, []);
+  const onMouseDownCapture = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).classList?.contains("resizer")) window.addEventListener("mouseup", saveWidths, { once: true });
+  };
+
+  // ---------- row click vs double click (inline edit) ----------
+  const clickTimer = useRef<number | undefined>(undefined);
+  const onRowClick = useCallback((r: GridRow) => {
+    window.clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => setDetail(r.part_no), 230);
+  }, []);
+  const onDoubleClickCapture = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("td.editable")) window.clearTimeout(clickTimer.current);
+  };
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
+  const closeDetail = useCallback(() => setDetail(null), []);
+
+  // ---------- visible totals ----------
+  const onVisibleRowsChange = useCallback((rows: GridRow[]) => {
+    let s = 0;
+    for (const r of rows) if (r.counted && (!r.is_assembly || r.is_purchased_assembly)) s += r.total_qty ?? 0;
+    setVisibleQty(s);
+  }, []);
+
+  // ---------- selection ----------
+  const selectedPartNos = useMemo(() => {
+    const keys = new Set(Object.keys(selection).filter((k) => selection[k]));
+    if (!keys.size) return [];
+    const out = new Set<string>();
+    for (const r of data) if (keys.has(r._key) && !r.fastener && (r.depth ?? 1) > 0) out.add(r.part_no);
+    return [...out];
+  }, [selection, data]);
+
+  const exportXlsx = async (kind: "pt" | "tl") => {
+    setExporting(kind);
+    try {
+      const base = (project?.root_part_no || "Proje").replace(/[^\w.-]+/g, "_");
+      if (kind === "pt") await download(EXPORT_PARCA_TAKIP(pid), `${base}_Parca_Takip.xlsx`);
+      else await download(EXPORT_TAKIP_LISTESI(pid), `${base}_Takip_Listesi.xlsx`);
+    } catch (e) {
+      toast(errText(e), true);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const loading = mainQ.isLoading;
+  return (
+    <Page full>
+      <div className="toolbar parts-top">
+        <div className="tabs parts-tabs" role="tablist">
+          <button role="tab" aria-selected={view === "tree"} className={view === "tree" ? "active" : ""} onClick={() => setView("tree")}>Ağaç</button>
+          <button role="tab" aria-selected={view === "flat"} className={view === "flat" ? "active" : ""} onClick={() => setView("flat")}>Sadece parçalar</button>
+        </div>
+        <label className="row" style={{ gap: 4 }}>
+          <input type="checkbox" checked={inPurchased} onChange={(e) => setInPurchased(e.target.checked)} />
+          Satın alınan montajların içini göster
+        </label>
+        <label className="row" style={{ gap: 4 }}>
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Arşivlenenleri göster
+        </label>
+        <span style={{ flex: 1 }} />
+        <button className="btn small" disabled={!!exporting} onClick={() => exportXlsx("pt")}>
+          {exporting === "pt" ? "Hazırlanıyor…" : "Excel'e aktar: Parça Takip"}
+        </button>
+        <button className="btn small" disabled={!!exporting} onClick={() => exportXlsx("tl")}>
+          {exporting === "tl" ? "Hazırlanıyor…" : "Excel'e aktar: Takip Listesi"}
+        </button>
+        {canEdit && <button className="btn small" onClick={() => setImp("excel")}>Excel'den içe aktar</button>}
+        {canEdit && <button className="btn small" onClick={() => setImp("t35")}>T-35 listesi içe aktar</button>}
+      </div>
+
+      {mainQ.isError ? (
+        <div className="error" style={{ padding: 16 }}>{errText(mainQ.error)}</div>
+      ) : loading ? (
+        <div className="muted" style={{ padding: 16 }}>Yükleniyor…</div>
+      ) : (
+        <div className="parts-wrap" ref={wrapRef} onMouseDownCapture={onMouseDownCapture} onDoubleClickCapture={onDoubleClickCapture}>
+          <DataGrid<GridRow>
+            data={data}
+            columns={columns}
+            getRowId={getRowId}
+            onEdit={canEdit ? onEdit : undefined}
+            onRowClick={onRowClick}
+            rowStyle={rowStyle}
+            selectable={canEdit}
+            selection={selection}
+            onSelectionChange={setSelection}
+            onVisibleRowsChange={onVisibleRowsChange}
+            emptyText={project && !project.current_version_id ? "Bu projede onaylı BOM sürümü yok." : "Kayıt yok."}
+            toolbar={
+              <>
+                {view === "tree" && (
+                  <>
+                    <button className="btn small" onClick={() => setCollapsed(new Set())}>Tümünü genişlet</button>
+                    <button className="btn small" onClick={collapseAll}>Tümünü daralt</button>
+                  </>
+                )}
+                {canEdit && (
+                  <>
+                    <button className="btn small primary" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>
+                      Toplu düzenle{selectedPartNos.length ? ` (${selectedPartNos.length.toLocaleString("tr-TR")})` : ""}
+                    </button>
+                    {selectedPartNos.length > 0 && <button className="btn small" onClick={() => setSelection({})}>Seçimi temizle</button>}
+                  </>
+                )}
+                <span className="muted">Görünen toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>
+                {(mainQ.isFetching || archQ.isFetching) && <span className="muted">Yenileniyor…</span>}
+                {archQ.isError && <span className="error">Arşiv: {errText(archQ.error)}</span>}
+                {choicesQ.isError && <span className="error">Seçenekler: {errText(choicesQ.error)}</span>}
+              </>
+            }
+          />
+        </div>
+      )}
+
+      {detail && <PartDetail pid={pid} partNo={detail} onClose={closeDetail} />}
+      {bulkOpen && (
+        <BulkEdit pid={pid} partNos={selectedPartNos} choices={choices} onClose={() => setBulkOpen(false)} onDone={() => setSelection({})} />
+      )}
+      {imp === "t35" && <T35ImportModal pid={pid} open onClose={() => setImp(null)} />}
+      {imp === "excel" && <ExcelImportModal pid={pid} open onClose={() => setImp(null)} />}
+    </Page>
+  );
+}

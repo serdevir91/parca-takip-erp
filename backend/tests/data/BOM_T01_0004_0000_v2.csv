@@ -1,0 +1,54 @@
+﻿Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+1;T01_0004_0000.SLDASM;1;;;;;
+1.1;  T01_0004_0001.SLDPRT;1;5083-111;3726.33;A;İmalat;Katı kuru film
+1.2;  T01_0004_0003.SLDASM;1;Material <not specified>;506.58;;;
+1.2.1;    T01_0004_0019.SLDPRT;1;5083-111;457.50;A;İmalat;Katı/kuru film kaplama
+1.2.2;    T01_0004_0020.SLDPRT;1;5083-111;23.46;A;İmalat;
+1.2.3;    T01_0004_0021.SLDPRT;1;A-Glass Fiber;21.31;;Hazır Alım;
+1.2.4;    T01_0004_0022.SLDPRT;1;EPDM;1.02;;Hazır Alım;
+1.2.5;    T01_0004_0023.SLDPRT;1;EPDM;3.29;;Hazır Alım;
+1.3;  T01_0004_0004.SLDASM;1;;;;;
+1.3.1;    T01_0004_0024.SLDPRT;1;6061-T6 (SS);385.39;A;İmalat;Katı/kuru film kaplama
+1.3.2;    T01_0004_0025.SLDPRT;1;;;;;
+1.3.3;    T01_0004_0026.SLDPRT;1;Material <not specified>;13.42;;Hazır Alım;
+1.3.4;    T01_0004_0027.SLDPRT;1;Material <not specified>;19.03;;Hazır Alım;
+1.3.5;    T01_0004_0028.SLDPRT;1;EPDM;2.03;;İmalat;Katı/kuru film kaplama
+1.3.6;    T01_0004_0029.SLDPRT;1;EPDM;1.55;;İmalat;Katı/kuru film kaplama
+1.4;  T01_0004_0014.SLDASM;1;;;;;
+1.4.1;    T01_0004_0030.SLDPRT;1;5083-111;51.13;A;İmalat;
+1.4.2;    T01_0004_0031.SLDPRT;1;;;;Hazır Alım;
+1.5;  T01_0004_0005.SLDPRT;1;5083-111;124.60;A;İmalat;Katı/kuru film kaplama
+1.6;  T01_0004_0006.SLDPRT;1;5083-111;80.50;A;İmalat;Katı/kuru film kaplama
+1.7;  T01_0004_0007.SLDPRT;1;5083-111;33.88;A;İmalat;Katı/kuru film kaplama
+1.8;  T01_0004_0008.SLDPRT;1;5083-111;41.53;A;İmalat;
+1.9;  T01_0004_0010.SLDPRT;1;5083-111;87.99;A;İmalat;
+1.10;  T01_0004_0011.SLDPRT;1;5083-111;100.23;A;İmalat;
+1.11;  T01_0004_0012.SLDPRT;2;5083-111;6.87;A;İmalat;Katı/kuru film kaplama
+1.12;  T01_0004_0013.SLDPRT;1;5083-111;27.71;A;İmalat;Katı/kuru film kaplama
+1.13;  T01_0004_0014.SLDPRT;1;Material <not specified>;973.55;;;
+1.14;  T01_0004_0015.SLDPRT;1;Material <not specified>;13.91;;;
+1.15;  T01_0004_0016.SLDPRT;1;Material <not specified>;25.69;;;
+1.16;  T01_0004_0017.SLDPRT;2;6061-T6 (SS);11.16;;Hazır Alım;
+1.17;  T01_0004_0018.SLDPRT;2;5083-111;1.26;A;İmalat;Katı/kuru film kaplama
+1.18;  T01_0004_0032.SLDPRT;1;5083-111;34.35;A;İmalat;Katı/kuru film kaplama
+1.19;  T01_0004_0009.SLDPRT;1;5083-111;13.01;A;İmalat;Katı/kuru film kaplama
+1.20;  Spring washer DIN 128 - A10.sldprt;1;;;;;
+1.21;  Spring washer DIN 128 - A6.sldprt;1;;;;;
+1.22;  DIN 912 M3 x 6 --- 6N.sldprt;12;;;;;
+1.23;  DIN 912 M5 x 16 --- 16N.sldprt;6;;;;;
+1.24;  DIN 912 M5 x 12 --- 12N.sldprt;18;;;A;;
+1.25;  DIN 912 M3 x 8 --- 8N.sldprt;12;;;;;
+1.26;  DIN 912 M3 x 10 --- 10N.sldprt;5;;;;;
+1.27;  DIN 912 M2 x 10 --- 10N.sldprt;4;;;;;
+1.28;  DIN 912 M3 x 12 --- 12N.sldprt;1;;;;;
+1.29;  DIN EN 28734 - 3 x 8 - A - St.sldprt;6;;;A;;
+1.30;  Spring washer DIN 128 - A3.sldprt;15;;;;;
+1.31;  Spring washer DIN 128 - A2.sldprt;4;;;;;
+1.32;  DIN 912 M2 x 8 --- 8N.sldprt;6;;;;;
+1.33;  DIN 912 M2 x 6 --- 6N.sldprt;6;;;;;
+1.34;  Hexagon Nut ISO 4034 - M10 - N.sldprt;2;;;;;
+1.35;  DIN 912 M3 x 16 --- 16N.sldprt;2;;;;;
+1.36;  Spring washer DIN 128 - A3.5.sldprt;1;;;;;
+1.37;  Spring washer DIN 128 - A5.sldprt;24;;;;;
+1.38;  DIN 912 M3 x 5 --- 5N.sldprt;4;;;;;
+1.39;  Part1-1.SLDPRT;1;Material <not specified>;1320.00;;;

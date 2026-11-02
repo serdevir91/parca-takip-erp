@@ -1,0 +1,16 @@
+# Keep LF everywhere (shell scripts, Dockerfiles and nginx.conf run inside Linux containers),
+# CRLF only for Windows-native scripts.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.xlsx binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.tar binary
+
+# Sample SolidWorks exports: keep byte-for-byte (CRLF, encoding)
+*.csv -text

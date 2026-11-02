@@ -1,0 +1,118 @@
+"""Projects: list, create, update, archive (spec 3, screen 8.2)."""
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ..models import BomVersion, Project, Tracking, User
+from ..services import audit
+from .deps import admin, any_user, editor, get_db, project_or_404
+
+router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+def version_brief(v: BomVersion | None) -> dict[str, Any] | None:
+    if v is None:
+        return None
+    return {"id": v.id, "seq": v.seq, "filename": v.filename, "status": v.status,
+            "uploaded_by": v.uploaded_by, "uploaded_at": v.uploaded_at.isoformat() if v.uploaded_at else None,
+            "approved_by": v.approved_by, "approved_at": v.approved_at.isoformat() if v.approved_at else None}
+
+
+def project_out(db: Session, p: Project) -> dict[str, Any]:
+    cur = db.get(BomVersion, p.current_version_id) if p.current_version_id else None
+    pending = db.scalar(select(func.count()).select_from(BomVersion)
+                        .where(BomVersion.project_id == p.id, BomVersion.status == "pending")) or 0
+    parts = db.scalar(select(func.count()).select_from(Tracking)
+                      .where(Tracking.project_id == p.id, Tracking.archived.is_(False))) or 0
+    return {"id": p.id, "name": p.name, "root_part_no": p.root_part_no, "description": p.description,
+            "archived": p.archived, "created_at": p.created_at.isoformat() if p.created_at else None,
+            "current_version_id": p.current_version_id, "current_version": version_brief(cur),
+            "pending_versions": pending, "tracked_parts": parts}
+
+
+def _name_taken(db: Session, name: str, exclude_id: int | None = None) -> bool:
+    q = select(Project.id).where(func.lower(Project.name) == name.lower())
+    if exclude_id is not None:
+        q = q.where(Project.id != exclude_id)
+    return db.scalar(q) is not None
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    root_part_no: str = ""
+    description: str = ""
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    root_part_no: str | None = None
+    description: str | None = None
+
+
+@router.get("")
+def list_projects(include_archived: bool = False, db: Session = Depends(get_db),
+                  _: User = Depends(any_user)) -> list[dict]:
+    q = select(Project).order_by(Project.archived, Project.name)
+    if not include_archived:
+        q = q.where(Project.archived.is_(False))
+    return [project_out(db, p) for p in db.scalars(q)]
+
+
+@router.post("", status_code=201)
+def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict:
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Proje adı boş olamaz")
+    if _name_taken(db, name):
+        raise HTTPException(400, f"Bu isimde bir proje zaten var: {name}")
+    p = Project(name=name, root_part_no=body.root_part_no.strip(), description=body.description)
+    db.add(p)
+    db.flush()
+    audit.record(db, user, "project", p.id, "name", None, name, p.id, action="create")
+    db.commit()
+    return project_out(db, p)
+
+
+@router.get("/{pid}")
+def get_project(pid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+    return project_out(db, project_or_404(db, pid))
+
+
+@router.patch("/{pid}")
+def update_project(pid: int, body: ProjectPatch, db: Session = Depends(get_db),
+                   user: User = Depends(editor)) -> dict:
+    p = project_or_404(db, pid)
+    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    if "name" in changes:
+        changes["name"] = changes["name"].strip()
+        if not changes["name"]:
+            raise HTTPException(400, "Proje adı boş olamaz")
+        if _name_taken(db, changes["name"], p.id):
+            raise HTTPException(400, f"Bu isimde bir proje zaten var: {changes['name']}")
+    if "root_part_no" in changes:
+        changes["root_part_no"] = changes["root_part_no"].strip()
+    audit.record_changes(db, user, p, changes, "project", p.id, p.id)
+    db.commit()
+    return project_out(db, p)
+
+
+@router.delete("/{pid}")
+def archive_project(pid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
+    """Projects are archived, never hard-deleted (BOM versions and history stay)."""
+    p = project_or_404(db, pid)
+    audit.record_changes(db, user, p, {"archived": True}, "project", p.id, p.id)
+    db.commit()
+    return project_out(db, p)
+
+
+@router.post("/{pid}/restore")
+def restore_project(pid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
+    p = project_or_404(db, pid)
+    audit.record_changes(db, user, p, {"archived": False}, "project", p.id, p.id)
+    db.commit()
+    return project_out(db, p)
