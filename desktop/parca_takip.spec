@@ -6,6 +6,8 @@ from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = Path(SPECPATH).parent
 BACKEND = ROOT / "backend"
+APP_MODULES = sorted(".".join(p.relative_to(BACKEND).with_suffix("").parts).removesuffix(".__init__")
+                     for p in (BACKEND / "app").rglob("*.py"))
 
 a = Analysis(
     [str(ROOT / "desktop" / "parca_takip_desktop.py")],
@@ -18,8 +20,9 @@ a = Analysis(
         (str(ROOT / "desktop" / "setup.html"), "."),
         (str(ROOT / "desktop" / "icon.ico"), "."),
     ],
-    # Routers are found with pkgutil at runtime, uvicorn loads its protocols by name
-    hiddenimports=collect_submodules("app") + collect_submodules("uvicorn") + ["python_multipart", "multipart"],
+    # Routers are found with pkgutil at runtime and uvicorn loads its protocols by name. The app modules are
+    # listed from the files: collect_submodules runs in a subprocess that does not see pathex.
+    hiddenimports=APP_MODULES + collect_submodules("uvicorn") + ["python_multipart", "multipart"],
     excludes=["psycopg", "psycopg_binary", "tkinter", "pytest"],
     noarchive=False,
 )

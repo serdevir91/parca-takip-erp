@@ -177,7 +177,9 @@ class EmbeddedServer:
         threading.Thread(target=cli.backup_daemon, args=(get_settings().backup_time,), name="backup",
                          daemon=True).start()
         discovery.start_responder(self.port, VERSION)
-        config = uvicorn.Config("app.main:app", host="0.0.0.0", port=self.port, workers=1, log_config=None,
+        from app.main import app  # imported here (not by name) so the bundler sees it
+
+        config = uvicorn.Config(app, host="0.0.0.0", port=self.port, workers=1, log_config=None,
                                 timeout_keep_alive=75, proxy_headers=True, forwarded_allow_ips="*")
         self.server = uvicorn.Server(config)
         t = threading.Thread(target=self._run, name="uvicorn", daemon=True)
