@@ -146,6 +146,13 @@ export default function Layout() {
   const { project } = useProject();
   const live = useLiveSync();
   const unread = useChatPoll(can("chat"));
+  const signups = useQuery({
+    queryKey: ["admin", "signups"],
+    queryFn: () => api.get<{ pending: number }>("/admin/signups/count"),
+    refetchInterval: 60_000,
+    retry: false,
+    enabled: user?.role === "admin",
+  }).data?.pending ?? 0;
   const [collapsed, setCollapsed] = useState(readCollapsed);
   // Phones: the sidebar is an off-canvas menu opened from the top bar.
   const [navOpen, setNavOpen] = useState(false);
@@ -170,6 +177,7 @@ export default function Layout() {
       <i.icon size={17} strokeWidth={1.9} aria-hidden />
       <span className="nav-label">{i.label}</span>
       {i.to === "/chat" && unread > 0 && <span className="nav-badge">{unread > 99 ? "99+" : unread}</span>}
+      {i.to === "/admin" && signups > 0 && <span className="nav-badge" title="Onay bekleyen hesap istekleri">{signups}</span>}
     </NavLink>
   );
   const ThemeIcon = mode === "light" ? Sun : Moon;

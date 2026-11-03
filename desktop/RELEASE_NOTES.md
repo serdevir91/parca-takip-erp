@@ -1,6 +1,16 @@
 Windows masaüstü uygulaması: `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.4.0 yenilikleri
+
+- **Hesap oluştur:** Giriş ekranından hesap isteği gönderilir. Yönetici Yönetim › Kullanıcılar ekranında rol ve yetki vererek onaylar ya da reddeder; bekleyen istek sayısı menüde görünür.
+- **E-posta:** Kullanıcılara e-posta adresi eklenebilir. Yönetim › E-posta ekranında Gmail, Outlook, Yandex için hazır ayarlar ve test e-postası. Listeler ve Excel dosyaları tek tıkla e-postayla gönderilir; telefonda Gmail/WhatsApp ile paylaşılır.
+- **Yeni liste görünümü:** Parça listesi, stok ve diğer listeler varsayılan olarak kart görünümünde; telefonda yana kaydırma yok, rahat kaydırma, arama, filtre ve sıralama. "Tablo" düğmesi Excel benzeri görünüme geçer.
+- **Parça listesi:** Sadeleştirilmiş araç çubuğu (Göster, Excel / e-posta, İçe aktar menüleri).
+- **Bağlantı:** Sunucunun adresi değişirse Windows uygulaması ağdaki sunucuyu kendisi bulur. Kurulum Windows Güvenlik Duvarı iznini ekler.
+- **Düzeltme:** "Yeni sürüm var" uyarısı güncel sürümde artık görünmüyor ve kapatılabiliyor.
+- **Kurulum kılavuzu:** KURULUM_KILAVUZU.md ile adım adım kurulum.
+
 ## 1.3.1 yenilikleri
 
 - **Android:** İşlemciye göre ayrı APK dosyaları (arm64-v8a, armeabi-v7a, x86_64, x86) ve her telefonda çalışan genel APK.

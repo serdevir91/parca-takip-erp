@@ -120,6 +120,7 @@ function NeedTab() {
       </div>
       <Loading error={q.error} loading={q.isLoading} />
       <DataGrid<Need>
+        exportName="İhtiyaç listesi"
         data={rows} columns={columns} getRowId={(r) => r.code}
         selectable={canEdit} selection={selection} onSelectionChange={setSelection}
         emptyText={quick === "short" ? "Eksik yok." : "Kayıt yok. Projenin onaylı bir BOM sürümü olmalı."}

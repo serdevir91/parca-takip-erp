@@ -66,6 +66,13 @@ Read this file first. Do not re-scan the whole project.
     SPA CSP elsewhere (nginx mirrors it in `frontend/security_headers.conf`). `/api/docs` only with `ERP_API_DOCS`.
   - `services/xlsafe.neutralize(wb)` before every workbook save (formula injection); `core/xlsxguard.check_xlsx`
     and the `drawings.iter_zip` limits stop zip bombs.
+- Sign-up and mail (v1.4.0):
+  - `POST /auth/register` creates a viewer with `active=False, pending=True` (setting `signup.enabled`, 5 per IP/hour).
+    Login with the right password on a pending/inactive user returns 403 with a Turkish reason; wrong password stays 401.
+    Admin: `GET /admin/signups/count`, `POST /admin/users/{id}/approve` (role + permissions), `DELETE /admin/users/{id}/signup`.
+  - `User.email` (migration 0006). `services/mailer.py`: SMTP settings key `smtp` (password never returned),
+    `send()` raises `RuntimeError` with Turkish text. `api/mail.py`: `/mail/status`, `/mail/recipients`,
+    `/mail/send` (multipart, 20 recipients, 20 MB, 60/hour/user, Reply-To = sender), admin `/mail/settings` + `/mail/test`.
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
@@ -88,6 +95,12 @@ Read this file first. Do not re-scan the whole project.
     `ImageLightbox` (transform-based wheel/pinch zoom, pan, rotate), `gestures.ts` (`useGestures`) and `Thumb`
     (cached, lazy object-URL thumbnails of protected API files; `forgetThumb` after delete).
   - `Photos`: photo grid + multi upload for one part number or stock item.
+- `DataGrid` has two views (`useGridView`, localStorage `dg.view`, default "cards"): `CardView` (virtualized cards,
+  columns mapped by `GridColumn.card` = title/sub/badge/field/actions/hide, `cardLead`, `cardColor`) and `TableView`.
+  The bar has search, Filtre sheet, sort, "Paylaş ▾" (CSV with `;` + BOM, or e-mail via `MailDialog`; `exportName`,
+  `false` hides it). `components/MailDialog.tsx`: `MailFile` (`path` from the API or `blob`), `shareFiles()` uses the
+  Android `share`/`shareData` bridge or Web Share.
+- `__APP_VERSION__` (vite.config.ts) is read from `backend/app/config.py`, so the update banner compares one source.
 - `Layout` also has the grouped, collapsible sidebar, `PageHeader` and `useLiveSync()` (polls `/api/sync` every
   4 s and invalidates all queries when the rev changes).
 - Routes: `/` is `Home` (dashboard), `/projects` the project list, `/p/:pid/*` the project screens, then

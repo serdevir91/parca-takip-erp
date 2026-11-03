@@ -318,6 +318,78 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    /** Share a server file (export, list) through the Android share sheet: Gmail, WhatsApp, Drive… */
+    private void shareFile(String url, String fallbackName, String token) {
+        toast("Hazırlanıyor…");
+        new Thread(() -> {
+            HttpURLConnection c = null;
+            try {
+                c = (HttpURLConnection) new URL(url).openConnection();
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(60000);
+                if (token != null && !token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
+                int code = c.getResponseCode();
+                if (code != 200) throw new Exception("Sunucu yanıtı " + code);
+                String name = nameFrom(c.getHeaderField("Content-Disposition"), fallbackName);
+                String mime = c.getContentType();
+                if (mime != null) mime = mime.split(";")[0].trim();
+                File f;
+                try (InputStream in = c.getInputStream()) {
+                    f = shareCache(name);
+                    try (OutputStream out = new FileOutputStream(f)) {
+                        copy(in, out);
+                    }
+                }
+                final String m = mime;
+                ui.post(() -> startShare(f, m, name));
+            } catch (Exception e) {
+                ui.post(() -> toast("Paylaşılamadı: " + e.getMessage()));
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }).start();
+    }
+
+    /** Share data the page built itself (a list as CSV), passed as base64. */
+    private void shareData(String base64, String name, String mime) {
+        try {
+            File f = shareCache(name);
+            try (OutputStream out = new FileOutputStream(f)) {
+                out.write(android.util.Base64.decode(base64, android.util.Base64.DEFAULT));
+            }
+            startShare(f, mime, name);
+        } catch (Exception e) {
+            toast("Paylaşılamadı: " + e.getMessage());
+        }
+    }
+
+    private File shareCache(String name) {
+        File dir = new File(getCacheDir(), "share");
+        dir.mkdirs();
+        File[] old = dir.listFiles();
+        if (old != null) for (File o : old) o.delete();  // only the latest shared file is kept
+        return new File(dir, name.replaceAll("[\\\\/:*?\"<>|]", "_"));
+    }
+
+    private void startShare(File f, String mime, String name) {
+        if (mime == null || mime.isEmpty() || mime.equals("application/octet-stream")) {
+            String ext = MimeTypeMap.getFileExtensionFromUrl(name.replace(' ', '_'));
+            String m = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(Locale.ROOT));
+            mime = m != null ? m : "application/octet-stream";
+        }
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", f);
+        Intent send = new Intent(Intent.ACTION_SEND)
+                .setType(mime)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, name)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(send, "Paylaş: " + name));
+        } catch (ActivityNotFoundException e) {
+            toast("Paylaşacak uygulama bulunamadı");
+        }
+    }
+
     private Uri write(InputStream in, String name, String mime) throws Exception {
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues v = new ContentValues();
@@ -590,6 +662,18 @@ public class MainActivity extends Activity {
             // The JWT only goes back to the server it came from.
             if (server().isEmpty() || !pageOrigin.equals(server()) || !originOf(url).equals(server())) return;
             ui.post(() -> saveFile(url, filename, token));
+        }
+
+        @JavascriptInterface
+        public void share(String url, String filename, String token) {
+            if (server().isEmpty() || !pageOrigin.equals(server()) || !originOf(url).equals(server())) return;
+            ui.post(() -> shareFile(url, filename, token));
+        }
+
+        @JavascriptInterface
+        public void shareData(String base64, String filename, String mime) {
+            if (!trusted()) return;
+            ui.post(() -> MainActivity.this.shareData(base64, filename, mime));
         }
 
         @JavascriptInterface

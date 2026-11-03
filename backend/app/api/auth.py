@@ -1,25 +1,41 @@
 """Login, current user and own password change."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
+import re
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from sqlalchemy import select
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import create_token, dummy_verify, hash_password, verify_password
-from ..models import ROLE_LABELS, User
+from ..db import SessionLocal
+from ..models import ROLE_ADMIN, ROLE_LABELS, ROLE_VIEWER, User
 from ..permissions import effective
-from ..services import audit, loginguard
+from ..services import audit, loginguard, mailer
+from ..services.settings import signup_enabled
 from .deps import any_user, get_db
 
+log = logging.getLogger("erp.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+USERNAME_RE = re.compile(r"^[\w.\-]{3,64}$")
+
 
 def user_out(u: User) -> dict:
-    return {"id": u.id, "username": u.username, "full_name": u.full_name, "role": u.role,
-            "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active, "permissions": effective(u)}
+    return {"id": u.id, "username": u.username, "full_name": u.full_name, "email": u.email or "",
+            "role": u.role, "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active,
+            "permissions": effective(u)}
+
+
+def check_email(email: str) -> str:
+    email = (email or "").strip()
+    if email and not mailer.valid_email(email):
+        raise HTTPException(400, "E-posta adresi geçersiz")
+    return email
 
 MIN_PASSWORD = 8
 
@@ -40,11 +56,75 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     u = db.scalar(select(User).where(User.username == name))
     if u is None:
         dummy_verify(form.password)
-    if u is None or not u.active or not verify_password(form.password, u.password_hash):
+    if u is None or not verify_password(form.password, u.password_hash):
         loginguard.failed(name, ip)
         raise HTTPException(401, "Kullanıcı adı veya şifre hatalı")
+    # The password was right: say why the account cannot log in yet
+    if u.pending:
+        raise HTTPException(403, "Hesabınız yönetici onayı bekliyor. Onaylandığında giriş yapabilirsiniz.")
+    if not u.active:
+        raise HTTPException(403, "Hesabınız pasif. Yöneticinize başvurun.")
     loginguard.succeeded(name)
     return {"access_token": create_token(u), "token_type": "bearer", "user": user_out(u)}
+
+
+@router.get("/options")
+def options(db: Session = Depends(get_db)) -> dict:
+    """What the login screen offers (no login needed)."""
+    return {"signup": signup_enabled(db)}
+
+
+class SignupIn(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    full_name: str = Field(default="", max_length=128)
+    email: str = Field(default="", max_length=200)
+    password: str
+
+
+def _notify_admins(user_id: int) -> None:
+    """E-mail the admins that a sign-up waits for them (only when SMTP is set up)."""
+    with SessionLocal() as db:
+        cfg = mailer.config(db)
+        u = db.get(User, user_id)
+        if not cfg.ready or u is None:
+            return
+        to = [a.email for a in db.scalars(select(User).where(User.role == ROLE_ADMIN, User.active.is_(True)))
+              if a.email]
+        if not to:
+            return
+        body = (f"Yeni hesap isteği:\n\nKullanıcı adı: {u.username}\nAd soyad: {u.full_name or '-'}\n"
+                f"E-posta: {u.email or '-'}\n\nOnaylamak için Parça Takip ERP > Yönetim > Kullanıcılar.")
+        try:
+            mailer.send(cfg, to, f"Parça Takip ERP: {u.username} hesap onayı bekliyor", body)
+        except RuntimeError as e:
+            log.warning("sign-up notice not sent: %s", e)
+
+
+@router.post("/register", status_code=201)
+def register(body: SignupIn, request: Request, background: BackgroundTasks,
+             db: Session = Depends(get_db)) -> dict:
+    """Self sign-up: the account waits (pending) until an admin approves it and sets the permissions."""
+    if not signup_enabled(db):
+        raise HTTPException(403, "Hesap oluşturma kapalı. Hesabı yöneticiniz açabilir.")
+    username = body.username.strip()
+    if not USERNAME_RE.match(username):
+        raise HTTPException(400, "Kullanıcı adı 3-64 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi "
+                                 "kullanılabilir (boşluk yok)")
+    email = check_email(body.email)
+    check_password_rules(body.password)
+    ip = request.client.host if request.client else "?"
+    if not loginguard.signup_allowed(ip):
+        raise HTTPException(429, "Bu cihazdan çok fazla hesap isteği gönderildi. Bir saat sonra tekrar deneyin.")
+    if db.scalar(select(User).where(func.lower(User.username) == username.lower())):
+        raise HTTPException(409, "Bu kullanıcı adı alınmış, başka bir ad seçin")
+    u = User(username=username, full_name=body.full_name.strip(), email=email, role=ROLE_VIEWER,
+             password_hash=hash_password(body.password), active=False, pending=True)
+    db.add(u)
+    db.flush()
+    audit.record(db, u, "user", u.id, "username", None, username, action="signup")
+    db.commit()
+    background.add_task(_notify_admins, u.id)
+    return {"ok": True, "message": "Hesap isteğiniz yöneticiye gönderildi. Onaylandığında giriş yapabilirsiniz."}
 
 
 @router.get("/me")
@@ -54,6 +134,7 @@ def me(user: User = Depends(any_user)) -> dict:
 
 class ProfileIn(BaseModel):
     full_name: str
+    email: str | None = None
 
 
 @router.put("/me")
@@ -64,7 +145,12 @@ def update_me(body: ProfileIn, user: User = Depends(any_user), db: Session = Dep
     if name != u.full_name:
         audit.record(db, user, "user", u.id, "full_name", u.full_name, name)
         u.full_name = name
-        db.commit()
+    if body.email is not None:
+        email = check_email(body.email)
+        if email != (u.email or ""):
+            audit.record(db, user, "user", u.id, "email", u.email, email)
+            u.email = email
+    db.commit()
     return user_out(u)
 
 

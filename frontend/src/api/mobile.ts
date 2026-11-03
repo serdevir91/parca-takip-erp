@@ -7,6 +7,9 @@ type MobileApi = {
   changeServer(): void;
   checkUpdate(manual: boolean): void;
   setTheme(bg: string, dark: boolean): void;
+  /** Android share sheet (1.4.0+ app): a server file, or data the page built (base64). */
+  share?(url: string, filename: string, token: string): void;
+  shareData?(base64: string, filename: string, mime: string): void;
 };
 
 export function mobileApp(): MobileApi | null {

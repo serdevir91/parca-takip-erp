@@ -283,6 +283,7 @@ function SummaryTab(p: {
           onClearSelection={() => setSelection({})} />
       )}
       <DataGrid<FastenerItem>
+        exportName="Bağlantı elemanları"
         data={items} columns={columns} getRowId={(r) => r.key}
         onEdit={canEdit ? onEdit : undefined}
         selectable={canEdit} selection={selection} onSelectionChange={setSelection}
@@ -433,6 +434,7 @@ function DetailTab(p: { rows: FastenerRow[]; statuses: string[]; canEdit: boolea
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       <DataGrid<FastenerRow>
+        exportName="Bağlantı elemanı satırları"
         data={data} columns={columns} getRowId={(r) => String(r.id)}
         onEdit={canEdit ? (r, col, v) => { if (col === "status") onSave({ keys: [r.fastener_key], order_status: v }); } : undefined}
         rowStyle={(r) => (r.in_purchased ? { color: "var(--muted)" } : undefined)}

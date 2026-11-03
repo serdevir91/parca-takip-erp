@@ -164,6 +164,7 @@ function Inner({ pid, onClose }: Props) {
                 <div className="imp-body">
                   {tab === "changes" && (
                     <DataGrid<Change>
+                      exportName={false}
                       data={changes} columns={columns} getRowId={(r) => r.id}
                       selectable selection={sel} onSelectionChange={setSel}
                       emptyText="Değişiklik yok; dosya ile veritabanı aynı."

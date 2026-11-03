@@ -10,10 +10,12 @@ import FastenerRulesTab from "./admin/FastenerRules";
 import T35ConfigTab from "./admin/T35Config";
 import AuditLogTab from "./admin/AuditLog";
 import BackupsTab from "./admin/Backups";
+import MailSettingsTab from "./admin/MailSettings";
 
 const TABS: { id: string; label: string; C: ComponentType }[] = [
   { id: "users", label: "Kullanıcılar", C: UsersTab },
   { id: "settings", label: "Ayarlar", C: SettingsTab },
+  { id: "mail", label: "E-posta", C: MailSettingsTab },
   { id: "fasteners", label: "Bağlantı Elemanı Kuralları", C: FastenerRulesTab },
   { id: "t35", label: "T-35 Ayarları", C: T35ConfigTab },
   { id: "audit", label: "Denetim Kaydı", C: AuditLogTab },

@@ -52,6 +52,23 @@ def succeeded(username: str) -> None:
         _fails.pop(f"u:{username.lower()}", None)
 
 
+SIGNUP_WINDOW = 60 * 60
+SIGNUP_LIMIT = 5
+
+
+def signup_allowed(ip: str) -> bool:
+    """At most SIGNUP_LIMIT sign-up requests per address per hour (counts the request)."""
+    now = time.monotonic()
+    with _lock:
+        q = _fails[f"s:{ip}"]
+        while q and q[0] <= now - SIGNUP_WINDOW:
+            q.popleft()
+        if len(q) >= SIGNUP_LIMIT:
+            return False
+        q.append(now)
+        return True
+
+
 def reset() -> None:
     with _lock:
         _fails.clear()

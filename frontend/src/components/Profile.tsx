@@ -6,11 +6,12 @@ import { errText, useToast } from "./Toast";
 
 const MIN_PASSWORD = 8;
 
-/** Own profile: display name and password. User name, role and permissions stay with the admin. */
+/** Own profile: display name, e-mail and password. User name, role and permissions stay with the admin. */
 export default function Profile({ onClose }: { onClose: () => void }) {
   const { user, reloadUser } = useAuth();
   const toast = useToast();
   const [name, setName] = useState(user?.full_name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
   const [oldPw, setOldPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [again, setAgain] = useState("");
@@ -23,7 +24,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
     : newPw.length < MIN_PASSWORD ? `Yeni şifre en az ${MIN_PASSWORD} karakter olmalı.`
     : newPw !== again ? "Yeni şifreler aynı değil."
     : "";
-  const nameChanged = name.trim() !== (user?.full_name ?? "");
+  const nameChanged = name.trim() !== (user?.full_name ?? "") || email.trim() !== (user?.email ?? "");
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -31,7 +32,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setErr("");
     try {
-      if (nameChanged) await api.put<User>("/auth/me", { full_name: name.trim() });
+      if (nameChanged) await api.put<User>("/auth/me", { full_name: name.trim(), email: email.trim() });
       if (pwWanted) {
         const r = await api.post<{ access_token: string }>("/auth/password", { old_password: oldPw, new_password: newPw });
         setToken(r.access_token); // the old token is revoked; other devices must log in again
@@ -54,6 +55,9 @@ export default function Profile({ onClose }: { onClose: () => void }) {
         </div>
         <Field label="Ad soyad">
           <input value={name} maxLength={128} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+        </Field>
+        <Field label="E-posta" hint="Gönderdiğiniz e-postalara verilen yanıtlar bu adrese gelir.">
+          <input type="email" value={email} maxLength={200} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </Field>
         <h4>Şifre değiştir</h4>
         <Field label="Mevcut şifre">

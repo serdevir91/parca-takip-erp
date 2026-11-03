@@ -5,6 +5,7 @@ import { api, download } from "../api/client";
 import { useAuth } from "../api/auth";
 import BulkEdit from "../components/BulkEdit";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
+import MailDialog, { type MailFile } from "../components/MailDialog";
 import ExcelImportModal from "../components/ExcelImportModal";
 import { Page, useProject } from "../components/Layout";
 import PartDetail, { type PartChoices, type PartRow } from "../components/PartDetail";
@@ -62,6 +63,7 @@ function save(key: string, v: unknown): void {
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("tr-TR"));
 const getRowId = (r: GridRow) => r._key;
 const rowStyle = (r: GridRow): CSSProperties | undefined => (r.archived ? { opacity: 0.55 } : undefined);
+const cardColor = (r: GridRow) => (r.status_color ? `#${r.status_color}` : undefined);
 const tracked = (r: PartRow) => !r.fastener && !r.archived && (r.depth ?? 1) > 0;
 
 function drawingText(r: PartRow): string {
@@ -123,6 +125,8 @@ export default function Parts() {
   const [imp, setImp] = useState<"t35" | "excel" | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [visibleQty, setVisibleQty] = useState(0);
+  const [menu, setMenu] = useState<"show" | "export" | "import" | null>(null);
+  const [mail, setMail] = useState<MailFile | null>(null);
 
   useEffect(() => save(LS.view, view), [view]);
   useEffect(() => save(LS.inPurchased, inPurchased), [inPurchased]);
@@ -261,7 +265,7 @@ export default function Parts() {
     const mans = choices?.manufacturers ?? [];
     return [
       {
-        id: "level", header: "Seviye", size: w("level", view === "tree" ? 170 : 110),
+        id: "level", header: "Seviye", size: w("level", view === "tree" ? 170 : 110), card: view === "tree" ? "hide" : "field",
         accessorFn: (r) => (r.levels && r.levels.length > 1 ? `${r.levels[0]} (+${r.levels.length - 1})` : r.level ?? ""),
         cell: ({ row, getValue }) => {
           const r = row.original;
@@ -278,13 +282,13 @@ export default function Parts() {
         },
       },
       {
-        id: "part_no", accessorKey: "part_no", header: "Parça No", size: w("part_no", 200),
+        id: "part_no", accessorKey: "part_no", header: "Parça No", size: w("part_no", 200), card: "title",
         cellStyle: (r) => (r.is_new ? statusStyle(colors.new || NEW_COLOR) : undefined),
         cell: ({ row }) => <span style={{ fontWeight: row.original.is_assembly ? 600 : 400 }}>{row.original.part_no}</span>,
       },
-      { id: "row_type", header: "Tip", size: w("row_type", 120), accessorFn: (r) => (r.archived ? "Arşivlenmiş" : r.row_type ?? "") },
+      { id: "row_type", header: "Tip", size: w("row_type", 120), card: "sub", accessorFn: (r) => (r.archived ? "Arşivlenmiş" : r.row_type ?? "") },
       { id: "main_group", accessorKey: "main_group", header: "Ana Grup", size: w("main_group", 150) },
-      { id: "parent_part_no", accessorKey: "parent_part_no", header: "Üst Montaj", size: w("parent_part_no", 170) },
+      { id: "parent_part_no", accessorKey: "parent_part_no", header: "Üst Montaj", size: w("parent_part_no", 170), card: view === "tree" ? "hide" : "field" },
       { id: "qty", accessorKey: "qty", header: "Adet", size: w("qty", 70), cell: ({ getValue }) => fmt(getValue() as number) },
       { id: "total_qty", accessorKey: "total_qty", header: "Toplam Adet", size: w("total_qty", 95), cell: ({ getValue }) => fmt(getValue() as number) },
       { id: "material", accessorKey: "material", header: "Malzeme", size: w("material", 130) },
@@ -305,7 +309,7 @@ export default function Parts() {
         edit: { type: "select", options: choices?.progress_choices ?? [], canEdit: can },
       },
       {
-        id: "status", accessorKey: "status", header: "Durum", size: w("status", 160),
+        id: "status", accessorKey: "status", header: "Durum", size: w("status", 160), card: "badge",
         cellStyle: (r) => statusStyle(r.status_color),
       },
       {
@@ -328,7 +332,7 @@ export default function Parts() {
         edit: { type: "select", options: ["", ...(choices?.material_status_choices ?? [])], canEdit: can },
       },
       {
-        id: "is_new", header: "Yeni", size: w("is_new", 70), accessorFn: (r) => (r.is_new ? "Yeni" : ""),
+        id: "is_new", header: "Yeni", size: w("is_new", 70), accessorFn: (r) => (r.is_new ? "Yeni" : ""), card: "badge",
         cell: ({ getValue }) => (getValue() ? <span className="badge new">Yeni</span> : null),
         edit: { type: "select", options: ["Yeni", ""], canEdit: can },
       },
@@ -383,10 +387,14 @@ export default function Parts() {
     return [...out];
   }, [selection, data]);
 
+  const base = (project?.root_part_no || "Proje").replace(/[^\w.-]+/g, "_");
+  const xlsxFile = (kind: "pt" | "tl"): MailFile => kind === "pt"
+    ? { path: EXPORT_PARCA_TAKIP(pid), name: `${base}_Parca_Takip.xlsx` }
+    : { path: EXPORT_TAKIP_LISTESI(pid), name: `${base}_Takip_Listesi.xlsx` };
   const exportXlsx = async (kind: "pt" | "tl") => {
     setExporting(kind);
+    setMenu(null);
     try {
-      const base = (project?.root_part_no || "Proje").replace(/[^\w.-]+/g, "_");
       if (kind === "pt") await download(EXPORT_PARCA_TAKIP(pid), `${base}_Parca_Takip.xlsx`);
       else await download(EXPORT_TAKIP_LISTESI(pid), `${base}_Takip_Listesi.xlsx`);
     } catch (e) {
@@ -397,39 +405,76 @@ export default function Parts() {
   };
 
   const loading = mainQ.isLoading;
+  const shownChanged = inPurchased || showArchived || kindsByView[view].join() !== DEFAULT_KINDS[view].join();
+  const cardLead = useCallback((r: GridRow) => {
+    if (view !== "tree" || r.archived) return null;
+    return (
+      <span className="tree-lead" style={{ "--d": Math.min(r.depth ?? 0, 8) } as CSSProperties}>
+        {r._kids ? (
+          <button className="tree-toggle" aria-label={r._open ? "Daralt" : "Genişlet"} aria-expanded={r._open}
+            onClick={(e) => { e.stopPropagation(); toggleRef.current(r._key); }}>{r._open ? "▾" : "▸"}</button>
+        ) : null}
+        <span className="tree-level">{r.level}</span>
+      </span>
+    );
+  }, [view]);
   return (
     <Page full>
-      <div className="toolbar parts-top">
-        <div className="tabs parts-tabs" role="tablist">
-          <button role="tab" aria-selected={view === "tree"} className={view === "tree" ? "active" : ""} onClick={() => setView("tree")}>Ağaç</button>
-          <button role="tab" aria-selected={view === "flat"} className={view === "flat" ? "active" : ""} onClick={() => setView("flat")}>Düz liste</button>
+      <div className="toolbar parts-top" onClick={(e) => e.target === e.currentTarget && setMenu(null)}>
+        <div className="seg" role="radiogroup" aria-label="Görünüm">
+          <button role="radio" aria-checked={view === "tree"} className={view === "tree" ? "on" : ""} onClick={() => setView("tree")}>Ağaç</button>
+          <button role="radio" aria-checked={view === "flat"} className={view === "flat" ? "on" : ""} onClick={() => setView("flat")}>Düz liste</button>
         </div>
-        <div className="row kind-chips" role="group" aria-label="Satır tipi filtresi">
-          <span className="muted">Göster:</span>
-          {KINDS.filter((k) => kindCounts[k.key] > 0).map((k) => (
-            <button key={k.key} className={`chip${kinds.has(k.key) ? " on" : ""}`} aria-pressed={kinds.has(k.key)}
-              onClick={() => toggleKind(k.key)}>
-              {k.label} <span className="muted">{fmt(kindCounts[k.key])}</span>
-            </button>
-          ))}
+        <div className="dg-menu-wrap">
+          <button className={`btn small${shownChanged ? " primary" : ""}`} onClick={() => setMenu(menu === "show" ? null : "show")} aria-haspopup="true">
+            Göster ▾
+          </button>
+          {menu === "show" && (
+            <div className="dg-menu card parts-show">
+              <div className="row kind-chips" role="group" aria-label="Satır tipi filtresi">
+                {KINDS.filter((k) => kindCounts[k.key] > 0).map((k) => (
+                  <button key={k.key} className={`chip${kinds.has(k.key) ? " on" : ""}`} aria-pressed={kinds.has(k.key)}
+                    onClick={() => toggleKind(k.key)}>
+                    {k.label} <span className="muted">{fmt(kindCounts[k.key])}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="row" style={{ gap: 6 }}>
+                <input type="checkbox" checked={inPurchased} onChange={(e) => setInPurchased(e.target.checked)} />
+                Satın alınan montajların içi
+              </label>
+              <label className="row" style={{ gap: 6 }}>
+                <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                Arşivlenenler
+              </label>
+              <button className="btn small" onClick={() => setMenu(null)}>Tamam</button>
+            </div>
+          )}
         </div>
-        <label className="row" style={{ gap: 4 }}>
-          <input type="checkbox" checked={inPurchased} onChange={(e) => setInPurchased(e.target.checked)} />
-          Satın alınan montajların içini göster
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Arşivlenenleri göster
-        </label>
-        <span style={{ flex: 1 }} />
-        <button className="btn small" disabled={!!exporting} onClick={() => exportXlsx("pt")}>
-          {exporting === "pt" ? "Hazırlanıyor…" : "Excel'e aktar: Parça Takip"}
-        </button>
-        <button className="btn small" disabled={!!exporting} onClick={() => exportXlsx("tl")}>
-          {exporting === "tl" ? "Hazırlanıyor…" : "Excel'e aktar: Takip Listesi"}
-        </button>
-        {canEdit && <button className="btn small" onClick={() => setImp("excel")}>Excel'den içe aktar</button>}
-        {canEdit && <button className="btn small" onClick={() => setImp("t35")}>T-35 listesi içe aktar</button>}
+        <div className="dg-menu-wrap">
+          <button className="btn small" disabled={!!exporting} onClick={() => setMenu(menu === "export" ? null : "export")} aria-haspopup="menu">
+            {exporting ? "Hazırlanıyor…" : "Excel / e-posta ▾"}
+          </button>
+          {menu === "export" && (
+            <div className="dg-menu card" role="menu">
+              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("pt")}>Excel indir: Parça Takip</button>
+              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("tl")}>Excel indir: Takip Listesi</button>
+              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("pt")); }}>E-posta ile gönder: Parça Takip</button>
+              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("tl")); }}>E-posta ile gönder: Takip Listesi</button>
+            </div>
+          )}
+        </div>
+        {canEdit && (
+          <div className="dg-menu-wrap">
+            <button className="btn small" onClick={() => setMenu(menu === "import" ? null : "import")} aria-haspopup="menu">İçe aktar ▾</button>
+            {menu === "import" && (
+              <div className="dg-menu card" role="menu">
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>Excel'den içe aktar</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>T-35 listesi içe aktar</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {mainQ.isError ? (
@@ -449,13 +494,16 @@ export default function Parts() {
             selection={selection}
             onSelectionChange={setSelection}
             onVisibleRowsChange={onVisibleRowsChange}
+            exportName={`${base}_parca_listesi`}
+            cardLead={cardLead}
+            cardColor={cardColor}
             emptyText={project && !project.current_version_id ? "Bu projede onaylı BOM sürümü yok." : "Kayıt yok."}
             toolbar={
               <>
                 {view === "tree" && (
                   <>
-                    <button className="btn small" onClick={() => setCollapsed(new Set())}>Tümünü genişlet</button>
-                    <button className="btn small" onClick={collapseAll}>Tümünü daralt</button>
+                    <button className="btn small" onClick={() => setCollapsed(new Set())}>Tümünü aç</button>
+                    <button className="btn small" onClick={collapseAll}>Tümünü kapat</button>
                   </>
                 )}
                 {canEdit && (
@@ -466,7 +514,7 @@ export default function Parts() {
                     {selectedPartNos.length > 0 && <button className="btn small" onClick={() => setSelection({})}>Seçimi temizle</button>}
                   </>
                 )}
-                <span className="muted">Görünen toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>
+                <span className="muted">Toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>
                 {(mainQ.isFetching || archQ.isFetching) && <span className="muted">Yenileniyor…</span>}
                 {archQ.isError && <span className="error">Arşiv: {errText(archQ.error)}</span>}
                 {choicesQ.isError && <span className="error">Seçenekler: {errText(choicesQ.error)}</span>}
@@ -482,6 +530,8 @@ export default function Parts() {
       )}
       {imp === "t35" && <T35ImportModal pid={pid} open onClose={() => setImp(null)} />}
       {imp === "excel" && <ExcelImportModal pid={pid} open onClose={() => setImp(null)} />}
+      {mail && <MailDialog files={[mail]} subject={`${project?.name ?? base}: ${mail.name.replace(/\.xlsx$/, "").replace(/_/g, " ")}`}
+        body="Güncel liste ektedir." onClose={() => setMail(null)} />}
     </Page>
   );
 }

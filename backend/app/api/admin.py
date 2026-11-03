@@ -16,8 +16,9 @@ from ..auth import hash_password
 from ..permissions import catalog, clean_overrides, effective, require
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
 from ..services import audit, backup as backup_svc
-from ..services.settings import get_setting, part_no_patterns, purchased_assemblies, set_setting
-from .auth import check_password_rules
+from ..services.settings import (get_setting, part_no_patterns, purchased_assemblies, set_setting,
+                                 signup_enabled)
+from .auth import check_email, check_password_rules
 from .deps import admin, get_db
 
 contacts_view, contacts_edit = require("contacts", "view"), require("contacts", "edit")
@@ -27,15 +28,15 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
 FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
                     "customer": "Müşteri"}
-SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules")
+SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules", "signup")
 
 
 
 # ---------- users ----------
 def user_out(u: User) -> dict[str, Any]:
-    return {"id": u.id, "username": u.username, "full_name": u.full_name, "role": u.role,
-            "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active,
-            "created_at": u.created_at.isoformat() if u.created_at else None,
+    return {"id": u.id, "username": u.username, "full_name": u.full_name, "email": u.email or "",
+            "role": u.role, "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active,
+            "pending": bool(u.pending), "created_at": u.created_at.isoformat() if u.created_at else None,
             "overrides": clean_overrides(u.permissions), "permissions": effective(u)}
 
 
@@ -43,12 +44,14 @@ class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str
     full_name: str = ""
+    email: str = ""
     role: str = "viewer"
     permissions: dict[str, str] | None = None
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
+    email: str | None = None
     role: str | None = None
     active: bool | None = None
     permissions: dict[str, str] | None = None  # {} clears every override
@@ -104,7 +107,51 @@ def permission_catalog(_: User = Depends(admin)) -> dict:
 
 @router.get("/users")
 def list_users(_: User = Depends(admin), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    return [user_out(u) for u in db.scalars(select(User).order_by(User.username))]
+    return [user_out(u) for u in db.scalars(select(User).order_by(User.pending.desc(), User.username))]
+
+
+@router.get("/signups/count")
+def signup_count(_: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, int]:
+    """Sign-ups waiting for approval (badge on the Yönetim menu)."""
+    return {"pending": db.scalar(select(func.count()).select_from(User).where(User.pending.is_(True))) or 0}
+
+
+class ApproveIn(BaseModel):
+    role: str = "viewer"
+    permissions: dict[str, str] | None = None
+    full_name: str | None = None
+
+
+def _pending_or_404(db: Session, user_id: int) -> User:
+    u = _user_or_404(db, user_id)
+    if not u.pending:
+        raise HTTPException(400, "Bu hesap onay beklemiyor")
+    return u
+
+
+@router.post("/users/{user_id}/approve")
+def approve_signup(user_id: int, body: ApproveIn, me: User = Depends(admin),
+                   db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Accept a sign-up: the account becomes active with the chosen role and permissions."""
+    u = _pending_or_404(db, user_id)
+    _check_role(body.role)
+    if body.full_name is not None:
+        u.full_name = body.full_name.strip()[:128]
+    u.role, u.permissions = body.role, clean_overrides(body.permissions) or None
+    u.pending, u.active = False, True
+    audit.record(db, me, "user", u.id, "role", None, body.role, action="approve")
+    db.commit()
+    return user_out(u)
+
+
+@router.delete("/users/{user_id}/signup")
+def reject_signup(user_id: int, me: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Refuse a sign-up: the request is removed (it never logged in), so the name can be used again."""
+    u = _pending_or_404(db, user_id)
+    audit.record(db, me, "user", u.id, "username", u.username, None, action="reject")
+    db.delete(u)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/users", status_code=201)
@@ -116,7 +163,7 @@ def create_user(body: UserCreate, me: User = Depends(admin), db: Session = Depen
     _check_password(body.password)
     if db.scalar(select(User).where(func.lower(User.username) == username.lower())):
         raise HTTPException(409, "Bu kullanıcı adı zaten var")
-    u = User(username=username, full_name=body.full_name.strip(), role=body.role,
+    u = User(username=username, full_name=body.full_name.strip(), email=check_email(body.email), role=body.role,
              password_hash=hash_password(body.password), active=True,
              permissions=clean_overrides(body.permissions) or None)
     db.add(u)
@@ -134,6 +181,8 @@ def update_user(user_id: int, body: UserUpdate, me: User = Depends(admin),
     changes: dict[str, Any] = {}
     if body.full_name is not None:
         changes["full_name"] = body.full_name.strip()
+    if body.email is not None:
+        changes["email"] = check_email(body.email)
     if body.role is not None:
         _check_role(body.role)
         changes["role"] = body.role
@@ -282,7 +331,8 @@ def delete_firm(firm_id: int, me: User = Depends(contacts_edit), db: Session = D
 def _settings_out(db: Session) -> dict[str, Any]:
     return {"part_no_patterns": part_no_patterns(db),
             "purchased_assemblies": sorted(purchased_assemblies(db)),
-            "status_rules": get_setting(db, "status_rules") or {"big_drop_ratio": 0.10}}
+            "status_rules": get_setting(db, "status_rules") or {"big_drop_ratio": 0.10},
+            "signup": {"enabled": signup_enabled(db)}}
 
 
 class SettingIn(BaseModel):
@@ -312,6 +362,10 @@ def _validate_setting(key: str, value: Any) -> Any:
         return pats
     if key == "purchased_assemblies":
         return sorted(_clean_str_list(value, "Satın alınan montaj listesi"))
+    if key == "signup":
+        if not isinstance(value, dict):
+            raise HTTPException(400, "Hesap oluşturma ayarı bir nesne olmalı")
+        return {"enabled": bool(value.get("enabled", True))}
     if key == "status_rules":
         if not isinstance(value, dict):
             raise HTTPException(400, "Durum kuralları bir nesne olmalı")

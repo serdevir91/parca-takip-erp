@@ -85,6 +85,7 @@ function Items() {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       <Loading error={list.error} loading={list.isLoading} />
       <DataGrid<StockItem>
+        exportName="Stok kartları"
         data={d?.rows ?? []} columns={columns} getRowId={(r) => String(r.id)} rowStyle={lowStyle}
         emptyText={low ? "Kritik seviyenin altında stok yok." : "Stok kartı yok. Satın alma mal kabulü ve üretim girişleri kartları kendiliğinden açar."}
         toolbar={<>

@@ -757,6 +757,7 @@ export default function Drawings() {
         </div>
       ) : (
         <DataGrid<Row>
+          exportName="Teknik resimler"
           data={rows}
           columns={columns}
           getRowId={(r) => r.key}

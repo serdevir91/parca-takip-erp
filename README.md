@@ -7,6 +7,9 @@ uygulamayı demo projelerle kurar ve tarayıcıda yeni sekmede açar (ilk açıl
 Giriş: **admin / admin**. Sekme açılmazsa alttaki **PORTS** sekmesinde 8000 numaralı portun yanındaki 🌐 simgesine tıklayın.
 Codespace kullanılmadığında 30 dakikada kendiliğinden durur; https://github.com/codespaces adresinden silinebilir.
 
+**İlk kez kuruyorsanız:** adım adım anlatım için [KURULUM_KILAVUZU.md](KURULUM_KILAVUZU.md) dosyasını okuyun
+(sunucu, istemciler, hesap onayı, e-posta ayarı, sorun giderme).
+
 Yerel ağda (internetsiz) çalışan parça takip sistemi. SolidWorks BOM listeleri, teknik resimler,
 üretim ve satın alma durumu tek yerde tutulur. Tarayıcıdan kullanılır, istemci bilgisayarlara kurulum gerekmez.
 
@@ -298,9 +301,12 @@ ve sistemi başlatır (`docker compose up -d --no-build`).
    `KURULUM.bat` rastgele şifre üretir ve kurulum sonunda ekrana yazar).
 3. **Hemen yönetici şifresini değiştirin:** sağ üstteki adınıza tıklayın, **Profilim** penceresinde yeni şifreyi
    girin (en az 8 karakter).
-4. Çalışanlar için kullanıcı açın ve rol verin (bkz. [Roller](#roller)).
-5. Yönetim > Firmalar ekranında üretici ve tedarikçi firmaları kontrol edin.
-6. Yönetim > Ayarlar ekranında parça numarası desenlerini ve satın alınan montajları kontrol edin.
+4. Çalışanlar için kullanıcı açın ve rol verin (bkz. [Roller](#roller)). Çalışanlar giriş ekranındaki
+   **Hesap oluştur** ile kendileri de istek gönderebilir; istek Yönetim › Kullanıcılar ekranında onaylanır.
+5. İsteğe bağlı: Yönetim › E-posta ekranında e-posta sunucusunu ayarlayın (listeleri e-postayla göndermek
+   ve hesap isteği bildirimleri için).
+6. Yönetim > Firmalar ekranında üretici ve tedarikçi firmaları kontrol edin.
+7. Yönetim > Ayarlar ekranında parça numarası desenlerini ve satın alınan montajları kontrol edin.
 
 Yönetici hesabı varsayılan değerlerle yalnızca veritabanında hiç kullanıcı yokken oluşturulur.
 Sonradan `.env` değiştirmek mevcut şifreyi değiştirmez.

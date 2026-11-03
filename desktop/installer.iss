@@ -1,7 +1,7 @@
 ﻿; Inno Setup script for the desktop app. CI: ISCC /DAppVersion=x.y.z desktop\installer.iss
 ; Expects dist\ParcaTakipERP (PyInstaller) and dist\MicrosoftEdgeWebview2Setup.exe (Evergreen bootstrapper).
 #ifndef AppVersion
-  #define AppVersion "1.3.1"
+  #define AppVersion "1.4.0"
 #endif
 
 [Setup]
@@ -45,9 +45,16 @@ Name: "{group}\Parça Takip ERP"; Filename: "{app}\ParcaTakipERP.exe"
 Name: "{autodesktop}\Parça Takip ERP"; Filename: "{app}\ParcaTakipERP.exe"; Tasks: desktopicon
 
 [Run]
+; Server mode: let other computers and phones reach the app (only possible when installed as admin;
+; otherwise Windows asks once when the server starts)
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Parca Takip ERP"""; Flags: runhidden waituntilterminated; Check: IsAdminInstallMode
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Parca Takip ERP"" dir=in action=allow program=""{app}\ParcaTakipERP.exe"" enable=yes profile=private,domain"; StatusMsg: "Güvenlik duvarı izni ekleniyor..."; Flags: runhidden waituntilterminated; Check: IsAdminInstallMode
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Microsoft Edge WebView2 kuruluyor..."; Check: NeedsWebView2; Flags: waituntilterminated
 ; Also runs after a silent update (no skipifsilent), so the app comes back by itself
 Filename: "{app}\ParcaTakipERP.exe"; Description: "{cm:LaunchProgram,Parça Takip ERP}"; Flags: nowait postinstall
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Parca Takip ERP"""; Flags: runhidden; Check: IsAdminInstallMode; RunOnceId: "DelFwRule"
 
 [Code]
 const

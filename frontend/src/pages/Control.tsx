@@ -242,6 +242,7 @@ export default function Control() {
         )}
       </div>
       <DataGrid<Issue>
+        exportName="Kontrol listesi"
         data={rows}
         columns={columns}
         getRowId={(r) => r.key}

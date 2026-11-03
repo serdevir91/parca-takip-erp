@@ -13,6 +13,7 @@ export interface User {
   id: number;
   username: string;
   full_name: string;
+  email?: string;
   role: Role;
   role_label: string;
   active: boolean;

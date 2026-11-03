@@ -115,7 +115,10 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .toast { position: fixed; bottom: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
 .toast div { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: 6px; box-shadow: var(--shadow); max-width: 420px; }
 .toast div.err { border-left-color: var(--danger); }
-.login { display: flex; align-items: center; justify-content: center; height: 100%; }
+.login { display: flex; align-items: center; justify-content: center; height: 100%; overflow-y: auto; padding: 16px 0; }
+.login form { margin: auto 0; }
+.ok-box { background: color-mix(in srgb, var(--ok) 15%, transparent); border: 1px solid var(--ok); border-radius: 6px; padding: 8px 10px; }
+.small-note { font-size: 12px; text-align: center; }
 .login form { width: 320px; display: flex; flex-direction: column; gap: 10px; }
 .progress { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .progress > div { height: 100%; background: var(--ok); }
@@ -536,3 +539,63 @@ div.chat-pick-row { cursor: default; }
   .tabs button { padding: 10px 14px; }
 }
 
+
+/* ---------- admin users as cards (fit phones and desktop alike) ---------- */
+.signup-box { border: 1px solid var(--accent); border-radius: 8px; padding: 10px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ulist { display: flex; flex-direction: column; gap: 6px; }
+.ucard { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.ucard-main { display: flex; flex-direction: column; min-width: 180px; flex: 1 1 220px; }
+.ucard-main .muted { font-size: 12px; overflow-wrap: anywhere; }
+.ucard-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 0 1 auto; }
+.ucard-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- DataGrid: search/filter bar, card (list) view, filter sheet ---------- */
+.dg-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.dg-search { flex: 1 1 180px; min-width: 120px; max-width: 360px; }
+.dg-sort { max-width: 200px; }
+.dg-menu-wrap { position: relative; }
+.dg-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 240px; }
+.dg-menu .btn { text-align: left; justify-content: flex-start; }
+.dg-sheet { margin: 6px 12px; padding: 10px; }
+/* Non-full pages: keep the grid's own scrollbars on screen */
+.content:not(.full) .dg, .content:not(.full) .dg-cards { max-height: calc(100dvh - 190px); min-height: 240px; }
+.modal .dg, .modal .dg-cards { max-height: 55vh; min-height: 200px; }
+.dg-cards { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 6px 10px 12px; background: var(--bg); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.dgc { display: flex; gap: 8px; padding: 9px 12px; margin-bottom: 6px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; box-sizing: border-box; }
+.dgc.clickable { cursor: pointer; }
+.dgc.clickable:hover { border-color: var(--accent); }
+.dgc.selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+.dgc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dgc-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dgc-head input[type="checkbox"] { width: 18px; height: 18px; flex: none; }
+.dgc-title { flex: 1 1 auto; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.dgc-badge { flex: none; max-width: 45%; }
+.dgc-badge { margin-left: auto; }
+.dgc-badge + .dgc-more { margin-left: 0; }
+.dgc-more { margin-left: auto; padding: 0 8px; }
+.dgc-sub { color: var(--muted); overflow-wrap: anywhere; }
+.dgc-fields { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.dgc-field { display: inline-flex; gap: 5px; align-items: baseline; min-width: 0; max-width: 100%; }
+.dgc-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.dgc-val { overflow-wrap: anywhere; border-radius: 4px; padding: 0 2px; }
+.dgc-val.editable { border-bottom: 1px dashed var(--muted); cursor: text; }
+.dgc-field input, .dgc-field select, .dgc-title input, .dgc-title select, .dgc-sub input, .dgc-sub select { min-width: 120px; height: 30px; }
+.dgc-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.dgc-actions .row { flex-wrap: wrap !important; }
+@media (max-width: 800px) {
+  .dg-bar { padding: 6px 8px; }
+  .dg-search { max-width: none; flex-basis: 100%; }
+  .dgc { padding: 10px; }
+  .dgc-fields { font-size: 14px; }
+  .tree-lead { --step: 5px; }
+  .dg-menu { position: fixed; top: auto; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); min-width: 0; max-height: 70dvh; overflow-y: auto; z-index: 60; box-shadow: 0 -6px 24px rgba(0,0,0,.35); }
+  .dg-menu .btn { min-height: 42px; }
+}
+.dgc-badge .dgc-val { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.tree-lead { --step: 12px; width: calc(22px + var(--d, 0) * var(--step)); flex: none; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start; gap: 2px; color: var(--muted); font-size: 11px; }
+.tree-lead .tree-toggle { width: 26px; height: 26px; font-size: 15px; border: 1px solid var(--border); border-radius: 6px; margin: 0; }
+.tree-level { white-space: nowrap; }
+.parts-show { min-width: 280px; gap: 8px; }
+.parts-show .kind-chips { flex-wrap: wrap; }

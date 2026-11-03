@@ -402,8 +402,20 @@ class DesktopApp:
         if c.get("mode") == "client":
             url = c.get("server_url", "")
             if not is_erp(url, 6):
-                return self._fail(f"{url} adresindeki sunucuya bağlanılamadı. Sunucu bilgisayarın açık ve "
-                                  "uygulamanın çalışır olduğunu kontrol edin.")
+                # The server may have got a new IP from the router: if exactly one server answers on the
+                # LAN, switch to it and remember the new address
+                try:
+                    found = self.discover()
+                except Exception:  # noqa: BLE001 - discovery is best effort
+                    log.exception("discovery failed")
+                    found = []
+                if len(found) != 1:
+                    return self._fail(f"{url} adresindeki sunucuya bağlanılamadı. Sunucu bilgisayarın açık, "
+                                      "uygulamanın çalışır ve iki cihazın aynı ağda olduğunu kontrol edin."
+                                      + (" Ağda birden fazla sunucu var, birini seçin." if found else ""))
+                log.info("server moved: %s -> %s", url, found[0]["url"])
+                url = c["server_url"] = found[0]["url"]
+                save_config({k: v for k, v in c.items() if not k.startswith("_")})
             self._base = url
         else:
             port = int(c.get("port", DEFAULT_PORT))

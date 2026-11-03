@@ -60,18 +60,54 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
 
 export const useUpdate = () => useContext(Ctx)!;
 
+const RELOADED_KEY = "erp_update_reloaded";
+const DISMISS_KEY = "erp_update_dismissed";
+
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Banner shown when the server (or the optional feed) has a newer version than the loaded bundle. */
 export function UpdateBanner() {
   const { info, available } = useUpdate();
+  const [dismissed, setDismissed] = useState(() => readSession(DISMISS_KEY));
   if (!available) return null;
   const serverNewer = info.server && cmpVersion(info.server, info.current) > 0;
+  const key = `${info.current}>${serverNewer ? info.server : info.feed?.version}`;
+  // Hidden for this session once dismissed, or when a reload already happened and the server still sends the
+  // old page (its frontend files were not updated): reloading again would not help.
+  if (dismissed === key || (serverNewer && readSession(RELOADED_KEY) === key)) return null;
+  const close = () => {
+    writeSession(DISMISS_KEY, key);
+    setDismissed(key);
+  };
   return (
-    <div className="card" style={{ margin: "8px 16px 0", borderColor: "var(--accent)" }}>
+    <div className="card update-banner" style={{ margin: "8px 16px 0", borderColor: "var(--accent)" }}>
       <div className="row">
         {serverNewer ? (
           <>
             <span>Sunucuda yeni sürüm var: <b>{info.server}</b> (açık olan: {info.current}).</span>
-            <button className="btn primary small" onClick={() => location.reload()}>Yenile</button>
+            <button
+              className="btn primary small"
+              onClick={() => {
+                writeSession(RELOADED_KEY, key);
+                location.reload();
+              }}
+            >
+              Yenile
+            </button>
           </>
         ) : (
           <>
@@ -80,6 +116,9 @@ export function UpdateBanner() {
             <span className="muted">Kurulum için README &gt; Güncelleme adımlarını izleyin.</span>
           </>
         )}
+        <button className="btn small" style={{ marginLeft: "auto" }} onClick={close} aria-label="Kapat" title="Kapat">
+          ✕
+        </button>
       </div>
     </div>
   );

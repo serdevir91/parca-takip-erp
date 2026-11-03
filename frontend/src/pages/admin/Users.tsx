@@ -6,8 +6,8 @@ import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal, fmtDate, roleLabel } from "./shared";
 
 export type AdminUser = {
-  id: number; username: string; full_name: string; role: string; role_label: string;
-  active: boolean; created_at: string | null;
+  id: number; username: string; full_name: string; email: string; role: string; role_label: string;
+  active: boolean; pending?: boolean; created_at: string | null;
   /** Admin's per-user overrides; permissions = effective levels (role defaults + overrides). */
   overrides?: Record<string, Level>; permissions?: Record<string, Level>;
 };
@@ -27,88 +27,131 @@ export default function UsersTab() {
   const { user: me } = useAuth();
   const users = useQuery({ queryKey: ["admin", "users"], queryFn: () => api.get<AdminUser[]>("/admin/users") });
   const roles = useQuery({ queryKey: ["admin", "roles"], queryFn: () => api.get<RoleOpt[]>("/admin/roles"), staleTime: Infinity });
+  const settings = useQuery({ queryKey: ["admin", "settings"], queryFn: () => api.get<{ signup?: { enabled: boolean } }>("/admin/settings") });
   const roleValues = roles.data?.map((r) => r.value) ?? FALLBACK_ROLES;
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [approving, setApproving] = useState<AdminUser | null>(null);
   const [pwFor, setPwFor] = useState<AdminUser | null>(null);
   const [showInactive, setShowInactive] = useState(true);
+  const [q, setQ] = useState("");
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    void qc.invalidateQueries({ queryKey: ["admin", "signups"] });
+  };
   const toggleActive = useMutation({
     mutationFn: (u: AdminUser) => api.put<AdminUser>(`/admin/users/${u.id}`, { active: !u.active }),
     onSuccess: (u) => {
       toast(u.active ? `${u.username} etkinleştirildi` : `${u.username} pasif yapıldı`);
-      void refresh();
+      refresh();
     },
     onError: (e) => toast(errText(e), true),
   });
+  const reject = useMutation({
+    mutationFn: (u: AdminUser) => api.del(`/admin/users/${u.id}/signup`),
+    onSuccess: (_, u) => {
+      toast(`${u.username} isteği reddedildi`);
+      refresh();
+    },
+    onError: (e) => toast(errText(e), true),
+  });
+  const signupOn = settings.data?.signup?.enabled ?? true;
+  const setSignup = useMutation({
+    mutationFn: (enabled: boolean) => api.put("/admin/settings/signup", { value: { enabled } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "settings"] }),
+    onError: (e) => toast(errText(e), true),
+  });
 
-  const list = (users.data ?? []).filter((u) => showInactive || u.active);
+  const all = users.data ?? [];
+  const pending = all.filter((u) => u.pending);
+  const needle = q.trim().toLocaleLowerCase("tr");
+  const list = all.filter((u) => !u.pending && (showInactive || u.active) &&
+    (!needle || `${u.username} ${u.full_name} ${u.email}`.toLocaleLowerCase("tr").includes(needle)));
   return (
     <div className="card">
-      <div className="row" style={{ marginBottom: 10 }}>
-        <button className="btn primary" onClick={() => setCreating(true)}>+ Yeni kullanıcı</button>
-        <label className="row" style={{ gap: 4 }}>
-          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasif kullanıcıları göster
-        </label>
-        <span className="muted">{(users.data?.length ?? 0).toLocaleString("tr-TR")} kullanıcı</span>
-      </div>
-      <Loading error={users.error} loading={users.isLoading} />
-      {users.data && (
-        <div className="adm-scroll">
-          <table className="simple">
-            <thead>
-              <tr><th>Kullanıcı adı</th><th>Ad Soyad</th><th>Rol</th><th>Durum</th><th>Oluşturulma</th><th></th></tr>
-            </thead>
-            <tbody>
-              {list.map((u) => {
-                const self = me?.username === u.username;
-                return (
-                  <tr key={u.id} style={u.active ? undefined : { opacity: 0.6 }}>
-                    <td><b>{u.username}</b>{self && <span className="badge" style={{ marginLeft: 6 }}>siz</span>}</td>
-                    <td>{u.full_name}</td>
-                    <td>
-                      {roleLabel(u.role)}
-                      {!!Object.keys(u.overrides ?? {}).length && u.role !== "admin" && (
-                        <span className="badge" style={{ marginLeft: 6 }} title="Bu kullanıcıya rol dışında özel yetki verilmiş">özel yetki</span>
-                      )}
-                    </td>
-                    <td>{u.active ? <span className="badge new">Aktif</span> : <span className="badge">Pasif</span>}</td>
-                    <td className="muted">{fmtDate(u.created_at)}</td>
-                    <td>
-                      <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                        <button className="btn small" onClick={() => setEditing(u)}>Düzenle</button>
-                        <button className="btn small" onClick={() => setPwFor(u)}>Şifre sıfırla</button>
-                        <button className="btn small" disabled={self || toggleActive.isPending}
-                          title={self ? "Kendi hesabınızı pasif yapamazsınız" : undefined}
-                          onClick={() => toggleActive.mutate(u)}>{u.active ? "Pasif yap" : "Etkinleştir"}</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {pending.length > 0 && (
+        <div className="signup-box">
+          <b>Onay bekleyen hesap istekleri ({pending.length})</b>
+          {pending.map((u) => (
+            <div key={u.id} className="ucard pending">
+              <div className="ucard-main">
+                <b>{u.full_name || u.username}</b>
+                <span className="muted">@{u.username}{u.email && ` · ${u.email}`} · {fmtDate(u.created_at)}</span>
+              </div>
+              <div className="ucard-actions">
+                <button className="btn primary small" onClick={() => setApproving(u)}>Onayla ve yetki ver</button>
+                <button className="btn danger small" disabled={reject.isPending}
+                  onClick={() => confirm(`${u.username} hesap isteği reddedilsin mi?`) && reject.mutate(u)}>Reddet</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button className="btn primary" onClick={() => setCreating(true)}>+ Yeni kullanıcı</button>
+        <input className="grow" placeholder="Ara: ad, kullanıcı adı, e-posta" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 160 }} />
+        <label className="row" style={{ gap: 4 }}>
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri göster
+        </label>
+        <label className="row" style={{ gap: 4 }} title="Kapalıysa hesapları yalnızca yönetici açar">
+          <input type="checkbox" checked={signupOn} disabled={setSignup.isPending || !settings.data}
+            onChange={(e) => setSignup.mutate(e.target.checked)} /> Girişte “Hesap oluştur” göster
+        </label>
+        <span className="muted">{list.length.toLocaleString("tr-TR")} kullanıcı</span>
+      </div>
+      <Loading error={users.error} loading={users.isLoading} />
+      <div className="ulist">
+        {list.map((u) => {
+          const self = me?.username === u.username;
+          return (
+            <div key={u.id} className="ucard" style={u.active ? undefined : { opacity: 0.6 }}>
+              <div className="ucard-main">
+                <b>
+                  {u.full_name || u.username}
+                  {self && <span className="badge" style={{ marginLeft: 6 }}>siz</span>}
+                </b>
+                <span className="muted">@{u.username}{u.email && ` · ${u.email}`}</span>
+              </div>
+              <div className="ucard-meta">
+                <span className="badge">{roleLabel(u.role)}</span>
+                {!!Object.keys(u.overrides ?? {}).length && u.role !== "admin" && (
+                  <span className="badge" title="Bu kullanıcıya rol dışında özel yetki verilmiş">özel yetki</span>
+                )}
+                {u.active ? <span className="badge new">Aktif</span> : <span className="badge">Pasif</span>}
+                <span className="muted">{fmtDate(u.created_at)}</span>
+              </div>
+              <div className="ucard-actions">
+                <button className="btn small" onClick={() => setEditing(u)}>Düzenle / yetkiler</button>
+                <button className="btn small" onClick={() => setPwFor(u)}>Şifre sıfırla</button>
+                <button className="btn small" disabled={self || toggleActive.isPending}
+                  title={self ? "Kendi hesabınızı pasif yapamazsınız" : undefined}
+                  onClick={() => toggleActive.mutate(u)}>{u.active ? "Pasif yap" : "Etkinleştir"}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
       <p className="muted" style={{ marginTop: 10 }}>
         Kullanıcılar silinmez; denetim kaydında adları korunur. Pasif kullanıcılar giriş yapamaz.
       </p>
       {creating && <UserForm roles={roleValues} onClose={() => setCreating(false)} onSaved={refresh} />}
       {editing && <UserForm roles={roleValues} user={editing} self={me?.username === editing.username}
         onClose={() => setEditing(null)} onSaved={refresh} />}
+      {approving && <UserForm roles={roleValues} user={approving} approve onClose={() => setApproving(null)} onSaved={refresh} />}
       {pwFor && <PasswordForm user={pwFor} onClose={() => setPwFor(null)} />}
     </div>
   );
 }
 
-function UserForm({ user, roles, self, onClose, onSaved }: {
-  user?: AdminUser; roles: string[]; self?: boolean; onClose: () => void; onSaved: () => void;
+function UserForm({ user, roles, self, approve, onClose, onSaved }: {
+  user?: AdminUser; roles: string[]; self?: boolean; approve?: boolean; onClose: () => void; onSaved: () => void;
 }) {
   const toast = useToast();
   const [username, setUsername] = useState(user?.username ?? "");
   const [fullName, setFullName] = useState(user?.full_name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState(user?.role ?? "viewer");
   const [active, setActive] = useState(user?.active ?? true);
   const [password, setPassword] = useState("");
@@ -116,12 +159,17 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
   const [overrides, setOverrides] = useState<Record<string, Level>>(user?.overrides ?? {});
 
   const save = useMutation({
-    mutationFn: () =>
-      user
-        ? api.put<AdminUser>(`/admin/users/${user.id}`, { full_name: fullName, role, active, permissions: overrides })
-        : api.post<AdminUser>("/admin/users", { username: username.trim(), password, full_name: fullName, role, permissions: overrides }),
+    mutationFn: async () => {
+      if (approve && user) {
+        await api.post<AdminUser>(`/admin/users/${user.id}/approve`, { role, permissions: overrides, full_name: fullName });
+        return email !== user.email ? api.put<AdminUser>(`/admin/users/${user.id}`, { email }) : { ...user, active: true };
+      }
+      return user
+        ? api.put<AdminUser>(`/admin/users/${user.id}`, { full_name: fullName, email, role, active, permissions: overrides })
+        : api.post<AdminUser>("/admin/users", { username: username.trim(), password, full_name: fullName, email, role, permissions: overrides });
+    },
     onSuccess: (u) => {
-      toast(user ? `${u.username} güncellendi` : `${u.username} oluşturuldu`);
+      toast(approve ? `${u.username} onaylandı; artık giriş yapabilir` : user ? `${u.username} güncellendi` : `${u.username} oluşturuldu`);
       onSaved();
       onClose();
     },
@@ -131,11 +179,11 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
   const pwErr = !user && (password.length < MIN_PASSWORD ? `Şifre en az ${MIN_PASSWORD} karakter olmalı` : password !== password2 ? "Şifreler aynı değil" : null);
   const invalid = (!user && !username.trim()) || !!pwErr;
   return (
-    <Modal wide title={user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
+    <Modal wide title={approve ? `Hesap isteğini onayla: ${user?.username}` : user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
       footer={<>
         <button className="btn" onClick={onClose}>Vazgeç</button>
         <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Kaydediliyor…" : "Kaydet"}
+          {save.isPending ? "Kaydediliyor…" : approve ? "Onayla" : "Kaydet"}
         </button>
       </>}>
       <div className="adm-form">
@@ -145,12 +193,16 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
         <Field label="Ad Soyad">
           <input value={fullName} autoFocus={!!user} onChange={(e) => setFullName(e.target.value)} />
         </Field>
+        <Field label="E-posta" hint="Listeler bu adrese gönderilebilir; hesap istekleri yöneticilere buradan bildirilir.">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+        </Field>
         <Field label="Rol" hint={self ? "Kendi rolünüzü değiştirirseniz yönetim ekranına erişiminizi kaybedebilirsiniz." : undefined}>
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             {roles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
           </select>
         </Field>
-        {user && (
+        {approve && <p className="muted">Rolü ve modül yetkilerini seçip onaylayın; kullanıcı hemen giriş yapabilir.</p>}
+        {user && !approve && (
           <label className="row" style={{ gap: 6 }} title={self ? "Kendi hesabınızı pasif yapamazsınız" : undefined}>
             <input type="checkbox" checked={active} disabled={self} onChange={(e) => setActive(e.target.checked)} /> Aktif
             {self && <span className="muted">(kendi hesabınız pasif yapılamaz)</span>}

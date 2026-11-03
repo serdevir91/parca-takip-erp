@@ -598,7 +598,7 @@ function TreeRows({ pid, vid }: { pid: number; vid: number }) {
   if (q.error) return <div className="badge err">{errText(q.error)}</div>;
   return (
     <div className="bomv-grid">
-      <DataGrid data={q.data?.rows ?? []} columns={columns} getRowId={(r) => String(r.id)}
+      <DataGrid exportName="BOM satırları" data={q.data?.rows ?? []} columns={columns} getRowId={(r) => String(r.id)}
         toolbar={<span className="muted">BOM sırasıyla tüm satırlar (girinti = seviye derinliği)</span>}
         emptyText="Satır yok" />
     </div>

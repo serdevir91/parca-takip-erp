@@ -36,11 +36,14 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True)
     full_name: Mapped[str] = mapped_column(String(128), default="")
+    email: Mapped[str] = mapped_column(String(200), default="", server_default="")
     password_hash: Mapped[str] = mapped_column(String(128))
     role: Mapped[str] = mapped_column(String(16), default=ROLE_VIEWER)
     # Per-module overrides of the role defaults, see app/permissions.py; None = role defaults only
     permissions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Self sign-up waiting for an admin: cannot log in until approved (then pending=False, active=True)
+    pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Bumped on password change/reset and deactivation; tokens carry it ("tv"), older tokens stop working
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

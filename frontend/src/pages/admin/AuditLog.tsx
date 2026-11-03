@@ -15,6 +15,7 @@ const PAGE_SIZE = 100;
 const ACTION_TR: Record<string, string> = {
   create: "Oluşturma", update: "Güncelleme", delete: "Silme", upload: "Yükleme", import: "İçe aktarma",
   login: "Giriş", restore: "Geri yükleme", backup: "Yedekleme", password: "Şifre değişikliği",
+  signup: "Hesap isteği", approve: "Onay", reject: "Ret", mail: "E-posta",
 };
 const ENTITY_TR: Record<string, string> = {
   project: "Proje", part: "Parça", bom: "BOM", setting: "Ayar", user: "Kullanıcı", firm: "Firma",

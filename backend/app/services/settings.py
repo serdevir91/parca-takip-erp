@@ -5,6 +5,8 @@ Keys:
   part_no_patterns   -> [regex, ...]
   purchased_assemblies -> [part_no, ...]   (global "Hazır Alım montaj" list, also mirrored in parts)
   status_rules       -> {big_drop_ratio}
+  signup             -> {enabled}            (login screen offers "Hesap oluştur")
+  smtp               -> see services/mailer.py
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ DEFAULTS: dict[str, Any] = {
             "skip_note": t35core.DEFAULT_SKIP_NOTE},
     "part_no_patterns": list(DEFAULT_PART_NO_PATTERNS),
     "status_rules": {"big_drop_ratio": 0.10},
+    "signup": {"enabled": True},
 }
 
 
@@ -84,3 +87,7 @@ def part_no_patterns(db: Session) -> list[str]:
 
 def big_drop_ratio(db: Session) -> float:
     return float((get_setting(db, "status_rules") or {}).get("big_drop_ratio", 0.10))
+
+
+def signup_enabled(db: Session) -> bool:
+    return bool((get_setting(db, "signup") or {}).get("enabled", True))

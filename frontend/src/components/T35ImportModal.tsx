@@ -191,6 +191,7 @@ function Inner({ pid, onClose }: Props) {
                 <div className="imp-body">
                   {tab === "changes" && (
                     <DataGrid<ChangeRow>
+                      exportName={false}
                       data={changeRows} columns={columns} getRowId={(r) => r.id}
                       selectable selection={sel} onSelectionChange={setSel}
                       emptyText="Uygulanacak değişiklik yok; liste ile takip bilgileri aynı."
