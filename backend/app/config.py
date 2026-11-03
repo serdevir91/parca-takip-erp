@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048
+    # Daily backup time (HH:MM) for "backup --daemon" and "serve"
+    backup_time: str = "02:00"
+    # Built SPA (frontend/dist) served by the backend itself when running without Docker/nginx.
+    # Empty: use ../frontend/dist next to the backend folder if it exists (never true inside the image).
+    static_dir: Path | None = None
+
+    @property
+    def spa_dir(self) -> Path | None:
+        d = self.static_dir or Path(__file__).resolve().parents[2] / "frontend" / "dist"
+        return d if (d / "index.html").is_file() else None
 
     @property
     def bom_dir(self) -> Path:

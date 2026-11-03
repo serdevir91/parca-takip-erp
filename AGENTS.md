@@ -31,6 +31,7 @@ Read this file first. Do not re-scan the whole project.
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
   - `restore`.
+  - `migrate` (alembic upgrade head from any cwd; stamps old create_all SQLite DBs) and `serve` (Docker-free: migrate + uvicorn + backup thread).
 - Migrations live in `alembic/`. The backend runs `alembic upgrade head` on startup.
 
 ## Frontend layout
@@ -55,6 +56,7 @@ cd frontend && npx tsc -b && npm run build
 docker compose up -d --build
 ```
 Windows install/update: `KURULUM.bat` runs `deploy/windows_install.ps1` (Docker check, random `.env` secrets, free-port pick, firewall rule). `.gitattributes` keeps LF everywhere except `*.ps1`/`*.bat`; `.ps1` files need a UTF-8 BOM for Windows PowerShell 5.1.
+Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules
 - The UI text is Turkish, with correct characters (ç, ğ, ı, İ, ö, ş, ü). This app is an explicit exception to the workspace's English-default rule.

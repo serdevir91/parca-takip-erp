@@ -38,3 +38,6 @@ dist-offline/
 Thumbs.db
 .idea/
 .vscode/
+
+# Codespaces demo data
+/.demo/

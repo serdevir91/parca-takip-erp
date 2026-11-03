@@ -58,3 +58,30 @@ for _m in sorted(pkgutil.iter_modules(api_pkg.__path__), key=lambda m: m.name):
     _router = getattr(_mod, "router", None)
     if _router is not None:
         app.include_router(_router, prefix="/api")
+
+
+# ---------- SPA (Docker-free install only; in Docker nginx serves the frontend) ----------
+_spa = get_settings().spa_dir
+if _spa is not None:
+    import mimetypes
+
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    # The Windows registry can map .js to text/plain, which browsers refuse for ES modules
+    for _ext, _type in ((".js", "text/javascript"), (".mjs", "text/javascript"), (".css", "text/css"),
+                        (".svg", "image/svg+xml"), (".wasm", "application/wasm"), (".json", "application/json")):
+        mimetypes.add_type(_type, _ext)
+
+    app.mount("/assets", StaticFiles(directory=_spa / "assets", check_dir=False), name="assets")
+    _spa_root = _spa.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        if path.startswith("api/") or path == "api":
+            raise HTTPException(404, "Not Found")
+        f = (_spa_root / path).resolve()
+        if path and f.is_file() and _spa_root in f.parents:
+            return FileResponse(f)
+        return FileResponse(_spa_root / "index.html", headers={"Cache-Control": "no-cache"})

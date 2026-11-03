@@ -22,6 +22,10 @@ def make_engine(url: str):
         @event.listens_for(eng, "connect")
         def _fk(dbapi_conn, _):  # pragma: no cover - sqlite only
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
+            # Several LAN users at once (Docker-free install): readers do not block the writer
+            dbapi_conn.execute("PRAGMA busy_timeout=15000")
+            if ":memory:" not in url:
+                dbapi_conn.execute("PRAGMA journal_mode=WAL")
     return eng
 
 

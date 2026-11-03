@@ -4,6 +4,8 @@
   backup        take a backup now (--daemon: every day at --at HH:MM, used by the compose service)
   restore FILE  restore a backup tar (overwrites database and data directory)
   create-admin  create an admin user or reset an existing user to admin with a new password
+  migrate       bring the database schema up to date (alembic upgrade head)
+  serve         Docker-free run: migrate, then web server (API + built frontend) and daily backup
 """
 from __future__ import annotations
 
@@ -11,11 +13,12 @@ import argparse
 import logging
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from .auth import hash_password
@@ -27,7 +30,8 @@ from .services.bootstrap import seed_defaults
 
 log = logging.getLogger("erp.cli")
 
-DEFAULT_SEED_DIR = Path(__file__).resolve().parents[1] / "tests" / "data"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_SEED_DIR = BACKEND_DIR / "tests" / "data"
 MAIN_PROJECT = "T-35 (Demo)"
 SUB_PROJECT = "T01_0004 Alt Montaj (Demo)"
 PURCHASED_DEMO = ["TSDacikboy"]
@@ -192,6 +196,39 @@ def backup_daemon(at: str) -> None:
             print(f"Yedekleme hatası: {e}", file=sys.stderr, flush=True)
 
 
+# ---------- migrate / serve (Docker-free install) ----------
+def migrate() -> None:
+    """alembic upgrade head from any working directory. A SQLite database whose tables came from
+    create_all (older dev setup) is stamped instead, since its schema already matches the models."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    insp = inspect(engine)
+    if insp.has_table("users") and not insp.has_table("alembic_version"):
+        command.stamp(cfg, "head")
+    else:
+        command.upgrade(cfg, "head")
+
+
+def serve(host: str, port: int, backup: bool) -> None:
+    import uvicorn
+
+    cfg = get_settings()
+    for d in (cfg.data_dir, cfg.backup_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    migrate()
+    if cfg.spa_dir is None:
+        print("Uyarı: frontend/dist bulunamadı, yalnızca API çalışacak (cd frontend && npm run build)",
+              file=sys.stderr, flush=True)
+    if backup:
+        threading.Thread(target=backup_daemon, args=(cfg.backup_time,), name="backup", daemon=True).start()
+    print(f"Parça Takip ERP: http://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
+    uvicorn.run("app.main:app", host=host, port=port, workers=1, proxy_headers=True,
+                forwarded_allow_ips="*", timeout_keep_alive=75, log_level="info")
+
+
 def restore(path: Path, yes: bool) -> None:
     m = backup_svc.read_manifest(path)
     print(f"Yedek: {path.name}, tarih {m.get('created_at')}, sürüm {m.get('app_version')}, "
@@ -201,7 +238,8 @@ def restore(path: Path, yes: bool) -> None:
         if ans.strip().casefold() not in ("evet", "e", "yes", "y"):
             raise SystemExit("İptal edildi")
     backup_svc.restore_backup(path)
-    print("Geri yükleme tamamlandı. Uygulamayı yeniden başlatın: docker compose restart backend")
+    print("Geri yükleme tamamlandı. Uygulamayı yeniden başlatın "
+          "(Docker: docker compose restart backend, Docker'sız: ParcaTakipERP görevini yeniden başlatın)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -213,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--force", action="store_true", help="Demo projelerini silip yeniden oluştur")
     b = sub.add_parser("backup", help="Yedek al")
     b.add_argument("--daemon", action="store_true", help="Her gün --at saatinde yedek al")
-    b.add_argument("--at", default=os.environ.get("ERP_BACKUP_TIME", "02:00"), help="HH:MM (varsayılan 02:00)")
+    b.add_argument("--at", default=get_settings().backup_time, help="HH:MM (varsayılan 02:00)")
     r = sub.add_parser("restore", help="Yedekten geri yükle")
     r.add_argument("file", type=Path)
     r.add_argument("--yes", action="store_true", help="Onay sormadan geri yükle")
@@ -221,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--username", default=get_settings().admin_user)
     c.add_argument("--password", default=os.environ.get("ERP_NEW_ADMIN_PASSWORD"))
     c.add_argument("--full-name", default="")
+    sub.add_parser("migrate", help="Veritabanı şemasını güncelle")
+    v = sub.add_parser("serve", help="Docker'sız çalıştır: web sunucusu + günlük yedek")
+    v.add_argument("--host", default=os.environ.get("ERP_HOST", "0.0.0.0"))
+    v.add_argument("--port", type=int, default=int(os.environ.get("ERP_HTTP_PORT", "8000")))
+    v.add_argument("--no-backup", action="store_true", help="Günlük yedeği çalıştırma")
     a = ap.parse_args(argv)
 
     if a.cmd == "seed":
@@ -241,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
         if not path.is_file():
             raise SystemExit(f"Yedek bulunamadı: {a.file}")
         restore(path, a.yes)
+    elif a.cmd == "migrate":
+        migrate()
+    elif a.cmd == "serve":
+        serve(a.host, a.port, not a.no_backup)
     elif a.cmd == "create-admin":
         pw = a.password
         if not pw:

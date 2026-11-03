@@ -1,5 +1,12 @@
 # Parça Takip ERP
 
+[![Codespaces'te aç](https://github.com/codespaces/badge.svg)](https://codespaces.new/serdevir91/parca-takip-erp?quickstart=1)
+
+**Hemen dene:** Yukarıdaki düğmeye tıklayın, ardından "Create codespace" deyin. GitHub bulutta bir makine açar,
+uygulamayı demo projelerle kurar ve tarayıcıda yeni sekmede açar (ilk açılış 3-5 dakika, sonrakiler birkaç saniye).
+Giriş: **admin / admin**. Sekme açılmazsa alttaki **PORTS** sekmesinde 8000 numaralı portun yanındaki 🌐 simgesine tıklayın.
+Codespace kullanılmadığında 30 dakikada kendiliğinden durur; https://github.com/codespaces adresinden silinebilir.
+
 Yerel ağda (internetsiz) çalışan parça takip sistemi. SolidWorks BOM listeleri, teknik resimler,
 üretim ve satın alma durumu tek yerde tutulur. Tarayıcıdan kullanılır, istemci bilgisayarlara kurulum gerekmez.
 
@@ -19,15 +26,15 @@ Sistem dört Docker konteynerinden oluşur:
 1. [Gereksinimler](#gereksinimler)
 2. [Kurulum: Linux](#kurulum-linux)
 3. [Kurulum: Windows](#kurulum-windows)
-4. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
-5. [İlk giriş](#ilk-giriş)
-6. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
-7. [Güncelleme](#güncelleme)
-8. [Roller](#roller)
-9. [Ayarlar (.env)](#ayarlar-env)
-10. [Sorun giderme](#sorun-giderme)
-11. [Geliştirme](#geliştirme)
-
+4. [Docker'sız kurulum](#dockersız-kurulum)
+5. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
+6. [İlk giriş](#ilk-giriş)
+7. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
+8. [Güncelleme](#güncelleme)
+9. [Roller](#roller)
+10. [Ayarlar (.env)](#ayarlar-env)
+11. [Sorun giderme](#sorun-giderme)
+12. [Geliştirme](#geliştirme)
 ## Gereksinimler
 
 - 64 bit sunucu, en az 4 GB RAM (8 GB önerilir), çizimler ve yedekler için yeterli disk.
@@ -113,6 +120,83 @@ otomatik oturum açma ayarlayın veya Linux kurulumu tercih edin.
 - *Sanallaştırma kapalı*: BIOS'ta Intel VT-x / AMD-V (SVM) seçeneğini açın.
 - *"Windows container modunda"*: Sistem tepsisindeki Docker simgesine sağ tıklayıp "Switch to Linux containers" seçin.
 - *Diğer bilgisayarlar erişemiyor*: Ağ profili "Ortak" ise "Özel" yapın, güvenlik duvarı kuralını kontrol edin.
+
+## Docker'sız kurulum
+
+Docker kurulamayan (sanallaştırma kapalı, eski Windows vb.) bilgisayarlar için. Uygulama tek bir Python
+sürecinde çalışır, veritabanı SQLite'tır, ek sunucu programı gerekmez. 10-20 kişilik bir ekip için yeterlidir.
+Daha kalabalık kullanımda Docker kurulumu (PostgreSQL) önerilir.
+
+### Windows
+
+1. Projeyi indirin (bkz. [Kurulum: Windows](#kurulum-windows), 2. adım), örneğin `C:\ParcaTakip`.
+2. `KURULUM_DOCKERSIZ.bat` dosyasına çift tıklayın ve yönetici iznini onaylayın.
+
+`KURULUM_DOCKERSIZ.bat` şunları yapar:
+
+- Python 3.12 ve Node.js yoksa `winget` ile kurar (ilk kurulumda internet gerekir).
+- Python paketlerini kurar ve web arayüzünü derler.
+- Verileri `C:\ParcaTakipVeri` klasöründe tutar: veritabanı (`erp.db`), yüklenen dosyalar (`data`), yedekler
+  (`yedek`), günlük (`erp.log`) ve ayarların bir kopyası (`ayarlar.env`).
+- Rastgele oturum anahtarı ve yönetici şifresi üretir; port 80 doluysa 8080 gibi boş bir port seçer.
+- `ParcaTakipERP` adında bir Görev Zamanlayıcı görevi kaydeder. Uygulama Windows açılışında, kimse oturum
+  açmadan başlar ve çökerse 1 dakika içinde yeniden başlar. Günlük yedek her gün 02:00'de alınır.
+- Güvenlik duvarında portu açar, sonunda adresleri ve ilk şifreyi yazar.
+
+Seçenekler (yönetici PowerShell'den):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\windows_native_install.ps1 -DataDir D:\ParcaTakipVeri -Port 8080 -Demo
+```
+
+**Güncelleme:** Yeni sürüm dosyalarını proje klasörüne kopyalayın (veya `git pull`) ve `KURULUM_DOCKERSIZ.bat`
+dosyasını tekrar çalıştırın. Veriler ve ayarlar korunur, şema otomatik güncellenir.
+
+**Yönetim (yönetici PowerShell):**
+
+```powershell
+Stop-ScheduledTask ParcaTakipERP                     # durdur
+Start-ScheduledTask ParcaTakipERP                    # başlat
+Get-Content C:\ParcaTakipVeri\erp.log -Tail 50 -Wait  # günlüğü izle
+Unregister-ScheduledTask ParcaTakipERP               # otomatik başlatmayı kaldır (veriler kalır)
+```
+
+`Stop-ScheduledTask` bazen Python sürecini kapatmaz. Görev Yöneticisi'nde `python.exe` kalıyorsa
+`KURULUM_DOCKERSIZ.bat` tekrar çalıştırıldığında kapatılır.
+
+**Elle yedek ve geri yükleme:**
+
+```powershell
+cd C:\ParcaTakip\backend
+.venv\Scripts\python -m app.cli backup                 # yedek: C:\ParcaTakipVeri\yedek
+Stop-ScheduledTask ParcaTakipERP
+.venv\Scripts\python -m app.cli restore erp_20261102_020000.tar --yes
+Start-ScheduledTask ParcaTakipERP
+```
+
+Yedek dosyası `C:\ParcaTakipVeri\yedek` içinde değilse tam yolunu yazın. Yönetim > Yedekleme ekranı da çalışır.
+**Yedek klasörünü düzenli olarak başka bir diske kopyalayın.**
+
+### Linux / macOS
+
+Python 3.12 ve Node.js 20 kurulu olmalı:
+
+```bash
+cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd ..
+cd frontend && npm ci && npm run build && cd ..
+cd backend
+cat > .env <<'ENV'
+ERP_DATABASE_URL=sqlite:////srv/parca-takip/erp.db
+ERP_DATA_DIR=/srv/parca-takip/data
+ERP_BACKUP_DIR=/srv/parca-takip/yedek
+ERP_JWT_SECRET=uzun-rastgele-bir-anahtar
+ERP_ADMIN_PASSWORD=ilk-sifre
+ENV
+.venv/bin/python -m app.cli serve --port 8080
+```
+
+Sürekli çalışması için bu komutu bir systemd servisi olarak tanımlayın (`WorkingDirectory` = `backend` klasörü).
+PostgreSQL kullanmak isterseniz `ERP_DATABASE_URL=postgresql+psycopg://kullanici:sifre@sunucu:5432/erp` yazın.
 
 ## Offline kurulum (internetsiz sunucu)
 
@@ -343,6 +427,8 @@ Komut satırı araçları (`python -m app.cli`):
 | `backup [--daemon --at 02:00]` | Yedek alır; `--daemon` ile her gün aynı saatte |
 | `restore DOSYA [--yes]` | Yedekten geri yükler |
 | `create-admin --username U --password P` | Yönetici oluşturur veya şifresini sıfırlar |
+| `migrate` | Veritabanı şemasını günceller (`alembic upgrade head`) |
+| `serve [--port 8000] [--no-backup]` | Docker'sız çalıştırma: şema güncelleme, web sunucusu (API + arayüz) ve günlük yedek |
 
 Veritabanı şeması değişikliği: `backend/app/models.py` düzenlendikten sonra
 `cd backend && .venv/bin/alembic revision --autogenerate -m "aciklama"` ile migration oluşturun.
