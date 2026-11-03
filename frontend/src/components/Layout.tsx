@@ -39,8 +39,15 @@ export default function Layout() {
               <NavLink to={`${p}/bom`}>BOM Sürümleri</NavLink>
               <NavLink to={`${p}/drawings`}>Teknik Resimler</NavLink>
               <NavLink to={`${p}/control`}>Kontrol Listesi</NavLink>
+              <NavLink to={`${p}/planning`}>İhtiyaç & Maliyet</NavLink>
+              <NavLink to={`${p}/purchasing`}>Satın Alma</NavLink>
+              <NavLink to={`${p}/work-orders`}>İş Emirleri</NavLink>
             </>
           )}
+          <div className="section">ERP</div>
+          <NavLink to="/purchasing">Satın Alma</NavLink>
+          <NavLink to="/work-orders">İş Emirleri</NavLink>
+          <NavLink to="/stock">Stok</NavLink>
           {isAdmin && (
             <>
               <div className="section">Sistem</div>

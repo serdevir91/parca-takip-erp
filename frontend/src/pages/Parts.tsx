@@ -21,7 +21,19 @@ type PartsResp = { version_id: number | null; view: string; total: number; count
 type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean };
 type EditVars = { partNo: string; changes: Record<string, unknown> };
 
-const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived" };
+const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived",
+  kinds: "parts.kinds" };
+// Row-type chips; the flat view starts without assemblies (the old "Sadece parçalar" behaviour)
+type Kind = "part" | "asm" | "purasm" | "fastener";
+const KINDS: { key: Kind; label: string }[] = [
+  { key: "part", label: "Parça" },
+  { key: "asm", label: "Montaj" },
+  { key: "purasm", label: "Satın alınan montaj" },
+  { key: "fastener", label: "Bağlantı elemanı" },
+];
+const DEFAULT_KINDS: Record<View, Kind[]> = { tree: ["part", "asm", "purasm", "fastener"], flat: ["part", "purasm", "fastener"] };
+const rowKind = (r: PartRow): Kind =>
+  r.fastener ? "fastener" : r.is_purchased_assembly ? "purasm" : r.is_assembly ? "asm" : "part";
 const RESET_PROC = "(BOM değerine dön)";
 const NEW_COLOR = "D9EAD3";
 const IMALAT = "İmalat";
@@ -96,6 +108,13 @@ export default function Parts() {
   const [view, setView] = useState<View>(() => (load<string>(LS.view, "tree") === "flat" ? "flat" : "tree"));
   const [inPurchased, setInPurchased] = useState<boolean>(() => load(LS.inPurchased, false));
   const [showArchived, setShowArchived] = useState<boolean>(() => load(LS.archived, false));
+  const [kindsByView, setKindsByView] = useState<Record<View, Kind[]>>(() => ({ ...DEFAULT_KINDS, ...load(LS.kinds, {}) }));
+  const kinds = useMemo(() => new Set(kindsByView[view]), [kindsByView, view]);
+  const toggleKind = (k: Kind) => setKindsByView((cur) => {
+    const set = new Set(cur[view]);
+    if (set.has(k)) set.delete(k); else set.add(k);
+    return { ...cur, [view]: KINDS.map((x) => x.key).filter((x) => set.has(x)) };
+  });
   const [widths] = useState<Record<string, number>>(() => load(LS.widths, {}));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [selection, setSelection] = useState<RowSelectionState>({});
@@ -108,7 +127,8 @@ export default function Parts() {
   useEffect(() => save(LS.view, view), [view]);
   useEffect(() => save(LS.inPurchased, inPurchased), [inPurchased]);
   useEffect(() => save(LS.archived, showArchived), [showArchived]);
-  useEffect(() => setSelection({}), [view, inPurchased, showArchived]);
+  useEffect(() => save(LS.kinds, kindsByView), [kindsByView]);
+  useEffect(() => setSelection({}), [view, inPurchased, showArchived, kindsByView]);
 
   const choicesQ = useQuery({
     queryKey: ["partChoices", pid],
@@ -131,10 +151,25 @@ export default function Parts() {
 
   // Tree: mark rows with children, then drop descendants of collapsed rows (rows come in BOM/DFS order).
   const baseRows = useMemo<GridRow[]>(() => {
-    const rows = mainQ.data?.rows ?? [];
+    const all = mainQ.data?.rows ?? [];
+    // Rows inside purchased assemblies follow their own checkbox, not the type chips
+    const match = (r: PartRow) => r.in_purchased || kinds.has(rowKind(r));
     if (view === "flat") {
-      return rows.filter((r) => !r.is_assembly || r.is_purchased_assembly).map((r) => ({ ...r, _key: `p${r.part_no}` }));
+      return all.filter(match).map((r) => ({ ...r, _key: `p${r.part_no}` }));
     }
+    // Tree: keep the ancestors of every matching row so the hierarchy stays readable
+    const keep = new Set<PartRow>();
+    const stack: PartRow[] = [];
+    for (const r of all) {
+      const d = r.depth ?? 0;
+      stack.length = Math.min(stack.length, d);
+      if (match(r)) {
+        keep.add(r);
+        for (const a of stack) if (a) keep.add(a);
+      }
+      stack[d] = r;
+    }
+    const rows = all.filter((r) => keep.has(r));
     const parents = new Set<string>();
     for (const r of rows) if (r.parent_level) parents.add(r.parent_level);
     const out: GridRow[] = [];
@@ -150,7 +185,13 @@ export default function Parts() {
       if (kids && !open) skip = d;
     }
     return out;
-  }, [mainQ.data, view, collapsed]);
+  }, [mainQ.data, view, collapsed, kinds]);
+
+  const kindCounts = useMemo(() => {
+    const c: Record<Kind, number> = { part: 0, asm: 0, purasm: 0, fastener: 0 };
+    for (const r of mainQ.data?.rows ?? []) if (!r.in_purchased) c[rowKind(r)]++;
+    return c;
+  }, [mainQ.data]);
 
   const data = useMemo<GridRow[]>(() => {
     if (!showArchived || !archQ.data) return baseRows;
@@ -361,7 +402,16 @@ export default function Parts() {
       <div className="toolbar parts-top">
         <div className="tabs parts-tabs" role="tablist">
           <button role="tab" aria-selected={view === "tree"} className={view === "tree" ? "active" : ""} onClick={() => setView("tree")}>Ağaç</button>
-          <button role="tab" aria-selected={view === "flat"} className={view === "flat" ? "active" : ""} onClick={() => setView("flat")}>Sadece parçalar</button>
+          <button role="tab" aria-selected={view === "flat"} className={view === "flat" ? "active" : ""} onClick={() => setView("flat")}>Düz liste</button>
+        </div>
+        <div className="row kind-chips" role="group" aria-label="Satır tipi filtresi">
+          <span className="muted">Göster:</span>
+          {KINDS.filter((k) => kindCounts[k.key] > 0).map((k) => (
+            <button key={k.key} className={`chip${kinds.has(k.key) ? " on" : ""}`} aria-pressed={kinds.has(k.key)}
+              onClick={() => toggleKind(k.key)}>
+              {k.label} <span className="muted">{fmt(kindCounts[k.key])}</span>
+            </button>
+          ))}
         </div>
         <label className="row" style={{ gap: 4 }}>
           <input type="checkbox" checked={inPurchased} onChange={(e) => setInPurchased(e.target.checked)} />

@@ -157,7 +157,8 @@ def deactivate_user(user_id: int, me: User = Depends(admin), db: Session = Depen
 # ---------- firms ----------
 def firm_out(f: Firm) -> dict[str, Any]:
     return {"id": f.id, "name": f.name, "kind": f.kind, "kind_label": FIRM_KIND_LABELS.get(f.kind, f.kind),
-            "contact": f.contact, "note": f.note, "active": f.active}
+            "contact": f.contact, "note": f.note, "active": f.active, "phone": f.phone, "email": f.email,
+            "address": f.address, "tax_office": f.tax_office, "tax_no": f.tax_no, "lead_days": f.lead_days}
 
 
 class FirmIn(BaseModel):
@@ -166,6 +167,12 @@ class FirmIn(BaseModel):
     contact: str = ""
     note: str = ""
     active: bool = True
+    phone: str = Field(default="", max_length=50)
+    email: str = Field(default="", max_length=200)
+    address: str = ""
+    tax_office: str = Field(default="", max_length=100)
+    tax_no: str = Field(default="", max_length=30)
+    lead_days: int = Field(default=0, ge=0, le=3650)
 
 
 class FirmUpdate(BaseModel):
@@ -174,6 +181,12 @@ class FirmUpdate(BaseModel):
     contact: str | None = None
     note: str | None = None
     active: bool | None = None
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=200)
+    address: str | None = None
+    tax_office: str | None = Field(default=None, max_length=100)
+    tax_no: str | None = Field(default=None, max_length=30)
+    lead_days: int | None = Field(default=None, ge=0, le=3650)
 
 
 def _check_kind(kind: str) -> None:
@@ -210,7 +223,7 @@ def create_firm(body: FirmIn, me: User = Depends(admin), db: Session = Depends(g
     _check_kind(body.kind)
     if _firm_name_taken(db, name):
         raise HTTPException(409, "Bu firma zaten var")
-    f = Firm(name=name, kind=body.kind, contact=body.contact.strip(), note=body.note, active=body.active)
+    f = Firm(**{**body.model_dump(), "name": name, "contact": body.contact.strip()})
     db.add(f)
     db.flush()
     audit.record(db, me, "firm", f.id, "name", None, name, action="create")

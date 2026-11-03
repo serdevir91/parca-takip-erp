@@ -29,12 +29,13 @@ Sistem dört Docker konteynerinden oluşur:
 4. [Docker'sız kurulum](#dockersız-kurulum)
 5. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
 6. [İlk giriş](#ilk-giriş)
-7. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
-8. [Güncelleme](#güncelleme)
-9. [Roller](#roller)
-10. [Ayarlar (.env)](#ayarlar-env)
-11. [Sorun giderme](#sorun-giderme)
-12. [Geliştirme](#geliştirme)
+7. [ERP modülleri](#erp-modülleri)
+8. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
+9. [Güncelleme](#güncelleme)
+10. [Roller](#roller)
+11. [Ayarlar (.env)](#ayarlar-env)
+12. [Sorun giderme](#sorun-giderme)
+13. [Geliştirme](#geliştirme)
 ## Gereksinimler
 
 - 64 bit sunucu, en az 4 GB RAM (8 GB önerilir), çizimler ve yedekler için yeterli disk.
@@ -269,6 +270,28 @@ docker compose exec backend python -m app.cli seed
 ```
 
 Gerçek kullanımda demo projeleri arşivleyin veya bu komutu çalıştırmayın.
+
+## ERP modülleri
+
+Parça takibinin yanında küçük bir üretim ERP'si bulunur. Akış: BOM yüklenir, ihtiyaç hesaplanır, eksikler
+stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projeye yazılır.
+
+- **Parça Listesi filtresi:** "Göster" düğmeleriyle parça, montaj, satın alınan montaj ve bağlantı elemanı
+  satırları ayrı ayrı gizlenip gösterilir. Ağaç görünümünde eşleşen satırların üst montajları korunur.
+  Seçim her görünüm için ayrı hatırlanır.
+- **İhtiyaç & Maliyet** (proje menüsü): Her parça ve bağlantı elemanı için ihtiyaç, projeye çıkılan,
+  siparişte, üretimde ve serbest stok miktarı; kalan eksik ve önerilen işlem (stoktan karşıla, satın al,
+  iş emri aç). Seçilen eksiklerden tek tıkla taslak sipariş veya iş emri açılır. Maliyet sekmesi taahhüt
+  edilen ve gerçekleşen maliyeti kaynağa, firmaya ve ana gruba göre gösterir.
+- **Satın Alma:** `SA-YYYY-####` numaralı siparişler (Taslak, Gönderildi, Kısmi teslim, Teslim alındı,
+  İptal), satır bazında fiyat, termin ve gecikme uyarısı, kısmi mal kabul, Excel sipariş formu.
+  Gönderilen siparişte parçalar "Devam ediyor", bağlantı elemanları "Sipariş Verildi" olur; teslim
+  tamamlanınca "Tamamlandı" ve "Teslim Edildi" olur.
+- **İş Emirleri:** `IE-YYYY-####` numaralı iç üretim veya fason iş emirleri, üretim girişi, birim maliyet.
+- **Stok:** Stok kartları (kod, birim, raf yeri, kritik seviye), giriş, çıkış, sayım ve projeye çıkış
+  hareketleri, hareketli ortalama maliyet, kritik stok uyarısı ve hareket geçmişi.
+- **Firmalar** (Yönetim): Telefon, e-posta, adres, vergi bilgileri ve termin süresi. Siparişte tedarikçi
+  seçilince termin tarihi bu süreye göre önerilir.
 
 ## Yedekleme ve geri yükleme
 

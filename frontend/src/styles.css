@@ -194,6 +194,11 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 /* === Parça Listesi === */
 .parts-top { flex-wrap: wrap; gap: 8px; align-items: center; }
 .parts-tabs { margin: 0; }
+.kind-chips { gap: 4px; }
+.chip { padding: 2px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; background: var(--surface); color: var(--muted); border: 1px dashed var(--border); }
+.chip.on { background: var(--surface-2); color: var(--fg); border: 1px solid var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chip.on .muted { color: var(--accent); }
 .parts-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tree-toggle { width: 18px; height: 18px; padding: 0; margin-right: 4px; border: 0; background: transparent; color: var(--fg); cursor: pointer; font-size: 12px; line-height: 18px; vertical-align: middle; }
 .tree-toggle:hover { color: var(--accent); }
@@ -239,3 +244,18 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
   .adm-settings { grid-template-columns: 1fr; }
   .adm-version { align-items: flex-start; text-align: left; }
 }
+
+/* === ERP: Satın Alma, İş Emirleri, Stok, İhtiyaç & Maliyet === */
+.erp-table th.num, .erp-table td.num { text-align: right; white-space: nowrap; }
+.erp-table th, .erp-table td:first-child, .erp-table td.mono { white-space: nowrap; }
+.erp-table tr.clickable { cursor: pointer; }
+.erp-table tr.clickable:hover td { background: var(--surface-2); }
+.erp-table .mono, .erp-pick .mono { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.erp-lines input, .erp-lines select { width: 100%; box-sizing: border-box; }
+.erp-head { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin-bottom: 12px; }
+.erp-head > div { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.erp-head .muted { font-size: 12px; }
+.erp-kpis { padding: 12px; }
+.erp-kpis .kpi .value { font-size: 20px; }
+.erp-cost-tables { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.erp-pick { max-height: 200px; overflow: auto; margin: 10px 0 0; padding-left: 18px; }

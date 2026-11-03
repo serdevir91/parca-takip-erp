@@ -87,6 +87,51 @@ def _apply_t35(db: Session, project: Project, path: Path, user: User | None) -> 
     return n
 
 
+def _seed_erp(db, project: Project, user: User | None) -> None:
+    """Demo ERP data: a partly received purchase order, a running work order and a low stock card."""
+    from datetime import date, timedelta
+
+    from .models import Firm, PurchaseOrder, WorkOrder
+    from .services import erp
+
+    firms = {}
+    for name, kind, lead in (("Demo Tedarik A.Ş.", "supplier", 10), ("Demo Fason Talaşlı İmalat", "manufacturer", 15)):
+        f = db.scalar(select(Firm).where(Firm.name == name))
+        if f is None:
+            f = Firm(name=name, kind=kind, contact="Satış", phone="0212 555 00 00", email="satis@example.com",
+                     lead_days=lead, note="Örnek veri")
+            db.add(f)
+            db.flush()
+        firms[kind] = f
+    need = erp.requirements(db, project)
+    buy = [r for r in need if r["action"] == "purchase"][:4]
+    make = [r for r in need if r["action"] == "work_order"][:2]
+    if buy:
+        po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder, "SA"), firm_id=firms["supplier"].id,
+                           firm_name=firms["supplier"].name, project_id=project.id, status="draft",
+                           due_date=date.today() + timedelta(days=10), created_by=user.username if user else "",
+                           note="Örnek sipariş")
+        erp.set_lines(po, [{"code": r["code"], "kind": r["kind"], "description": r["description"], "unit": r["unit"],
+                            "qty": r["shortage"], "unit_price": 25.0 + 10 * i} for i, r in enumerate(buy)])
+        db.add(po)
+        db.flush()
+        erp.set_po_status(db, user, po, "sent")
+        erp.receive(db, user, po, [(po.lines[0], po.lines[0].qty)], "Demo irsaliye")
+    for i, r in enumerate(make):
+        w = WorkOrder(no=erp.next_no(db, WorkOrder, "IE"), project_id=project.id, part_no=r["code"],
+                      description=r["description"], qty=r["shortage"], done_qty=0.0,
+                      firm_name=firms["manufacturer"].name if i else "", status="planned", unit_cost=150.0,
+                      due_date=date.today() + timedelta(days=7 + i), created_by=user.username if user else "")
+        db.add(w)
+        db.flush()
+        if i == 0:
+            erp.set_wo_status(db, user, w, "in_progress")
+    item = erp.stock_item(db, "DEMO-SARF-001", "Kesme yağı (örnek)", "other", "Litre")
+    if item.qty == 0:
+        item.min_qty = 20
+        erp.move(db, user, item, "in", 8, note="Açılış", unit_cost=95.0)
+
+
 def seed(data_dir: Path, force: bool = False) -> None:
     _prepare_db()
     files = {
@@ -129,7 +174,8 @@ def seed(data_dir: Path, force: bool = False) -> None:
                 db.flush()
                 for i, f in enumerate(files["v"], 1):
                     _upload_and_approve(db, p, f, user, f"Demo: v{i}")
-                print(f"'{name}' oluşturuldu: 3 BOM sürümü")
+                _seed_erp(db, p, user)
+                print(f"'{name}' oluşturuldu: 3 BOM sürümü, örnek sipariş, iş emri ve stok")
             audit.record(db, user, "project", p.id, "seed", None, name, p.id, action="create")
         db.commit()
 

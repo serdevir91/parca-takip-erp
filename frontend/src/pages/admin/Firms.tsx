@@ -4,7 +4,10 @@ import { api } from "../../api/client";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal } from "./shared";
 
-type Firm = { id: number; name: string; kind: string; kind_label: string; contact: string; note: string; active: boolean };
+type Firm = {
+  id: number; name: string; kind: string; kind_label: string; contact: string; note: string; active: boolean;
+  phone: string; email: string; address: string; tax_office: string; tax_no: string; lead_days: number;
+};
 
 export const FIRM_KINDS: { value: string; label: string }[] = [
   { value: "manufacturer", label: "Üretici" },
@@ -42,7 +45,7 @@ export default function FirmsTab() {
   const list = useMemo(() => {
     const s = q.trim().toLocaleLowerCase("tr-TR");
     return (firms.data ?? []).filter(
-      (f) => (!kind || f.kind === kind) && (!s || `${f.name} ${f.contact} ${f.note}`.toLocaleLowerCase("tr-TR").includes(s)),
+      (f) => (!kind || f.kind === kind) && (!s || `${f.name} ${f.contact} ${f.phone} ${f.email} ${f.note}`.toLocaleLowerCase("tr-TR").includes(s)),
     );
   }, [firms.data, kind, q]);
 
@@ -67,7 +70,11 @@ export default function FirmsTab() {
                 <tr key={f.id} style={f.active ? undefined : { opacity: 0.6 }}>
                   <td><b>{f.name}</b></td>
                   <td>{kindLabel(f.kind)}</td>
-                  <td>{f.contact}</td>
+                  <td>
+                    {f.contact}
+                    {(f.phone || f.email) && <div className="muted">{[f.phone, f.email].filter(Boolean).join(" · ")}</div>}
+                    {f.lead_days > 0 && <div className="muted">Termin {f.lead_days} gün</div>}
+                  </td>
                   <td className="muted" style={{ whiteSpace: "pre-wrap" }}>{f.note}</td>
                   <td>
                     <label className="row" style={{ gap: 4 }}>
@@ -104,9 +111,16 @@ function FirmForm({ firm, onClose, onSaved }: { firm?: Firm; onClose: () => void
   const [contact, setContact] = useState(firm?.contact ?? "");
   const [note, setNote] = useState(firm?.note ?? "");
   const [active, setActive] = useState(firm?.active ?? true);
+  const [phone, setPhone] = useState(firm?.phone ?? "");
+  const [email, setEmail] = useState(firm?.email ?? "");
+  const [address, setAddress] = useState(firm?.address ?? "");
+  const [taxOffice, setTaxOffice] = useState(firm?.tax_office ?? "");
+  const [taxNo, setTaxNo] = useState(firm?.tax_no ?? "");
+  const [leadDays, setLeadDays] = useState(String(firm?.lead_days ?? 0));
   const save = useMutation({
     mutationFn: () => {
-      const body = { name: name.trim(), kind, contact, note, active };
+      const body = { name: name.trim(), kind, contact, note, active, phone, email, address, tax_office: taxOffice, tax_no: taxNo,
+        lead_days: Math.max(0, Math.round(Number(leadDays) || 0)) };
       return firm ? api.put<Firm>(`/admin/firms/${firm.id}`, body) : api.post<Firm>("/admin/firms", body);
     },
     onSuccess: () => {
@@ -129,7 +143,15 @@ function FirmForm({ firm, onClose, onSaved }: { firm?: Firm; onClose: () => void
             {FIRM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </Field>
-        <Field label="İletişim"><input value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
+        <Field label="İletişim (yetkili kişi)"><input value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
+        <div className="adm-form two">
+          <Field label="Telefon"><input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <Field label="E-posta"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="Vergi dairesi"><input value={taxOffice} onChange={(e) => setTaxOffice(e.target.value)} /></Field>
+          <Field label="Vergi no"><input value={taxNo} onChange={(e) => setTaxNo(e.target.value)} /></Field>
+        </div>
+        <Field label="Adres"><textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+        <Field label="Termin süresi (gün)" hint="Satın alma siparişinde varsayılan teslim süresi."><input type="number" min={0} value={leadDays} onChange={(e) => setLeadDays(e.target.value)} /></Field>
         <Field label="Not"><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Aktif</label>
       </div>

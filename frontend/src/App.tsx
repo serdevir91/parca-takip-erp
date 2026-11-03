@@ -12,6 +12,10 @@ const BomVersions = lazy(() => import("./pages/BomVersions"));
 const Drawings = lazy(() => import("./pages/Drawings"));
 const Control = lazy(() => import("./pages/Control"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Planning = lazy(() => import("./pages/Planning"));
+const Purchasing = lazy(() => import("./pages/Purchasing"));
+const WorkOrders = lazy(() => import("./pages/WorkOrders"));
+const Stock = lazy(() => import("./pages/Stock"));
 
 function RequireAuth({ children, admin }: { children: ReactNode; admin?: boolean }) {
   const { user, ready, isAdmin } = useAuth();
@@ -39,7 +43,13 @@ export default function App() {
           <Route path="bom" element={<S><BomVersions /></S>} />
           <Route path="drawings" element={<S><Drawings /></S>} />
           <Route path="control" element={<S><Control /></S>} />
+          <Route path="planning" element={<S><Planning /></S>} />
+          <Route path="purchasing" element={<S><Purchasing /></S>} />
+          <Route path="work-orders" element={<S><WorkOrders /></S>} />
         </Route>
+        <Route path="purchasing" element={<S><Purchasing /></S>} />
+        <Route path="work-orders" element={<S><WorkOrders /></S>} />
+        <Route path="stock" element={<S><Stock /></S>} />
         <Route path="admin" element={<RequireAuth admin><S><Admin /></S></RequireAuth>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

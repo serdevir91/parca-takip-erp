@@ -2,14 +2,15 @@
 
 Part status lives on Tracking (project + part number) so it survives BOM
 version changes. BomRow rows are immutable snapshots of an uploaded CSV.
-Future modules (purchase orders, stock, work orders, costing) attach to
-Part / Firm / Project through new tables without touching these.
+ERP modules (purchase orders, stock, work orders) attach to Project / Firm
+through their own tables and refer to parts by part number (fasteners by
+their type|std|size key), so they never touch the BOM snapshots.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String,
+from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String,
                         Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -210,6 +211,13 @@ class Firm(Base):
     contact: Mapped[str] = mapped_column(String(300), default="")
     note: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Supplier card (tedarikçi kartı)
+    phone: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    email: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    address: Mapped[str] = mapped_column(Text, default="", server_default="")
+    tax_office: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    tax_no: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    lead_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class Setting(Base):
@@ -295,3 +303,96 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(50), default="update")
 
     __table_args__ = (Index("ix_audit_entity", "entity", "entity_id"),)
+
+
+# ---------- ERP: stock, purchasing, work orders ----------
+class StockItem(Base):
+    """Stock card. code = part number, or the fastener key (type|std|size)."""
+    __tablename__ = "stock_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(200), unique=True)
+    name: Mapped[str] = mapped_column(String(300), default="")
+    kind: Mapped[str] = mapped_column(String(20), default="part")      # part | fastener | other
+    unit: Mapped[str] = mapped_column(String(20), default="Adet")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    min_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)   # moving average
+    location: Mapped[str] = mapped_column(String(100), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class StockMove(Base):
+    """Stock ledger. qty is the signed change; issue = handed to a project (consumed)."""
+    __tablename__ = "stock_moves"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("stock_items.id", ondelete="CASCADE"), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    kind: Mapped[str] = mapped_column(String(20))       # in | out | count | receipt | production | issue
+    qty: Mapped[float] = mapped_column(Float)
+    balance: Mapped[float] = mapped_column(Float)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    ref: Mapped[str] = mapped_column(String(100), default="")   # SA-2026-0001, IE-2026-0001, ...
+    note: Mapped[str] = mapped_column(Text, default="")
+    username: Mapped[str] = mapped_column(String(64), default="")
+
+
+class PurchaseOrder(Base):
+    """Satın alma siparişi. status: draft | sent | partial | received | cancelled."""
+    __tablename__ = "purchase_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    no: Mapped[str] = mapped_column(String(30), unique=True)
+    firm_id: Mapped[int | None] = mapped_column(ForeignKey("firms.id", ondelete="SET NULL"), nullable=True)
+    firm_name: Mapped[str] = mapped_column(String(200), default="")     # kept if the firm is deleted
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    order_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="TRY")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    lines: Mapped[list["PurchaseOrderLine"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", order_by="PurchaseOrderLine.seq")
+
+
+class PurchaseOrderLine(Base):
+    __tablename__ = "purchase_order_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    code: Mapped[str] = mapped_column(String(200), default="", index=True)  # part_no / fastener key / free
+    kind: Mapped[str] = mapped_column(String(20), default="part")           # part | fastener | other
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="Adet")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    received_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+
+
+class WorkOrder(Base):
+    """İş emri for a manufactured part. firm_name empty = in-house, else fason (subcontract).
+    status: planned | in_progress | done | cancelled."""
+    __tablename__ = "work_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    no: Mapped[str] = mapped_column(String(30), unique=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"),
+                                                   nullable=True, index=True)
+    part_no: Mapped[str] = mapped_column(String(200), index=True)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    qty: Mapped[float] = mapped_column(Float, default=1.0)
+    done_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    firm_name: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(20), default="planned", index=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -27,12 +27,21 @@ Read this file first. Do not re-scan the whole project.
   - `state.ProjectView`: the read model every screen uses.
   - `settings`: admin-editable JSON settings.
   - `excel_export` / `excel_import`, `drawings` / `thumbs`, `backup` and `audit`.
+  - `erp`: purchasing, stock, work orders, requirements (MRP) and project costs. Its API routers are
+    `api/purchasing.py`, `api/stock.py` and `api/workorders.py`.
+    - Stock is one global pool. Goods bought or made for a project get a receipt or production move plus an
+      issue move to that project, so free stock nets to 0. Stock-to-project issues use `ref="STOK"`.
+    - Shortage = required - issued - on order (open PO lines) - in production (open WOs) - free stock.
+    - Hooks: a sent PO or started WO sets tracking to "Devam ediyor" and fasteners to "Sipariş Verildi";
+      when issued >= required, parts become "Tamamlandı" and fasteners "Teslim Edildi".
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
   - `restore`.
   - `migrate` (alembic upgrade head from any cwd; stamps old create_all SQLite DBs) and `serve` (Docker-free: migrate + uvicorn + backup thread).
-- Migrations live in `alembic/`. The backend runs `alembic upgrade head` on startup.
+- Migrations live in `alembic/`. The backend runs `alembic upgrade head` on startup. Migration 0001 runs `create_all` from the
+  current models, so later migrations must be idempotent: check the inspector before adding a column or table
+  (see `0002_erp_modules.py`).
 
 ## Frontend layout
 - `src/api/`:
@@ -42,7 +51,8 @@ Read this file first. Do not re-scan the whole project.
   - `DataGrid`: virtualized, with Excel-like column filters, inline edit and selection.
   - `Layout`: `Page`, `useProject`.
   - `Toast`, `PdfViewer`, the import modals and `UpdateCheck`.
-- `src/pages/`: one file per spec §8 screen.
+- `src/pages/`: one file per spec §8 screen. The ERP screens are `Planning`, `Purchasing`, `WorkOrders` and `Stock`;
+  their shared types, formatters and pickers are in `pages/erp/common.tsx`.
 - `src/theme/`: light, dark and AMOLED themes. The theme is set with the `data-theme` attribute and saved in localStorage under `erp_theme`.
 - `src/styles.css`: one block per screen, marked with `/* === Screen === */` comments.
 
