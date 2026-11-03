@@ -1,6 +1,14 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.1 yenilikleri
+
+- **Yeni liste kartları:** Parça listesi, stok ve diğer listelerde her kayıt düzenli bir blok: üstte parça no ve tip, sağda durum rozeti, altında etiketli alan kutuları. Telefonda parça no tek satırda kalır, durum rozeti alt satıra geçer.
+- **Modern filtre:** Filtre paneli solda sütunlar, sağda değerler (telefonda alttan açılan sayfa). Değerlerin yanında kaç kayıt olduğu görünür; "Metin içerir" ve değer arama tek yerde.
+- **Etkin filtreler:** Arama çubuğunun altında çip olarak görünür. Çipe dokunmak filtreyi düzenler, ✕ kaldırır, "Tümünü temizle" hepsini siler.
+- **Sade araç çubuğu:** Arama kutusu simgeli ve temizleme düğmeli. Telefonda üstteki düğmeler tek satırda yana kaydırılır.
+- **Düzeltme:** Tablo görünümünde sütun başlığındaki filtre penceresi artık kesik açılmıyor.
+
 ## 1.5.0 yenilikleri
 
 - **Sunucuma kur:** Windows uygulamasının ilk ekranında yeni seçenek. Linux sunucunun (Ubuntu, Debian, Rocky, Alma, Fedora) adresini ve SSH bilgilerini girin; LAB ERP sunucuya otomatik kurulur, açılışta kendiliğinden başlayan hizmet olarak çalışır ve bu bilgisayar ona bağlanır. Tekrar çalıştırmak sunucuyu günceller, veriler korunur.

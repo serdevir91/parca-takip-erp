@@ -95,6 +95,28 @@ const headerText = <T,>(c: GridColumn<T>): string => (typeof c.header === "strin
 const colId = <T,>(c: GridColumn<T>): string => c.id ?? ((c as { accessorKey?: string }).accessorKey ?? "");
 const isEmpty = (v: unknown) => v === null || v === undefined || v === "";
 
+const ICONS = {
+  search: "M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z",
+  filter: "M3 5h18l-7 8.2V19l-4 2v-7.8L3 5Zm3.3 1.5 5.2 6.1v5.9l1-.5v-5.4l5.2-6.1H6.3Z",
+  x: "m6.4 5.3 5.6 5.6 5.6-5.6 1.1 1.1-5.6 5.6 5.6 5.6-1.1 1.1-5.6-5.6-5.6 5.6-1.1-1.1 5.6-5.6-5.6-5.6 1.1-1.1Z",
+  sort: "M7 4 3 8.5h3V20h2V8.5h3L7 4Zm10 16 4-4.5h-3V4h-2v11.5h-3l4 4.5Z",
+} as const;
+export function Icon({ name, size = 16 }: { name: keyof typeof ICONS; size?: number }) {
+  return (
+    <svg className="dg-icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d={ICONS[name]} />
+    </svg>
+  );
+}
+
+/** Short text for an active column filter chip: «Durum: Tamamlandı», «Malzeme: 3 değer», «Not: "abc"» */
+function filterSummary(f: ColFilter): string {
+  const parts: string[] = [];
+  if (f.text) parts.push(`"${f.text}"`);
+  if (f.values) parts.push(f.values.length === 1 ? f.values[0] || "(boş)" : `${f.values.length.toLocaleString("tr-TR")} değer`);
+  return parts.join(" + ");
+}
+
 function globalMatch(row: Row<any>, id: string, value: string): boolean {
   const v = row.getValue(id);
   return !isEmpty(v) && norm(String(v)).includes(norm(value));
@@ -120,6 +142,7 @@ export default function DataGrid<T>(p: Props<T>) {
   const selection = p.selection ?? localSel;
   const [view, setView] = useGridView();
   const [sheet, setSheet] = useState<"filter" | "export" | null>(null);
+  const [sheetCol, setSheetCol] = useState<string | null>(null);
   const [mail, setMail] = useState<MailFile | null>(null);
   const toast = useToast();
 
@@ -194,30 +217,38 @@ export default function DataGrid<T>(p: Props<T>) {
 
   return (
     <>
-      {p.toolbar && <div className="toolbar">{p.toolbar}</div>}
+      {p.toolbar && <div className="toolbar dg-extra">{p.toolbar}</div>}
       <div className="dg-bar">
-        <input type="search" className="dg-search" placeholder="Ara…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Listede ara" />
-        <button className={`btn small${activeFilters ? " primary" : ""}`} onClick={() => setSheet(sheet === "filter" ? null : "filter")}>
-          Filtre{activeFilters ? ` (${activeFilters})` : ""}
+        <label className="dg-search">
+          <Icon name="search" />
+          <input type="search" placeholder="Listede ara…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Listede ara" />
+          {search && <button className="dg-search-x" onClick={() => setSearch("")} aria-label="Aramayı temizle"><Icon name="x" size={14} /></button>}
+        </label>
+        <button className={`dg-tool${sheet === "filter" ? " on" : ""}${activeFilters ? " active" : ""}`} aria-expanded={sheet === "filter"}
+          onClick={() => { setSheetCol(null); setSheet(sheet === "filter" ? null : "filter"); }}>
+          <Icon name="filter" /> Filtre{activeFilters > 0 && <span className="dg-count-badge">{activeFilters}</span>}
         </button>
         {view === "cards" && sortable.length > 0 && (
-          <select className="dg-sort" value={sortVal} aria-label="Sırala"
-            onChange={(e) => {
-              const [id, dir] = e.target.value.split(":");
-              setSorting(id ? [{ id, desc: dir === "desc" }] : []);
-            }}>
-            <option value="">Sıralama: varsayılan</option>
-            {sortable.map((c) => (
-              <Fragment key={c.id}>
-                <option value={`${c.id}:asc`}>{headerText(c.columnDef as GridColumn<T>)} ▲</option>
-                <option value={`${c.id}:desc`}>{headerText(c.columnDef as GridColumn<T>)} ▼</option>
-              </Fragment>
-            ))}
-          </select>
+          <label className={`dg-tool dg-sort${sortVal ? " active" : ""}`}>
+            <Icon name="sort" />
+            <select value={sortVal} aria-label="Sırala"
+              onChange={(e) => {
+                const [id, dir] = e.target.value.split(":");
+                setSorting(id ? [{ id, desc: dir === "desc" }] : []);
+              }}>
+              <option value="">Sıralama</option>
+              {sortable.map((c) => (
+                <Fragment key={c.id}>
+                  <option value={`${c.id}:asc`}>{headerText(c.columnDef as GridColumn<T>)} (artan)</option>
+                  <option value={`${c.id}:desc`}>{headerText(c.columnDef as GridColumn<T>)} (azalan)</option>
+                </Fragment>
+              ))}
+            </select>
+          </label>
         )}
         {exportName && (
           <div className="dg-menu-wrap">
-            <button className="btn small" onClick={() => setSheet(sheet === "export" ? null : "export")} aria-haspopup="menu">Paylaş ▾</button>
+            <button className="dg-tool" onClick={() => setSheet(sheet === "export" ? null : "export")} aria-haspopup="menu">Paylaş ▾</button>
             {sheet === "export" && (
               <div className="dg-menu card" role="menu">
                 <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>Listeyi indir (CSV, Excel'de açılır)</button>
@@ -226,17 +257,34 @@ export default function DataGrid<T>(p: Props<T>) {
             )}
           </div>
         )}
-        <span className="spacer" style={{ flex: 1 }} />
-        <span className="muted dg-count"><b>{rows.length.toLocaleString("tr-TR")}</b> / {p.data.length.toLocaleString("tr-TR")}</span>
-        {(activeFilters > 0 || search) && (
-          <button className="btn small" onClick={() => { table.resetColumnFilters(); setSearch(""); }}>Temizle</button>
-        )}
+        <span className="dg-spacer" />
+        <span className="dg-count" title="Gösterilen / toplam kayıt">
+          <b>{rows.length.toLocaleString("tr-TR")}</b>{rows.length !== p.data.length && <> / {p.data.length.toLocaleString("tr-TR")}</>} kayıt
+        </span>
         <div className="seg small" role="radiogroup" aria-label="Görünüm">
           <button className={view === "cards" ? "on" : ""} onClick={() => setView("cards")} title="Kart görünümü">Liste</button>
           <button className={view === "table" ? "on" : ""} onClick={() => setView("table")} title="Tablo görünümü">Tablo</button>
         </div>
       </div>
-      {sheet === "filter" && <FilterSheet table={table} onClose={() => setSheet(null)} />}
+      {activeFilters > 0 && (
+        <div className="dg-active" aria-label="Etkin filtreler">
+          {filters.map((f) => {
+            const c = table.getColumn(f.id);
+            if (!c) return null;
+            return (
+              <span key={f.id} className="dg-fchip">
+                <button className="dg-fchip-main" title="Filtreyi düzenle" onClick={() => { setSheetCol(f.id); setSheet("filter"); }}>
+                  <span className="dg-fchip-k">{headerText(c.columnDef as GridColumn<T>) || f.id}</span>
+                  <span className="dg-fchip-v">{filterSummary(f.value as ColFilter)}</span>
+                </button>
+                <button className="dg-fchip-x" aria-label="Filtreyi kaldır" onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
+              </span>
+            );
+          })}
+          <button className="dg-link" onClick={() => { table.resetColumnFilters(); setSearch(""); }}>Tümünü temizle</button>
+        </div>
+      )}
+      {sheet === "filter" && <FilterSheet key={sheetCol ?? ""} table={table} initialCol={sheetCol} onClose={() => setSheet(null)} />}
       {view === "cards" ? <CardView p={p} table={table} rows={rows} /> : <TableView p={p} table={table} rows={rows} columns={columns} />}
       {mail && <MailDialog files={[mail]} subject={exportName ?? "Liste"} body={`${exportName} listesi ektedir (${rows.length} satır).`} onClose={() => setMail(null)} />}
     </>
@@ -267,7 +315,7 @@ function TableView<T>({ p, table, rows, columns }: ViewProps<T> & { columns: Gri
                   const f = h.column.getFilterValue() as ColFilter | undefined;
                   const sorted = h.column.getIsSorted();
                   return (
-                    <th key={h.id} style={{ width: h.getSize(), position: "sticky" }}>
+                    <th key={h.id} className={openFilter === h.id ? "fopen" : undefined} style={{ width: h.getSize(), position: "sticky" }}>
                       <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
                         <span style={{ cursor: h.column.getCanSort() ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
                           onClick={h.column.getToggleSortingHandler()}>
@@ -337,7 +385,7 @@ function CardView<T>({ p, table, rows }: ViewProps<T>) {
     return n;
   });
   const scrollRef = useRef<HTMLDivElement>(null);
-  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => 96, overscan: 8 });
+  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => 120, overscan: 8 });
   const leaf = table.getVisibleLeafColumns().filter((c) => c.id !== "_sel");
   const role = (c: (typeof leaf)[number], i: number) => {
     const d = c.columnDef as GridColumn<T>;
@@ -380,6 +428,8 @@ function CardView<T>({ p, table, rows }: ViewProps<T>) {
           const show = (id: string) => !isEmpty(cells[id].getValue()) || (open && editable(id));
           const hiddenEdits = roles.some((r) => r.role !== "actions" && r.role !== "hide" && editable(r.c.id) && isEmpty(cells[r.c.id].getValue()));
           const accent = p.cardColor?.(row.original);
+          const fields = roles.filter((r) => r.role === "field" && show(r.c.id));
+          const badges = roles.filter((r) => r.role === "badge" && show(r.c.id));
           return (
             <div key={row.id} data-index={vi.index} ref={virt.measureElement}
               className={`dgc${row.getIsSelected() ? " selected" : ""}${p.onRowClick ? " clickable" : ""}`}
@@ -391,23 +441,29 @@ function CardView<T>({ p, table, rows }: ViewProps<T>) {
                   {p.selectable && (
                     <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onClick={(e) => e.stopPropagation()} onChange={row.getToggleSelectedHandler()} />
                   )}
-                  {roles.filter((r) => r.role === "title").map(({ c }) => <b key={c.id} className="dgc-title">{value(c.id)}</b>)}
-                  {roles.filter((r) => r.role === "badge" && show(r.c.id)).map(({ c }) => <span key={c.id} className="dgc-badge">{value(c.id)}</span>)}
+                  <div className="dgc-titles">
+                    {roles.filter((r) => r.role === "title").map(({ c }) => <b key={c.id} className="dgc-title">{value(c.id)}</b>)}
+                    {roles.filter((r) => r.role === "sub" && show(r.c.id)).map(({ c }) => <div key={c.id} className="dgc-sub">{value(c.id)}</div>)}
+                  </div>
+                  {badges.length > 0 && (
+                    <div className="dgc-badges">{badges.map(({ c }) => <span key={c.id} className="dgc-badge">{value(c.id)}</span>)}</div>
+                  )}
                   {(hiddenEdits || open) && (
-                    <button className={`btn small dgc-more${open ? " primary" : ""}`} aria-expanded={open}
+                    <button className={`dgc-more${open ? " on" : ""}`} aria-expanded={open}
                       title={open ? "Boş alanları gizle" : "Boş alanları da göster ve düzenle"}
                       onClick={(e) => { e.stopPropagation(); toggleExpand(row.id); }}>✎</button>
                   )}
                 </div>
-                {roles.filter((r) => r.role === "sub" && show(r.c.id)).map(({ c }) => <div key={c.id} className="dgc-sub">{value(c.id)}</div>)}
-                <div className="dgc-fields">
-                  {roles.filter((r) => r.role === "field" && show(r.c.id)).map(({ c }) => (
-                    <span key={c.id} className="dgc-field">
-                      <span className="dgc-label">{headerText(c.columnDef as GridColumn<T>) || c.id}</span>
-                      {value(c.id)}
-                    </span>
-                  ))}
-                </div>
+                {fields.length > 0 && (
+                  <div className="dgc-grid">
+                    {fields.map(({ c }) => (
+                      <div key={c.id} className={`dgc-cell${cellText(cells[c.id].getValue()).length > 28 ? " wide" : ""}`}>
+                        <span className="dgc-label">{headerText(c.columnDef as GridColumn<T>) || c.id}</span>
+                        {value(c.id)}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {roles.filter((r) => r.role === "actions").map(({ c }) => (
                   <div key={c.id} className="dgc-actions" onClick={(e) => e.stopPropagation()}>{render(c.id)}</div>
                 ))}
@@ -421,34 +477,61 @@ function CardView<T>({ p, table, rows }: ViewProps<T>) {
   );
 }
 
-/** Filter sheet for both views: pick a column, then its values (same filter as the table header ▾). */
-function FilterSheet<T>({ table, onClose }: { table: ReturnType<typeof useReactTable<T>>; onClose: () => void }) {
+/** Filter panel for both views: columns on the left (on phones: first step), the chosen column's values on the right. */
+function FilterSheet<T>({ table, initialCol, onClose }: { table: ReturnType<typeof useReactTable<T>>; initialCol: string | null; onClose: () => void }) {
   const cols = table.getAllLeafColumns().filter((c) => {
     const d = c.columnDef as GridColumn<T>;
     return !d.noFilter && c.id !== "_sel" && c.id !== "actions" && headerText(d);
   });
-  const [col, setCol] = useState<string | null>(null);
+  const [col, setCol] = useState<string | null>(initialCol);
+  const [q, setQ] = useState("");
+  const shownCols = cols.filter((c) => !q || norm(headerText(c.columnDef as GridColumn<T>)).includes(norm(q)));
+  const active = table.getState().columnFilters.length;
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onClose]);
   return (
-    <div className="dg-sheet card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <b>{col ? `Filtre: ${headerText(table.getColumn(col)!.columnDef as GridColumn<T>)}` : "Sütuna göre filtrele"}</b>
-        <div className="row" style={{ gap: 4 }}>
-          {col && <button className="btn small" onClick={() => setCol(null)}>‹ Sütunlar</button>}
-          <button className="btn small" onClick={onClose} aria-label="Kapat">✕</button>
+    <>
+      <div className="fs-backdrop" onClick={onClose} />
+      <div className={`fs card${col ? " has-col" : ""}`} role="dialog" aria-label="Filtreler">
+        <div className="fs-head">
+          {col && <button className="fs-back" onClick={() => setCol(null)} aria-label="Sütunlara dön">‹</button>}
+          <b>{col ? headerText(table.getColumn(col)!.columnDef as GridColumn<T>) : "Filtreler"}</b>
+          {active > 0 && <span className="dg-count-badge">{active}</span>}
+          <span className="dg-spacer" />
+          {active > 0 && <button className="dg-link" onClick={() => table.resetColumnFilters()}>Tümünü temizle</button>}
+          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
+        </div>
+        <div className="fs-body">
+          <div className="fs-cols">
+            {cols.length > 8 && (
+              <label className="dg-search fs-colsearch">
+                <Icon name="search" size={14} />
+                <input type="search" placeholder="Sütun ara…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Sütun ara" />
+              </label>
+            )}
+            {shownCols.map((c) => {
+              const f = c.getFilterValue() as ColFilter | undefined;
+              return (
+                <button key={c.id} className={`fs-col${col === c.id ? " on" : ""}${f ? " active" : ""}`} onClick={() => setCol(c.id)}>
+                  <span className="fs-col-name">{headerText(c.columnDef as GridColumn<T>)}</span>
+                  {f ? <span className="fs-col-val">{filterSummary(f)}</span> : <span className="fs-col-chev">›</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="fs-vals">
+            {col ? (
+              <FilterPopup key={col} table={table} colId={col} inline onClose={() => setCol(null)} />
+            ) : (
+              <div className="fs-hint muted">Filtrelemek için soldan bir sütun seçin.</div>
+            )}
+          </div>
         </div>
       </div>
-      {col ? (
-        <FilterPopup table={table} colId={col} inline onClose={() => setCol(null)} />
-      ) : (
-        <div className="chips" style={{ marginTop: 8 }}>
-          {cols.map((c) => (
-            <button key={c.id} className={`chip${c.getFilterValue() ? " on" : ""}`} onClick={() => setCol(c.id)}>
-              {headerText(c.columnDef as GridColumn<T>)}{c.getFilterValue() ? " ●" : ""}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -503,27 +586,48 @@ function FilterPopup<T>({ table, colId, onClose, inline }: { table: ReturnType<t
     onClose();
   };
 
+  const allOn = shown.length > 0 && shown.every(([k]) => sel.has(k));
+  const toggle = (k: string, on: boolean) => { const n = new Set(sel); if (on) n.add(k); else n.delete(k); setSel(n); };
+  const max = Math.max(1, ...counts.map((c) => c[1]));
+
   return (
-    <div className="card" onClick={(e) => e.stopPropagation()}
-      style={inline ? { marginTop: 8, padding: 10, maxWidth: 420 } : { position: "absolute", top: "100%", left: 0, zIndex: 20, width: 260, fontWeight: 400, padding: 10 }}>
-      <input placeholder="İçeren metin…" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && apply()} style={{ width: "100%", marginBottom: 6 }} autoFocus />
-      <input placeholder="Değer ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: "100%", marginBottom: 6 }} />
-      <div className="row" style={{ marginBottom: 4 }}>
-        <button className="btn small" onClick={() => setSel(new Set([...sel, ...shown.map((s) => s[0])]))}>Tümü</button>
-        <button className="btn small" onClick={() => { const n = new Set(sel); shown.forEach(([k]) => n.delete(k)); setSel(n); }}>Hiçbiri</button>
+    <div className={`fp${inline ? " inline" : " pop card"}`} onClick={(e) => e.stopPropagation()}>
+      <div className="fp-sec">
+        <span className="fp-label">Metin içerir</span>
+        <label className="dg-search">
+          <Icon name="filter" size={14} />
+          <input placeholder="örnek: 1250 veya kaynak" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && apply()} autoFocus={!inline || matchMedia("(pointer: fine)").matches} />
+        </label>
       </div>
-      <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid var(--border)", borderRadius: 4, padding: 4 }}>
-        {shown.map(([k, n]) => (
-          <label key={k} className="row" style={{ gap: 6, flexWrap: "nowrap", whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={sel.has(k)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(k) : s.delete(k); setSel(s); }} />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{k}</span>
-            <span className="muted" style={{ marginLeft: "auto" }}>{n}</span>
+      <div className="fp-sec">
+        <div className="fp-row">
+          <span className="fp-label">Değerler <span className="muted">({sel.size.toLocaleString("tr-TR")} / {counts.length.toLocaleString("tr-TR")} seçili)</span></span>
+          <button className="dg-link" onClick={() => {
+            const n = new Set(sel);
+            shown.forEach(([k]) => (allOn ? n.delete(k) : n.add(k)));
+            setSel(n);
+          }}>{allOn ? "Hiçbirini seçme" : "Tümünü seç"}</button>
+        </div>
+        {counts.length > 6 && (
+          <label className="dg-search">
+            <Icon name="search" size={14} />
+            <input type="search" placeholder="Değer ara…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </label>
-        ))}
+        )}
+        <div className="fp-list">
+          {shown.map(([k, n]) => (
+            <label key={k} className={`fp-opt${sel.has(k) ? " on" : ""}`}>
+              <input type="checkbox" checked={sel.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
+              <span className="fp-opt-k" title={k}>{k}</span>
+              <span className="fp-opt-n" style={{ "--w": `${Math.round((n / max) * 100)}%` } as CSSProperties}>{n.toLocaleString("tr-TR")}</span>
+            </label>
+          ))}
+          {shown.length === 0 && <div className="muted fp-empty">Eşleşen değer yok</div>}
+        </div>
       </div>
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 8 }}>
-        <button className="btn small" onClick={() => { column.setFilterValue(undefined); onClose(); }}>Temizle</button>
-        <button className="btn small primary" onClick={apply}>Uygula</button>
+      <div className="fp-foot">
+        <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>Temizle</button>
+        <button className="btn primary" onClick={apply}>Uygula</button>
       </div>
     </div>
   );
