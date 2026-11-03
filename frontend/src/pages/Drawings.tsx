@@ -513,7 +513,7 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
 // ---------- page ----------
 export default function Drawings() {
   const { pid } = useProject();
-  const { canDesign } = useAuth();
+  const canDesign = useAuth().can("drawings", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>("all");

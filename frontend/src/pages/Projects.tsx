@@ -3,14 +3,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../api/auth";
-import { Page } from "../components/Layout";
+import { FolderKanban } from "lucide-react";
+import { Page, PageHeader } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import type { Project } from "../types";
 
 const fmt = (s: string | null | undefined) => (s ? new Date(s).toLocaleString("tr-TR") : "—");
 
 export default function Projects() {
-  const { canEdit, isAdmin } = useAuth();
+  const { can, isAdmin } = useAuth();
+  const canEdit = can("projects", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
@@ -34,12 +36,10 @@ export default function Projects() {
 
   return (
     <Page>
-      <div className="row" style={{ marginBottom: 12 }}>
-        <h1 style={{ margin: 0 }}>Projeler</h1>
-        <span className="spacer" style={{ flex: 1 }} />
+      <PageHeader icon={FolderKanban} title="Projeler" sub="Makine projeleri, BOM sürümleri ve parça takibi">
         <label className="row"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Arşivdekileri göster</label>
         {canEdit && <button className="btn primary" onClick={() => setForm({ name: "", root_part_no: "", description: "" })}>Yeni proje</button>}
-      </div>
+      </PageHeader>
       {q.isLoading && <div className="muted">Yükleniyor…</div>}
       {q.error && <div className="error">{errText(q.error)}</div>}
       {q.data && q.data.length === 0 && <div className="card muted">Henüz proje yok. “Yeni proje” ile başlayın, ardından BOM Sürümleri ekranından CSV yükleyin.</div>}

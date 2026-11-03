@@ -67,7 +67,7 @@ export const numOrNull = (v: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-export function useFirms(kind?: "supplier" | "manufacturer") {
+export function useFirms(kind?: "supplier" | "manufacturer" | "customer") {
   return useQuery({
     queryKey: ["firms", kind ?? ""],
     queryFn: () => api.get<FirmBrief[]>(`/firms${kind ? `?kind=${kind}` : ""}`),
@@ -80,7 +80,7 @@ export function useProjects() {
 }
 
 export function FirmSelect({ value, onChange, kind, emptyLabel = "(Firma seçilmedi)" }: {
-  value: number | null; onChange: (id: number | null) => void; kind?: "supplier" | "manufacturer"; emptyLabel?: string;
+  value: number | null; onChange: (id: number | null) => void; kind?: "supplier" | "manufacturer" | "customer"; emptyLabel?: string;
 }) {
   const firms = useFirms(kind);
   return (

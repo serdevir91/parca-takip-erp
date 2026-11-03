@@ -26,6 +26,7 @@ Sistem dört Docker konteynerinden oluşur:
 1. [Gereksinimler](#gereksinimler)
 2. [Kurulum: Linux](#kurulum-linux)
 3. [Kurulum: Windows](#kurulum-windows)
+   - [Masaüstü uygulaması](#masaüstü-uygulaması-windows)
 4. [Docker'sız kurulum](#dockersız-kurulum)
 5. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
 6. [İlk giriş](#ilk-giriş)
@@ -121,6 +122,27 @@ otomatik oturum açma ayarlayın veya Linux kurulumu tercih edin.
 - *Sanallaştırma kapalı*: BIOS'ta Intel VT-x / AMD-V (SVM) seçeneğini açın.
 - *"Windows container modunda"*: Sistem tepsisindeki Docker simgesine sağ tıklayıp "Switch to Linux containers" seçin.
 - *Diğer bilgisayarlar erişemiyor*: Ağ profili "Ortak" ise "Özel" yapın, güvenlik duvarı kuralını kontrol edin.
+
+### Masaüstü uygulaması (Windows)
+
+Tarayıcı yerine kendi penceresinde açılan Windows uygulamasıdır. Docker, Python veya Node gerekmez.
+
+1. [Releases](https://github.com/serdevir91/parca-takip-erp/releases/latest) sayfasından
+   `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
+2. İlk açılışta iki seçenek gelir:
+   - **Bu bilgisayar sunucu:** Veriler seçilen klasörde tutulur (varsayılan
+     `Belgeler\ParcaTakipERP`). Yeni veritabanında yönetici (`admin`) şifresi bu ekranda belirlenir. Uygulama varsayılan olarak 8000 portunu açar ve her
+     gece yedek alır. Windows Güvenlik Duvarı izin sorarsa **Özel ağlar** için izin verin; yoksa diğer
+     cihazlar bağlanamaz.
+   - **Ağdaki sunucuya bağlan:** "Ağda sunucu ara" düğmesi aynı ağdaki sunucuları bulur. Adres elle de
+     yazılabilir (örnek `http://192.168.1.20:8000`).
+3. Aynı ağdaki telefon, tablet veya başka bilgisayarlar tarayıcıdan sunucunun adresini de açabilir.
+
+**Canlı eşitleme:** Bir cihazda yapılan değişiklik diğer açık ekranlara birkaç saniye içinde yansır, sayfayı
+yenilemek gerekmez. Üst çubuktaki "Canlı" göstergesi bağlantıyı gösterir; "Bağlantı yok" görünürse sunucu
+kapalıdır veya ağ kesilmiştir.
+
+Uygulama açılışta yeni sürümü kendisi denetler; Yönetim sayfasında "Güncellemeleri denetle" düğmesi de vardır.
 
 ## Docker'sız kurulum
 
@@ -290,8 +312,21 @@ stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projey
 - **İş Emirleri:** `IE-YYYY-####` numaralı iç üretim veya fason iş emirleri, üretim girişi, birim maliyet.
 - **Stok:** Stok kartları (kod, birim, raf yeri, kritik seviye), giriş, çıkış, sayım ve projeye çıkış
   hareketleri, hareketli ortalama maliyet, kritik stok uyarısı ve hareket geçmişi.
-- **Firmalar** (Yönetim): Telefon, e-posta, adres, vergi bilgileri ve termin süresi. Siparişte tedarikçi
-  seçilince termin tarihi bu süreye göre önerilir.
+- **Ana sayfa:** Kullanıcının görebildiği modüllerin özeti: açık sipariş, iş emri, stok değeri, alacak ve
+  borç kutucukları, dikkat gerektirenler (geciken sipariş, kritik stok, vadesi geçen fatura), son 30 günün
+  işlem grafiği ve son işlemler.
+- **Cari kartlar:** Müşteri, tedarikçi ve üretici firmalar; telefon, e-posta, adres, vergi bilgileri,
+  termin süresi ve güncel bakiye. "Ekstre" düğmesi firmanın fatura ve ödeme hareketlerini yürüyen bakiyeyle
+  gösterir. Siparişte tedarikçi seçilince termin tarihi bu süreye göre önerilir.
+- **Satış ve teklif:** `SS-YYYY-####` numaralı teklif ve satış siparişleri (Taslak, Teklif verildi,
+  Onaylandı, Teslim edildi, Kaybedildi, İptal). İskonto, KDV, geçerlilik ve teslim tarihi; Excel teklif veya
+  sipariş onayı formu. Onaylanan siparişten tek tıkla satış faturası kesilir.
+- **Fatura ve ödeme:** `FT-YYYY-####` numaralı satış faturaları ve tedarikçi numarasıyla girilen alış
+  faturaları. Alış faturası satın alma siparişinden de oluşturulur ("Alış faturası gir"). Tahsilat ve
+  ödemeler faturaya bağlanır veya cari hesaba (avans) yazılır. Ödeme durumu (Ödenmedi, Kısmi, Ödendi,
+  Vadesi geçti) ve firma bazında cari bakiyeler.
+- **Personel ve zaman:** Personel kartları (saatlik maliyet) ve projeye veya iş emrine yazılan çalışma
+  saatleri. İşçilik maliyeti projenin maliyet sekmesine "İşçilik" kaynağıyla eklenir.
 
 ## Yedekleme ve geri yükleme
 
@@ -383,6 +418,13 @@ Sorun çıkarsa eski sürüme dönmek için `.env` içindeki `ERP_TAG` değerini
 | **Tasarımcı** | Proje açma, BOM yükleme ve onaylama, teknik resim yükleme, durum güncelleme. |
 | **Planlama / Satın alma** | Üretim ve malzeme durumunu güncelleme, T-35 listesi aktarma, bağlantı elemanı siparişi. |
 | **İzleyici** | Sadece görüntüleme ve dışa aktarma. Değişiklik yapamaz. |
+
+**Modül yetkileri:** Yönetici, Yönetim › Kullanıcılar ekranında her kullanıcı için modül bazında yetki
+verebilir: **Yok** (menüde görünmez), **Görüntüle** veya **Düzenle**. "Rol" seçeneği rolün varsayılanını
+kullanır. Modüller: Projeler ve BOM, Parça listesi, Bağlantı elemanları, Teknik resimler, Kontrol listesi,
+İhtiyaç ve maliyet, Satın alma, İş emirleri, Stok, Personel ve zaman, Cari kartlar, Satış, Fatura ve ödemeler,
+Yönetim. Admin rolü her zaman tam yetkilidir. Değişiklik kullanıcının açık ekranına birkaç saniye içinde
+yansır.
 
 Kurallar:
 

@@ -2,6 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, getToken, setToken, setUnauthorizedHandler } from "./client";
 
 export type Role = "admin" | "designer" | "planner" | "viewer" | string;
+export type Level = "none" | "view" | "edit";
+/** Permission modules (backend/app/permissions.py MODULES). */
+export type Module =
+  | "projects" | "parts" | "fasteners" | "drawings" | "control" | "planning" | "purchasing"
+  | "workorders" | "stock" | "hr" | "contacts" | "sales" | "finance" | "admin";
+const RANK: Record<Level, number> = { none: 0, view: 1, edit: 2 };
 
 export interface User {
   id: number;
@@ -10,6 +16,8 @@ export interface User {
   role: Role;
   role_label: string;
   active: boolean;
+  /** Effective level per module: role defaults plus the admin's per-user overrides. */
+  permissions?: Partial<Record<Module, Level>>;
 }
 
 interface AuthState {
@@ -17,6 +25,10 @@ interface AuthState {
   ready: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Re-read /auth/me (role or permissions changed by an admin). */
+  reloadUser: () => void;
+  /** True when the user has at least `level` on `module`. */
+  can: (module: Module, level?: Level) => boolean;
   canEdit: boolean;
   canDesign: boolean;
   isAdmin: boolean;
@@ -46,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
   }, [logout]);
 
+  const reloadUser = useCallback(() => {
+    if (getToken()) api.get<User>("/auth/me").then(setUser).catch(() => undefined);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     const form = new URLSearchParams({ username, password });
     const r = await api.post<{ access_token: string; user: User }>("/auth/login", form);
@@ -55,16 +71,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthState>(() => {
     const role = user?.role;
+    const can = (module: Module, level: Level = "view") =>
+      role === "admin" || RANK[user?.permissions?.[module] ?? "none"] >= RANK[level];
     return {
       user,
       ready,
       login,
       logout,
+      reloadUser,
+      can,
       isAdmin: role === "admin",
       canDesign: role === "admin" || role === "designer",
       canEdit: role === "admin" || role === "designer" || role === "planner",
     };
-  }, [user, ready, login, logout]);
+  }, [user, ready, login, logout, reloadUser]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

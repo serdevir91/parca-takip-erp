@@ -52,7 +52,7 @@ type ResolveTarget = { issue: Issue; action: "resolve" | "unresolve" };
 
 export default function Control() {
   const { pid } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("control", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("open");

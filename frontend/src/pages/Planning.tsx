@@ -56,7 +56,7 @@ export default function Planning() {
 
 function NeedTab() {
   const { pid } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("purchasing", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [quick, setQuick] = useState<Quick>("short");

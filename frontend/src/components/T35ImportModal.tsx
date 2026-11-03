@@ -55,7 +55,7 @@ export function T35ImportModal(p: Props) {
 export default T35ImportModal;
 
 function Inner({ pid, onClose }: Props) {
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("control", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);

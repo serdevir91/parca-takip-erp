@@ -60,7 +60,7 @@ const num: CSSProperties = { textAlign: "right" };
 
 export default function Fasteners() {
   const { pid, project } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("fasteners", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"ozet" | "detay">("ozet");

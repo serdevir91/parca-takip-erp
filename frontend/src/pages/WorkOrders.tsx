@@ -13,7 +13,7 @@ type ListResp = { rows: WorkOrder[]; statuses: Record<string, string> };
 /** İş emirleri: all projects at /work-orders, one project at /p/:pid/work-orders. */
 export default function WorkOrders() {
   const { pid, project } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("workorders", "edit");
   const toast = useToast();
   const refresh = useRefresh();
   const [status, setStatus] = useState("open");

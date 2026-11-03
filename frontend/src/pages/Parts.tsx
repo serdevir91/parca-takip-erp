@@ -101,7 +101,7 @@ function mergeServer(r: PartRow, s: PartRow): PartRow {
 
 export default function Parts() {
   const { pid, project } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("parts", "edit");
   const toast = useToast();
   const qc = useQueryClient();
 

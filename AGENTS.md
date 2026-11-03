@@ -34,6 +34,17 @@ Read this file first. Do not re-scan the whole project.
     - Shortage = required - issued - on order (open PO lines) - in production (open WOs) - free stock.
     - Hooks: a sent PO or started WO sets tracking to "Devam ediyor" and fasteners to "Sipariş Verildi";
       when issued >= required, parts become "Tamamlandı" and fasteners "Teslim Edildi".
+- `app/permissions.py`: per-module levels `none`/`view`/`edit` for projects, parts, fasteners, drawings, control,
+  planning, purchasing, workorders, stock, hr, contacts, sales, finance and admin. Role defaults plus per-user
+  overrides in `users.permissions` (JSON); admin always has full access. Guard endpoints with
+  `Depends(require("<module>", "edit"))`; `/api/admin/permissions` serves the catalog to the UI.
+- `app/services/sync.py` + the `live_sync` middleware in `main.py`: every successful write bumps `sync_state.rev`
+  (login, password, test and `*/preview` paths are skipped). `GET /api/sync` (no auth) returns the rev; clients poll it.
+- `app/services/commerce.py`: sales orders (`SS-YYYY-####`), invoices (`FT-YYYY-####` for sales, the supplier's
+  number for purchases), payments and firm balances/ledger. Total = sum(qty*price) - discount + KDV. Balance > 0
+  means the firm owes us: + issued sales invoice, + payment out; - issued purchase invoice, - payment in.
+  Routers: `api/sales.py`, `api/finance.py`, `api/hr.py` (employees, time entries; labour cost flows into
+  `erp.project_costs` as source "İşçilik") and `api/overview.py` (home page KPIs, filtered by permission).
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
@@ -46,13 +57,19 @@ Read this file first. Do not re-scan the whole project.
 ## Frontend layout
 - `src/api/`:
   - The client: `api.get/post/put/patch/del`, `upload`, `download` and `blobUrl`.
-  - The auth hook `useAuth`, which gives `canEdit`, `canDesign` and `isAdmin`.
+  - The auth hook `useAuth`, which gives `can(module, level = "view")`, `isAdmin` and `reloadUser()`.
+    Pages gate edit buttons with `useAuth().can("<module>", "edit")`; `App.tsx` wraps routes in `RequireAuth({module})`.
 - `src/components/`:
   - `DataGrid`: virtualized, with Excel-like column filters, inline edit and selection.
   - `Layout`: `Page`, `useProject`.
   - `Toast`, `PdfViewer`, the import modals and `UpdateCheck`.
+- `Layout` also has the grouped, collapsible sidebar, `PageHeader` and `useLiveSync()` (polls `/api/sync` every
+  4 s and invalidates all queries when the rev changes).
+- Routes: `/` is `Home` (dashboard), `/projects` the project list, `/p/:pid/*` the project screens, then
+  `/purchasing`, `/work-orders`, `/stock`, `/hr`, `/contacts`, `/sales`, `/finance` and `/admin`.
 - `src/pages/`: one file per spec §8 screen. The ERP screens are `Planning`, `Purchasing`, `WorkOrders` and `Stock`;
-  their shared types, formatters and pickers are in `pages/erp/common.tsx`.
+  their shared types, formatters and pickers are in `pages/erp/common.tsx`. The commerce screens `Sales`, `Finance`,
+  `Hr` and `Contacts` share types and widgets (`LinesEditor`, `LedgerModal`, `Stat`) in `pages/erp/commerce.tsx`.
 - `src/theme/`: light, dark and AMOLED themes. The theme is set with the `data-theme` attribute and saved in localStorage under `erp_theme`.
 - `src/styles.css`: one block per screen, marked with `/* === Screen === */` comments.
 
@@ -66,6 +83,7 @@ cd frontend && npx tsc -b && npm run build
 docker compose up -d --build
 ```
 Windows install/update: `KURULUM.bat` runs `deploy/windows_install.ps1` (Docker check, random `.env` secrets, free-port pick, firewall rule). `.gitattributes` keeps LF everywhere except `*.ps1`/`*.bat`; `.ps1` files need a UTF-8 BOM for Windows PowerShell 5.1.
+Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss`. CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules

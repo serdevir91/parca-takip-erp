@@ -1,10 +1,10 @@
 import { useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { Page } from "../components/Layout";
+import { Settings } from "lucide-react";
+import { Page, PageHeader } from "../components/Layout";
 import { useUpdate } from "../components/UpdateCheck";
 import UsersTab from "./admin/Users";
-import FirmsTab from "./admin/Firms";
 import SettingsTab from "./admin/Settings";
 import FastenerRulesTab from "./admin/FastenerRules";
 import T35ConfigTab from "./admin/T35Config";
@@ -13,7 +13,6 @@ import BackupsTab from "./admin/Backups";
 
 const TABS: { id: string; label: string; C: ComponentType }[] = [
   { id: "users", label: "Kullanıcılar", C: UsersTab },
-  { id: "firms", label: "Firmalar", C: FirmsTab },
   { id: "settings", label: "Ayarlar", C: SettingsTab },
   { id: "fasteners", label: "Bağlantı Elemanı Kuralları", C: FastenerRulesTab },
   { id: "t35", label: "T-35 Ayarları", C: T35ConfigTab },
@@ -45,10 +44,9 @@ export default function Admin() {
   const Current = (TABS.find((t) => t.id === tab) ?? TABS[0]).C;
   return (
     <Page>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>Yönetim</h2>
+      <PageHeader icon={Settings} title="Yönetim" sub="Kullanıcılar ve yetkiler, ayarlar, denetim kaydı ve yedekler">
         <VersionBox />
-      </div>
+      </PageHeader>
       <div className="tabs adm-tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "active" : ""} onClick={() => pick(t.id)}>

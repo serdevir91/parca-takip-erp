@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { useAuth } from "../../api/auth";
+import { useAuth, type Level } from "../../api/auth";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal, fmtDate, roleLabel } from "./shared";
 
 export type AdminUser = {
   id: number; username: string; full_name: string; role: string; role_label: string;
   active: boolean; created_at: string | null;
+  /** Admin's per-user overrides; permissions = effective levels (role defaults + overrides). */
+  overrides?: Record<string, Level>; permissions?: Record<string, Level>;
+};
+type Catalog = {
+  modules: { key: string; label: string; group: string }[];
+  levels: { key: Level; label: string }[];
+  role_defaults: Record<string, Record<string, Level>>;
 };
 type RoleOpt = { value: string; label: string };
 
@@ -61,7 +68,12 @@ export default function UsersTab() {
                   <tr key={u.id} style={u.active ? undefined : { opacity: 0.6 }}>
                     <td><b>{u.username}</b>{self && <span className="badge" style={{ marginLeft: 6 }}>siz</span>}</td>
                     <td>{u.full_name}</td>
-                    <td>{roleLabel(u.role)}</td>
+                    <td>
+                      {roleLabel(u.role)}
+                      {!!Object.keys(u.overrides ?? {}).length && u.role !== "admin" && (
+                        <span className="badge" style={{ marginLeft: 6 }} title="Bu kullanıcıya rol dışında özel yetki verilmiş">özel yetki</span>
+                      )}
+                    </td>
                     <td>{u.active ? <span className="badge new">Aktif</span> : <span className="badge">Pasif</span>}</td>
                     <td className="muted">{fmtDate(u.created_at)}</td>
                     <td>
@@ -101,12 +113,13 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
   const [active, setActive] = useState(user?.active ?? true);
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+  const [overrides, setOverrides] = useState<Record<string, Level>>(user?.overrides ?? {});
 
   const save = useMutation({
     mutationFn: () =>
       user
-        ? api.put<AdminUser>(`/admin/users/${user.id}`, { full_name: fullName, role, active })
-        : api.post<AdminUser>("/admin/users", { username: username.trim(), password, full_name: fullName, role }),
+        ? api.put<AdminUser>(`/admin/users/${user.id}`, { full_name: fullName, role, active, permissions: overrides })
+        : api.post<AdminUser>("/admin/users", { username: username.trim(), password, full_name: fullName, role, permissions: overrides }),
     onSuccess: (u) => {
       toast(user ? `${u.username} güncellendi` : `${u.username} oluşturuldu`);
       onSaved();
@@ -118,7 +131,7 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
   const pwErr = !user && (password.length < MIN_PASSWORD ? `Şifre en az ${MIN_PASSWORD} karakter olmalı` : password !== password2 ? "Şifreler aynı değil" : null);
   const invalid = (!user && !username.trim()) || !!pwErr;
   return (
-    <Modal title={user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
+    <Modal wide title={user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
       footer={<>
         <button className="btn" onClick={onClose}>Vazgeç</button>
         <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>
@@ -151,6 +164,7 @@ function UserForm({ user, roles, self, onClose, onSaved }: {
           </>
         )}
       </div>
+      <PermissionMatrix role={role} value={overrides} onChange={setOverrides} />
     </Modal>
   );
 }
@@ -180,5 +194,63 @@ function PasswordForm({ user, onClose }: { user: AdminUser; onClose: () => void 
         {pw && err && <div className="error">{err}</div>}
       </div>
     </Modal>
+  );
+}
+
+/** Per-module access: "Rol varsayılanı" follows the role; any other choice overrides it for this user only. */
+function PermissionMatrix({ role, value, onChange }: { role: string; value: Record<string, Level>; onChange: (v: Record<string, Level>) => void }) {
+  const cat = useQuery({ queryKey: ["admin", "permissions"], queryFn: () => api.get<Catalog>("/admin/permissions"), staleTime: Infinity });
+  if (!cat.data) return <Loading error={cat.error} loading={cat.isLoading} />;
+  const { modules, levels, role_defaults } = cat.data;
+  const defaults = role_defaults[role] ?? {};
+  const label = (lv: Level | undefined) => levels.find((l) => l.key === lv)?.label ?? "Yok";
+  const set = (key: string, lv: string) => {
+    const next = { ...value };
+    if (lv === "") delete next[key];
+    else next[key] = lv as Level;
+    onChange(next);
+  };
+  const setAll = (lv: Level | "") => onChange(lv === "" ? {} : Object.fromEntries(modules.filter((m) => m.key !== "admin").map((m) => [m.key, lv])));
+  const groups = [...new Set(modules.map((m) => m.group))];
+  if (role === "admin") {
+    return <p className="muted perm-note">Admin rolü tüm modüllere tam erişir; ayrı yetki gerekmez.</p>;
+  }
+  return (
+    <div className="perm">
+      <div className="row" style={{ justifyContent: "space-between", margin: "16px 0 6px" }}>
+        <b>Modül yetkileri</b>
+        <div className="row" style={{ gap: 4 }}>
+          <span className="muted">Hepsini:</span>
+          <button className="btn small" type="button" onClick={() => setAll("")}>Rol varsayılanı</button>
+          <button className="btn small" type="button" onClick={() => setAll("view")}>Görüntüle</button>
+          <button className="btn small" type="button" onClick={() => setAll("edit")}>Düzenle</button>
+        </div>
+      </div>
+      <div className="perm-grid">
+        {groups.map((g) => (
+          <div key={g} className="perm-group">
+            <div className="perm-title">{g}</div>
+            {modules.filter((m) => m.group === g).map((m) => {
+              const own = value[m.key];
+              const eff = own ?? defaults[m.key] ?? "none";
+              return (
+                <div key={m.key} className="perm-row">
+                  <span>{m.label}</span>
+                  <div className="seg small" role="radiogroup" aria-label={m.label}>
+                    <button type="button" className={own === undefined ? "on" : ""} onClick={() => set(m.key, "")}
+                      title="Rolün varsayılan yetkisi">Rol ({label(defaults[m.key])})</button>
+                    {levels.map((l) => (
+                      <button key={l.key} type="button" className={own === l.key ? `on lv-${l.key}` : ""} onClick={() => set(m.key, l.key)}>{l.label}</button>
+                    ))}
+                  </div>
+                  <span className={`perm-eff lv-${eff}`}>{label(eff)}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="muted">Değişiklik kullanıcının açık ekranına birkaç saniye içinde yansır; yeniden giriş gerekmez.</p>
+    </div>
   );
 }

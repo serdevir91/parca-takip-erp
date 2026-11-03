@@ -16,7 +16,7 @@ type ListResp = { rows: PurchaseOrder[]; statuses: Record<string, string> };
 /** Satın alma siparişleri: all projects at /purchasing, one project at /p/:pid/purchasing. */
 export default function Purchasing() {
   const { pid, project } = useProject();
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("purchasing", "edit");
   const [status, setStatus] = useState("open");
   const [projectFilter, setProjectFilter] = useState<number | null>(null);
   const [q, setQ] = useState("");
@@ -109,7 +109,8 @@ function useRefresh() {
 }
 
 export function OrderModal({ id, onClose }: { id: number; onClose: () => void }) {
-  const { canEdit } = useAuth();
+  const { can } = useAuth();
+  const canEdit = can("purchasing", "edit");
   const toast = useToast();
   const refresh = useRefresh();
   const [editing, setEditing] = useState(false);
@@ -120,6 +121,11 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
   const setStatus = useMutation({
     mutationFn: (status: string) => api.post<PurchaseOrder>(`/purchase-orders/${id}/status`, { status }),
     onSuccess: (r) => { toast(`${r.no}: ${r.status_label}`); refresh(); },
+    onError: (e) => toast(errText(e), true),
+  });
+  const invoice = useMutation({
+    mutationFn: (no: string) => api.post<{ no: string }>(`/purchase-orders/${id}/invoice`, { no, tax_rate: 20 }),
+    onSuccess: (r) => { toast(`Alış faturası ${r.no} taslak olarak oluşturuldu (Fatura ve ödeme)`); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
   const del = useMutation({
@@ -139,6 +145,12 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
         <button className="btn" onClick={() => void download(`/purchase-orders/${id}/xlsx`, `${po.no}.xlsx`).catch((e) => toast(errText(e), true))}>
           Sipariş formu (Excel)
         </button>
+        {can("finance", "edit") && (s === "sent" || s === "partial" || s === "received") && (
+          <button className="btn" disabled={invoice.isPending} onClick={() => {
+            const no = prompt("Tedarikçi fatura numarası:")?.trim();
+            if (no) invoice.mutate(no);
+          }}>Alış faturası gir</button>
+        )}
         <span style={{ flex: 1 }} />
         {canEdit && s === "draft" && <>
           <button className="btn danger" disabled={busy} onClick={() => confirm(`${po.no} silinsin mi?`) && del.mutate()}>Sil</button>

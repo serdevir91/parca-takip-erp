@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { useAuth } from "../../api/auth";
+import { fmtMoney } from "../erp/common";
+import { LedgerModal, useBalances } from "../erp/commerce";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal } from "./shared";
 
@@ -12,13 +15,25 @@ type Firm = {
 export const FIRM_KINDS: { value: string; label: string }[] = [
   { value: "manufacturer", label: "Üretici" },
   { value: "supplier", label: "Tedarikçi" },
-  { value: "both", label: "Her ikisi" },
+  { value: "both", label: "Üretici + tedarikçi" },
+  { value: "customer", label: "Müşteri" },
 ];
 const kindLabel = (k: string) => FIRM_KINDS.find((x) => x.value === k)?.label ?? k;
 
+/** Cari kartlar: customers, suppliers and manufacturers, with the current balance when finance may be seen. */
 export default function FirmsTab() {
   const qc = useQueryClient();
   const toast = useToast();
+  const { can } = useAuth();
+  const canEdit = can("contacts", "edit");
+  const fin = can("finance");
+  const bal = useBalances(fin);
+  const balance = useMemo(() => {
+    const m = new Map<number, { v: number; cur: string; overdue: number }[]>();
+    for (const b of bal.data ?? []) if (b.firm_id) m.set(b.firm_id, [...(m.get(b.firm_id) ?? []), { v: b.balance, cur: b.currency, overdue: b.overdue_receivable + b.overdue_payable }]);
+    return m;
+  }, [bal.data]);
+  const [ledger, setLedger] = useState<Firm | null>(null);
   const firms = useQuery({ queryKey: ["admin", "firms"], queryFn: () => api.get<Firm[]>("/admin/firms") });
   const [editing, setEditing] = useState<Firm | "new" | null>(null);
   const [kind, setKind] = useState("");
@@ -27,6 +42,7 @@ export default function FirmsTab() {
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["admin", "firms"] });
     void qc.invalidateQueries({ queryKey: ["t35config"] });
+    void qc.invalidateQueries({ queryKey: ["firms"] });
   };
   const del = useMutation({
     mutationFn: (f: Firm) => api.del(`/admin/firms/${f.id}`),
@@ -52,7 +68,7 @@ export default function FirmsTab() {
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
-        <button className="btn primary" onClick={() => setEditing("new")}>+ Yeni firma</button>
+        {canEdit && <button className="btn primary" onClick={() => setEditing("new")}>+ Yeni cari kart</button>}
         <select value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="">Tüm türler</option>
           {FIRM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
@@ -64,7 +80,7 @@ export default function FirmsTab() {
       {firms.data && (
         <div className="adm-scroll">
           <table className="simple">
-            <thead><tr><th>Firma adı</th><th>Tür</th><th>İletişim</th><th>Not</th><th>Durum</th><th></th></tr></thead>
+            <thead><tr><th>Firma adı</th><th>Tür</th><th>İletişim</th>{fin && <th className="num">Bakiye</th>}<th>Not</th><th>Durum</th><th></th></tr></thead>
             <tbody>
               {list.map((f) => (
                 <tr key={f.id} style={f.active ? undefined : { opacity: 0.6 }}>
@@ -75,30 +91,41 @@ export default function FirmsTab() {
                     {(f.phone || f.email) && <div className="muted">{[f.phone, f.email].filter(Boolean).join(" · ")}</div>}
                     {f.lead_days > 0 && <div className="muted">Termin {f.lead_days} gün</div>}
                   </td>
+                  {fin && (
+                    <td className="num">
+                      {(balance.get(f.id) ?? []).map((b) => (
+                        <div key={b.cur} className={b.v > 0 ? "ok" : b.v < 0 ? "warn" : "muted"} title={b.v > 0 ? "Firma bize borçlu" : b.v < 0 ? "Biz firmaya borçluyuz" : undefined}>
+                          {fmtMoney(b.v, b.cur)}{b.overdue > 0 && <span className="badge err" style={{ marginLeft: 4 }} title="Vadesi geçen">!</span>}
+                        </div>
+                      ))}
+                    </td>
+                  )}
                   <td className="muted" style={{ whiteSpace: "pre-wrap" }}>{f.note}</td>
                   <td>
                     <label className="row" style={{ gap: 4 }}>
-                      <input type="checkbox" checked={f.active} disabled={toggle.isPending} onChange={() => toggle.mutate(f)} />
+                      <input type="checkbox" checked={f.active} disabled={!canEdit || toggle.isPending} onChange={() => toggle.mutate(f)} />
                       {f.active ? "Aktif" : "Pasif"}
                     </label>
                   </td>
                   <td>
                     <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                      <button className="btn small" onClick={() => setEditing(f)}>Düzenle</button>
-                      <button className="btn small danger" disabled={del.isPending}
-                        onClick={() => confirm(`"${f.name}" firması silinsin mi? Parça kayıtlarındaki firma adı metin olarak korunur.`) && del.mutate(f)}>Sil</button>
+                      {fin && <button className="btn small" onClick={() => setLedger(f)}>Ekstre</button>}
+                      {canEdit && <button className="btn small" onClick={() => setEditing(f)}>Düzenle</button>}
+                      {canEdit && <button className="btn small danger" disabled={del.isPending}
+                        onClick={() => confirm(`"${f.name}" firması silinsin mi? Parça kayıtlarındaki firma adı metin olarak korunur.`) && del.mutate(f)}>Sil</button>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!list.length && <tr><td colSpan={6} className="muted">Kayıt yok.</td></tr>}
+              {!list.length && <tr><td colSpan={fin ? 7 : 6} className="muted empty">Kayıt yok.</td></tr>}
             </tbody>
           </table>
         </div>
       )}
       <p className="muted" style={{ marginTop: 10 }}>
-        Üretici firmalar T-35 listesindeki metinden üretici tespiti için de kullanılır.
+        Üretici firmalar T-35 listesindeki metinden üretici tespiti için de kullanılır. Müşteriler satış ve faturada seçilir.
       </p>
+      {ledger && <LedgerModal firmId={ledger.id} firmName={ledger.name} onClose={() => setLedger(null)} />}
       {editing && <FirmForm firm={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={refresh} />}
     </div>
   );

@@ -1,7 +1,7 @@
 ﻿; Inno Setup script for the desktop app. CI: ISCC /DAppVersion=x.y.z desktop\installer.iss
 ; Expects dist\ParcaTakipERP (PyInstaller) and dist\MicrosoftEdgeWebview2Setup.exe (Evergreen bootstrapper).
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.1.0"
 #endif
 
 [Setup]

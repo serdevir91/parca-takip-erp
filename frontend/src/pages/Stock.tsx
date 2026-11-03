@@ -38,7 +38,7 @@ function useRefresh() {
 }
 
 function Items() {
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("stock", "edit");
   const toast = useToast();
   const refresh = useRefresh();
   const [low, setLow] = useState(false);

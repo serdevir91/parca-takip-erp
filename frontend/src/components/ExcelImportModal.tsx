@@ -53,7 +53,7 @@ export function ExcelImportModal(p: Props) {
 export default ExcelImportModal;
 
 function Inner({ pid, onClose }: Props) {
-  const { canEdit } = useAuth();
+  const canEdit = useAuth().can("parts", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);

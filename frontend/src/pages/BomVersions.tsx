@@ -94,7 +94,7 @@ function Confirm(p: { title: string; children: ReactNode; okText: string; danger
 // ---------- page ----------
 export default function BomVersions() {
   const { pid, project } = useProject();
-  const { canDesign } = useAuth();
+  const canDesign = useAuth().can("projects", "edit");
   const toast = useToast();
   const qc = useQueryClient();
   const [selected, setSelected] = useState<number | null>(null);
