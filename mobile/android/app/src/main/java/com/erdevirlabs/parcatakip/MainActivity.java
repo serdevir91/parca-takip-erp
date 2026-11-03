@@ -383,6 +383,28 @@ public class MainActivity extends Activity {
 
     // ---- app update ---------------------------------------------------------------------------
 
+    static final String[] ABIS = {"arm64-v8a", "armeabi-v7a", "x86_64", "x86"};
+
+    /** Release APK for this phone: the split matching its preferred ABI, else the universal one, else any APK. */
+    private static String pickApk(JSONArray assets) throws Exception {
+        String universal = null, any = null;
+        for (String abi : Build.SUPPORTED_ABIS) {
+            for (int i = 0; assets != null && i < assets.length(); i++) {
+                String u = assets.getJSONObject(i).optString("browser_download_url", "");
+                if (u.endsWith("-" + abi + ".apk")) return u;
+            }
+        }
+        for (int i = 0; assets != null && i < assets.length(); i++) {
+            String u = assets.getJSONObject(i).optString("browser_download_url", "");
+            if (!u.endsWith(".apk")) continue;
+            any = u;
+            boolean split = false;
+            for (String abi : ABIS) split |= u.endsWith("-" + abi + ".apk");
+            if (!split) universal = u;
+        }
+        return universal != null ? universal : any;
+    }
+
     /** Latest GitHub release vs this build; silent at startup, with feedback when `manual`. */
     private void checkUpdate(boolean manual) {
         if (manual) toast("Güncelleme kontrol ediliyor…");
@@ -392,12 +414,7 @@ public class MainActivity extends Activity {
                 if (body == null) throw new Exception("Sunucuya ulaşılamadı");
                 JSONObject rel = new JSONObject(body);
                 String latest = rel.optString("tag_name", "").replaceFirst("^v", "");
-                String apk = null;
-                JSONArray assets = rel.optJSONArray("assets");
-                for (int i = 0; assets != null && i < assets.length(); i++) {
-                    String u = assets.getJSONObject(i).optString("browser_download_url", "");
-                    if (u.endsWith(".apk")) apk = u;
-                }
+                String apk = pickApk(rel.optJSONArray("assets"));
                 String page = apk != null ? apk : rel.optString("html_url", "");
                 if (newer(latest, BuildConfig.VERSION_NAME) && !page.isEmpty()) {
                     ui.post(() -> new AlertDialog.Builder(this)

@@ -1,5 +1,10 @@
 Windows masaüstü uygulaması: `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
-Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü).
+Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
+
+## 1.3.1 yenilikleri
+
+- **Android:** İşlemciye göre ayrı APK dosyaları (arm64-v8a, armeabi-v7a, x86_64, x86) ve her telefonda çalışan genel APK.
+- **Güncelleme:** Uygulama yeni sürümde telefona uygun APK'yı kendisi seçer.
 
 ## 1.3.0 yenilikleri
 

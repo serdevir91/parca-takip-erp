@@ -123,7 +123,12 @@ jobs:
           ./gradlew assembleRelease --no-daemon -q
           v=$(grep -oP 'app_version: str = "\K[^"]+' ../../backend/app/config.py)
           mkdir -p ../../dist
-          cp app/build/outputs/apk/release/app-release.apk "../../dist/ParcaTakipERP-$v.apk"
+          # ABI splits -> ParcaTakipERP-<v>-<abi>.apk, universal -> ParcaTakipERP-<v>.apk
+          for f in app/build/outputs/apk/release/app-*-release.apk; do
+            a=$(basename "$f" -release.apk); a=${a#app-}
+            if [ "$a" = universal ]; then n="ParcaTakipERP-$v.apk"; else n="ParcaTakipERP-$v-$a.apk"; fi
+            cp "$f" "../../dist/$n"
+          done
 
       - uses: actions/upload-artifact@v4
         if: steps.ks.outputs.skip != 'true'
@@ -135,4 +140,8 @@ jobs:
         if: github.ref_type == 'tag' && steps.ks.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/ParcaTakipERP-*.apk --repo "$GITHUB_REPOSITORY"
+        # universal last: 1.3.0 clients take the last .apk asset
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          gh release upload "$GITHUB_REF_NAME" dist/ParcaTakipERP-$v-*.apk --repo "$GITHUB_REPOSITORY"
+          gh release upload "$GITHUB_REF_NAME" "dist/ParcaTakipERP-$v.apk" --repo "$GITHUB_REPOSITORY"

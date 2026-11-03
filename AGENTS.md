@@ -121,7 +121,9 @@ saved server with the `ParcaTakipApp` JS bridge (gated to `setup.html` and the s
 camera via FileProvider, downloads to `Downloads/ParcaTakip`, back key -> `__erpBack`, GitHub releases update check.
 `Discovery` finds servers (UDP 47811, then a /24 probe on 8000/80/8080). `assets/setup.html` is the first-run screen.
 Version comes from `config.py`. Release signing: gitignored `keystore.properties` + `release.jks`, or `ERP_KEYSTORE_*`
-env (CI secrets; the job skips the APK when they are missing). Build: `JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
+env (CI secrets; the job skips the APK when they are missing). `splits.abi` builds arm64-v8a, armeabi-v7a, x86_64, x86 and
+universal; release assets are `ParcaTakipERP-<v>-<abi>.apk` + `ParcaTakipERP-<v>.apk` (upload the universal one last:
+1.3.0 clients take the last `.apk` asset). `MainActivity.pickApk` picks the split for `Build.SUPPORTED_ABIS`. Build: `JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules

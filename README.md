@@ -155,7 +155,9 @@ uygulama aynı ağdaki sunucuya bağlanır.
 
 1. [Releases](https://github.com/serdevir91/parca-takip-erp/releases/latest) sayfasından telefonda
    `ParcaTakipERP-x.y.z.apk` dosyasını indirin ve açın. Android "bilinmeyen kaynaklar" izni sorarsa
-   tarayıcıya bu izni verin.
+   tarayıcıya bu izni verin. Bu dosya her telefonda çalışır. İşlemciye özel dosyalar da vardır:
+   `-arm64-v8a` (güncel telefonların çoğu), `-armeabi-v7a` (eski 32 bit telefonlar), `-x86_64` / `-x86`
+   (emülatör ve bazı tabletler).
 2. İlk açılışta uygulama ağdaki sunucuları kendisi arar. Bulunan sunucuya dokunun ya da adresi elle yazın
    (örnek `192.168.1.20:8000`). Telefon sunucuyla aynı Wi-Fi ağında olmalıdır.
 3. Kullanıcı adı ve şifrenizle giriş yapın. Son bağlanılan sunucu hatırlanır.
@@ -568,7 +570,7 @@ npm ci && npm run dev
 # Android uygulaması (JDK 17 ve Android SDK gerekir)
 cd mobile/android
 ./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease    # imza: keystore.properties veya ERP_KEYSTORE_* ortam değişkenleri
+./gradlew assembleRelease    # ABI başına APK + universal; imza: keystore.properties veya ERP_KEYSTORE_*
 ```
 
 Android sürümü imzalanırken her zaman aynı anahtar kullanılmalıdır; aksi halde telefonlar güncellemeyi
