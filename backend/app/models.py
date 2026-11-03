@@ -41,6 +41,8 @@ class User(Base):
     # Per-module overrides of the role defaults, see app/permissions.py; None = role defaults only
     permissions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Bumped on password change/reset and deactivation; tokens carry it ("tv"), older tokens stop working
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

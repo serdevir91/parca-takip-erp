@@ -43,8 +43,7 @@ def test_part_photos(client, admin_headers):
     pid = rows[0]["id"]
     f = client.get(f"/api/photos/{pid}/file", headers=h)
     assert f.status_code == 200 and f.content == PNG
-    tok = h["Authorization"].split()[1]
-    t = client.get(f"/api/photos/{pid}/thumb", params={"access_token": tok})
+    t = client.get(f"/api/photos/{pid}/thumb", headers=h)
     assert t.status_code == 200 and t.content == b"\xff\xd8thumb" and t.headers["content-type"] == "image/jpeg"
     assert client.get(f"/api/photos/{pid}/file").status_code == 401
 
@@ -118,12 +117,10 @@ def test_group_with_file(client, people):
     assert f.status_code == 201, f.text
     msg = f.json()
     assert msg["file"] == {"name": "kaynak.png", "size": len(PNG), "type": "image/png", "image": True}
-    tok = ah["Authorization"].split()[1]
-    dl = client.get(f"/api/chat/messages/{msg['id']}/file", params={"access_token": tok, "download": True})
+    dl = client.get(f"/api/chat/messages/{msg['id']}/file", headers=ah, params={"download": True})
     assert dl.status_code == 200 and dl.content == PNG and "attachment" in dl.headers["content-disposition"]
     assert client.get(f"/api/chat/messages/{msg['id']}/thumb", headers=ah).content == PNG
-    ctok = ch["Authorization"].split()[1]
-    assert client.get(f"/api/chat/messages/{msg['id']}/file", params={"access_token": ctok}).status_code == 404
+    assert client.get(f"/api/chat/messages/{msg['id']}/file", headers=ch).status_code == 404
 
     # Members cannot manage the group; admins add/remove/rename
     assert client.patch(f"/api/chat/rooms/{gid}", headers=bh, json={"add": [c]}).status_code == 403

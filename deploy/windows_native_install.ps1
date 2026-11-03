@@ -39,9 +39,15 @@ function EnvValue([string[]]$lines, [string]$key) {
   if ($m) { return ($m -replace "^$key=", "").Trim() }
   return ""
 }
+# Secrets inside: only Administrators, SYSTEM and the installing user may read the file (SIDs, so any Windows language works)
+function LockDown([string]$path) {
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  & icacls $path /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "*${me}:F" | Out-Null
+}
 # UTF-8 without BOM, so the settings parser reads the first key correctly
 function WriteLines([string]$path, [string[]]$lines) {
   [IO.File]::WriteAllLines($path, $lines, (New-Object System.Text.UTF8Encoding($false)))
+  if ($path -like "*.env") { LockDown $path }
 }
 function WingetInstall($id, $what) {
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -164,6 +170,7 @@ if (PortBusy $Port) {
 $lines = SetEnvValue $lines "ERP_HTTP_PORT" "$Port"
 WriteLines $envFile $lines
 Copy-Item $envFile $savedEnv -Force
+LockDown $savedEnv
 
 # ---------- 6. Database ----------
 Step "Veritabanı"

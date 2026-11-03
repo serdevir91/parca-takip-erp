@@ -101,6 +101,10 @@ def save_upload_sync(file: UploadFile) -> tuple[Path, int, str]:
     return _copy_stream(file.file, "Dosya çok büyük")
 
 
+ZIP_MAX_ENTRIES = 5000
+ZIP_MAX_RATIO = 20
+
+
 def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | None]]:
     """Yield (name, tmp_path, size, sha256, error) for every drawing file inside a zip."""
     try:
@@ -109,7 +113,20 @@ def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | Non
         yield "", None, 0, "", "Zip dosyası okunamadı."
         return
     with zf:
-        for info in zf.infolist():
+        infos = zf.infolist()
+        # Zip bomb guard: entry count and total unpacked size (header sizes, then the bytes really read)
+        budget = max(ZIP_MAX_RATIO * path.stat().st_size, 64 * 1024 * 1024)
+        if len(infos) > ZIP_MAX_ENTRIES:
+            yield "", None, 0, "", f"Zip içinde çok fazla dosya var (en fazla {ZIP_MAX_ENTRIES})."
+            return
+        if sum(i.file_size for i in infos) > budget:
+            yield "", None, 0, "", "Zip açıldığında çok büyük (sıkıştırma oranı şüpheli)."
+            return
+        used = 0
+        for info in infos:
+            if used > budget:
+                yield info.filename, None, 0, "", "Zip açıldığında çok büyük; kalan dosyalar atlandı."
+                return
             name = info.filename
             base = name.replace("\\", "/").rsplit("/", 1)[-1]
             if info.is_dir() or not base or name.startswith("__MACOSX/") or base.startswith("._"):
@@ -121,6 +138,7 @@ def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | Non
             try:
                 with zf.open(info) as src:
                     tmp, size, sha = _copy_stream(src)
+                used += size
             except DrawingError as e:
                 yield name, None, 0, "", str(e)
                 continue

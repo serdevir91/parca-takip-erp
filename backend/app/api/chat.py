@@ -49,6 +49,8 @@ def _active_user(db: Session, user_id: int) -> User:
     u = db.get(User, user_id)
     if u is None or not u.active:
         raise HTTPException(404, "Kullanıcı bulunamadı veya pasif")
+    if not can(u, "chat", "view"):
+        raise HTTPException(400, f"{display(u)} sohbet modülünü kullanamıyor")
     return u
 
 
@@ -316,9 +318,8 @@ def delete_message(message_id: int, db: Session = Depends(get_db), me: User = De
     return message_out(msg)
 
 
-def _file_user(token: str | None = Depends(oauth2), access_token: str | None = Query(None),
-               db: Session = Depends(get_db)) -> User:
-    user = user_from_token(token or access_token, db)
+def _file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+    user = user_from_token(token, db)
     if not can(user, "chat", "view"):
         raise HTTPException(403, "Bu işlem için yetkiniz yok")
     return user
@@ -338,8 +339,9 @@ def message_file(message_id: int, download: bool = False, db: Session = Depends(
     msg = _attachment(db, message_id, me)
     if not Path(msg.file_path or "").is_file():
         raise HTTPException(404, "Dosya bulunamadı")
-    return FileResponse(msg.file_path or "", media_type=msg.file_type or "application/octet-stream",
-                        filename=msg.file_name, content_disposition_type="attachment" if download else "inline")
+    media, inline = uploads.media_for(msg.file_name or "")
+    return FileResponse(msg.file_path or "", media_type=media, filename=msg.file_name,
+                        content_disposition_type="inline" if inline and not download else "attachment")
 
 
 @router.get("/messages/{message_id}/thumb")
@@ -348,5 +350,6 @@ def message_thumb(message_id: int, db: Session = Depends(get_db), me: User = Dep
     path = msg.thumb_path if msg.thumb_path and Path(msg.thumb_path).is_file() else msg.file_path
     if not path or not Path(path).is_file():
         raise HTTPException(404, "Dosya bulunamadı")
-    return FileResponse(path, media_type="image/jpeg" if path == msg.thumb_path else (msg.file_type or "image/*"),
+    media = "image/jpeg" if path == msg.thumb_path else uploads.media_for(msg.file_name or "")[0]
+    return FileResponse(path, media_type=media,
                         headers={"Cache-Control": "private, max-age=86400"})

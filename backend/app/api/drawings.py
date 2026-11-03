@@ -24,10 +24,9 @@ drawings_edit = require("drawings", "edit")
 router = APIRouter(tags=["drawings"])
 
 
-def file_user(token: str | None = Depends(oauth2), access_token: str | None = Query(None),
-              db: Session = Depends(get_db)) -> User:
-    """Bearer header, or `?access_token=` so <img>/<iframe>/download links work."""
-    user = user_from_token(token or access_token, db)
+def file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+    """Bearer header only: tokens in URLs end up in logs and history and make links replayable."""
+    user = user_from_token(token, db)
     if not can(user, "drawings", "view"):
         raise HTTPException(403, "Bu işlem için yetkiniz yok")
     return user

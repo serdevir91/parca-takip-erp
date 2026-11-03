@@ -27,9 +27,15 @@ function PortBusy([int]$p) {
   return [bool]$l
 }
 
+# Secrets inside: only Administrators, SYSTEM and the installing user may read the file (SIDs, so any Windows language works)
+function LockDown([string]$path) {
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  & icacls $path /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "*${me}:F" | Out-Null
+}
 # UTF-8 without BOM: Windows PowerShell 5.1 "-Encoding utf8" adds a BOM that breaks compose's .env parser
 function WriteEnv([string[]]$lines) {
   [IO.File]::WriteAllLines((Join-Path $root ".env"), $lines, (New-Object System.Text.UTF8Encoding($false)))
+  LockDown (Join-Path $root ".env")
 }
 
 function SetEnvValue([string[]]$lines, [string]$key, [string]$value) {

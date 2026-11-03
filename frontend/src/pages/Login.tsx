@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../api/auth";
+import { mobileApp } from "../api/mobile";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -33,6 +34,11 @@ export default function Login() {
         <label>Şifre<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%" }} /></label>
         {err && <div className="error">{err}</div>}
         <button className="btn primary" disabled={busy || !username || !password}>{busy ? "Giriş yapılıyor…" : "Giriş yap"}</button>
+        {mobileApp() && (
+          <button type="button" className="btn" onClick={() => mobileApp()?.changeServer()}>
+            Sunucuyu değiştir ({location.host})
+          </button>
+        )}
       </form>
     </div>
   );

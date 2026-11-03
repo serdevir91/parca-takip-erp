@@ -1,13 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, Layers,
-  ListTree, LogOut, Menu, MessageCircle, Moon, RefreshCw, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
+  ListTree, LogOut, Menu, MessageCircle, Moon, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { mobileApp, onBack } from "../api/mobile";
 import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
+import Profile from "./Profile";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
 import type { Project } from "../types";
 import type { ChatState } from "../pages/Chat";
@@ -144,6 +147,13 @@ export default function Layout() {
   const live = useLiveSync();
   const unread = useChatPoll(can("chat"));
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Phones: the sidebar is an off-canvas menu opened from the top bar.
+  const [navOpen, setNavOpen] = useState(false);
+  const path = useLocation().pathname;
+  useEffect(() => setNavOpen(false), [path]);
+  useEffect(() => (navOpen ? onBack(() => (setNavOpen(false), true)) : undefined), [navOpen]);
+  const app = mobileApp();
+  const [profile, setProfile] = useState(false);
   const toggle = () => {
     setCollapsed((c) => {
       try {
@@ -165,11 +175,15 @@ export default function Layout() {
   const ThemeIcon = mode === "light" ? Sun : Moon;
 
   return (
-    <div className={collapsed ? "app collapsed" : "app"}>
+    <div className={`app${collapsed ? " collapsed" : ""}${navOpen ? " nav-open" : ""}`}>
+      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
       <aside className="sidebar">
         <div className="brand">
-          <button className="icon-btn" onClick={toggle} aria-label={collapsed ? "Menüyü aç" : "Menüyü daralt"}>
+          <button className="icon-btn desk-only" onClick={toggle} aria-label={collapsed ? "Menüyü aç" : "Menüyü daralt"}>
             <Menu size={18} />
+          </button>
+          <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label="Menüyü kapat">
+            <X size={18} />
           </button>
           <span className="brand-logo">P</span>
           <span className="nav-label brand-name">Parça Takip <b>ERP</b></span>
@@ -195,6 +209,10 @@ export default function Layout() {
       </aside>
       <div className="main">
         <header className="topbar">
+          <button className="icon-btn mobile-only nav-toggle" onClick={() => setNavOpen(true)} aria-label="Menü">
+            <Menu size={20} />
+            {unread > 0 && <span className="nav-dot" />}
+          </button>
           <span className={live.online ? "live on" : "live off"}
             title={live.online ? "Sunucuya bağlı. Diğer bilgisayarlardaki değişiklikler birkaç saniye içinde görünür."
               : "Sunucuya ulaşılamıyor. Ağ bağlantısını kontrol edin."}>
@@ -206,17 +224,23 @@ export default function Layout() {
             <ThemeIcon size={17} />
             <span className="icon-btn-text">{THEME_LABELS[mode]}</span>
           </button>
-          <button className="icon-btn" disabled={upd.checking} onClick={() => void upd.check(true)}
+          {app && (
+            <button className="icon-btn" title="Sunucuyu değiştir" aria-label="Sunucuyu değiştir" onClick={() => app.changeServer()}>
+              <Server size={17} />
+            </button>
+          )}
+          <button className="icon-btn" disabled={upd.checking}
+            onClick={() => { void upd.check(true); app?.checkUpdate(true); }}
             title={upd.message || `Sürüm ${upd.info.current}`} aria-label="Güncellemeleri denetle">
             <RefreshCw size={17} className={upd.checking ? "spin" : undefined} />
           </button>
-          <div className="user-chip" title={ROLE_LABELS[user?.role ?? ""] ?? user?.role}>
+          <button className="user-chip" title="Profilim: ad ve şifre" onClick={() => setProfile(true)}>
             <span className="avatar">{(user?.full_name || user?.username || "?").slice(0, 1).toLocaleUpperCase("tr-TR")}</span>
             <span className="user-text">
               <b>{user?.full_name || user?.username}</b>
               <small>{ROLE_LABELS[user?.role ?? ""] ?? user?.role}</small>
             </span>
-          </div>
+          </button>
           <button className="icon-btn" title="Çıkış" aria-label="Çıkış" onClick={() => { logout(); nav("/login"); }}>
             <LogOut size={17} />
           </button>
@@ -224,6 +248,7 @@ export default function Layout() {
         {upd.message && <div className="muted" style={{ padding: "4px 16px" }}>{upd.message}</div>}
         <UpdateBanner />
         <Outlet />
+        {profile && <Profile onClose={() => setProfile(false)} />}
       </div>
     </div>
   );

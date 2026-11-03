@@ -130,10 +130,6 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .dg td input, .dg td select { width: 100%; padding: 1px 4px; height: 24px; }
 .dg .resizer { position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
-@media (max-width: 800px) {
-  .app { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-}
 
 /* === Dashboard === */
 .dash { display: flex; flex-direction: column; gap: 12px; }
@@ -477,3 +473,66 @@ div.chat-pick-row { cursor: default; }
   .chat-back { display: inline-grid; }
   .chat-bubble { max-width: 86%; }
 }
+
+/* === Mobil (telefon) === */
+/* Below 800px the sidebar is an off-canvas menu (Layout navOpen), dialogs become bottom sheets and
+   wide tables scroll sideways. The Android app pads the window itself; env() covers iPhone browsers. */
+.mobile-only { display: none !important; }
+.user-chip { background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; color: inherit; font: inherit; text-align: left; }
+.user-chip:hover { background: var(--surface-2); }
+.nav-toggle { position: relative; }
+.nav-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+.profile-form { display: flex; flex-direction: column; gap: 10px; }
+.profile-form h4 { margin: 8px 0 0; }
+.app { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+@media (max-width: 800px) {
+  .desk-only { display: none !important; }
+  .mobile-only { display: inline-flex !important; }
+  .app, .app.collapsed { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 46; width: min(300px, 84vw);
+    transform: translateX(-105%); transition: transform .2s ease; box-shadow: 4px 0 18px rgba(0,0,0,.25);
+    padding: calc(10px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom));
+  }
+  .app.nav-open .sidebar { transform: none; }
+  .nav-backdrop { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.4); }
+  /* The desktop "collapsed" rail never applies to the phone menu */
+  .app.collapsed .brand-logo { display: grid; }
+  .app.collapsed .nav-label { display: inline; }
+  .app.collapsed .sidebar .section { display: block; }
+  .app.collapsed .sidebar nav a { justify-content: flex-start; padding: 11px 12px; }
+  .app.collapsed .nav-project { margin: 2px 0 4px 10px; padding-left: 6px; border-left: 2px solid var(--border); border-top: none; }
+  .app.collapsed .nav-group + .nav-group { border-top: none; margin-top: 0; padding-top: 0; }
+  .sidebar nav a { padding: 11px 12px; }
+  .topbar { padding: 4px 6px; gap: 2px; min-height: 52px; }
+  .live { font-size: 0; gap: 0; padding: 8px; }
+  .user-chip { padding: 2px; margin-left: 0; }
+  .content { padding: 12px 10px calc(12px + env(safe-area-inset-bottom)); }
+  .page-head { gap: 8px; margin-bottom: 10px; }
+  .page-title { min-width: 0; flex: 1; }
+  .page-title h1 { font-size: 18px; }
+  .page-actions { margin-left: 0; width: 100%; }
+  .page-actions > * { flex: 1 1 auto; }
+  .modal-back { align-items: flex-end; }
+  .modal:not(.pdfv) {
+    max-width: 100vw !important; width: 100%; max-height: 92vh; border-radius: 14px 14px 0 0; padding: 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom)); box-sizing: border-box;
+  }
+  .drawer { width: 100vw; padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+  .toast { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .toast div { max-width: none; }
+  .tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .tabs button { white-space: nowrap; flex: none; }
+  .content table.simple, .modal table.simple, .drawer table.simple { display: block; overflow-x: auto; }
+  .toolbar { padding: 8px; gap: 6px; }
+  .toolbar input[type="search"], .toolbar input:not([type]) { min-width: 0; flex: 1 1 140px; }
+  .login form { width: min(340px, calc(100vw - 32px)); }
+  input:not(.dg input), select:not(.dg select), textarea { font-size: 16px; }
+}
+@media (pointer: coarse) {
+  .btn { min-height: 38px; }
+  .btn.small { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+  .icon-btn { min-width: 40px; min-height: 40px; justify-content: center; }
+  .tabs button { padding: 10px 14px; }
+}
+

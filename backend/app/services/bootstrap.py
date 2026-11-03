@@ -25,6 +25,7 @@ def seed_defaults(db: Session) -> None:
         db.add(User(username=cfg.admin_user, full_name="Yönetici", role=ROLE_ADMIN,
                     password_hash=hash_password(cfg.admin_password)))
         log.warning("Admin user '%s' created. Change the password after the first login.", cfg.admin_user)
+
     if not db.scalar(select(func.count()).select_from(FastenerRule)):
         for r in FASTENER_DEFAULTS:
             db.add(FastenerRule(

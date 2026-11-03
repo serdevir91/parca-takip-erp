@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     jwt_expire_hours: int = 12
     admin_user: str = "admin"
     admin_password: str = "admin"
-    app_version: str = "1.2.0"
+    # Interactive API docs at /api/docs (off by default: they map the whole API without a login)
+    api_docs: bool = False
+    app_version: str = "1.3.0"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048
@@ -56,4 +58,36 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    ensure_jwt_secret(s)
+    return s
+
+
+WEAK_SECRETS = {"", "change-me", "changeme", "secret", "please-change-me", "erp", "parca-takip"}
+
+
+def ensure_jwt_secret(cfg: Settings) -> None:
+    """Replace a missing, default or short JWT secret with a random one kept in data_dir/.jwt_secret.
+
+    A known secret lets anyone forge admin tokens, so installs that copied .env.example or left the
+    default still get a private key. The file survives restarts; deleting it logs everyone out.
+    """
+    import secrets
+
+    if cfg.jwt_secret not in WEAK_SECRETS and len(cfg.jwt_secret) >= 32:
+        return
+    f = cfg.data_dir / ".jwt_secret"
+    try:
+        stored = f.read_text(encoding="utf-8").strip()
+    except OSError:
+        stored = ""
+    if len(stored) < 32:
+        stored = secrets.token_urlsafe(48)
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(stored, encoding="utf-8")
+            f.chmod(0o600)
+        except OSError:  # read-only data dir: the secret lasts until the next restart
+            pass
+    cfg.jwt_secret = stored
+

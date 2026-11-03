@@ -1,4 +1,19 @@
 Windows masaüstü uygulaması: `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
+Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü).
+
+## 1.3.0 yenilikleri
+
+- **Android uygulaması:** Ağdaki sunucuyu kendisi bulur, son sunucuyu hatırlar. İndirmeler İndirilenler › ParcaTakip klasörüne kaydedilir, fotoğraf eklerken kamera kullanılabilir, geri tuşu pencereleri ve menüyü kapatır.
+- **Telefona uyumlu arayüz:** Telefonda kayan yan menü, alttan açılan pencereler, kaydırılabilir tablolar ve büyük dokunma alanları.
+- **Profilim:** Her kullanıcı sağ üstteki adına tıklayarak kendi adını ve şifresini değiştirebilir.
+- **Güvenlik:**
+  - Hatalı giriş denemeleri sınırlandırıldı.
+  - Şifre değişince diğer cihazlardaki oturumlar kapanır.
+  - Şifreler en az 8 karakter.
+  - Zayıf oturum anahtarı otomatik olarak güçlüsüyle değiştirilir.
+  - Yüklenen dosyalar güvenli biçimde sunulur.
+  - Excel formül saldırılarına ve bozuk/aşırı büyük dosyalara karşı koruma eklendi.
+  - Tarayıcı güvenlik başlıkları eklendi.
 
 ## 1.2.0 yenilikleri
 

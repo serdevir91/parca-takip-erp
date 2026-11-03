@@ -15,6 +15,7 @@ from openpyxl import load_workbook
 
 from .normalize import strip_cad_ext, tr_casefold, tr_contains
 from .status import PROG_DONE, PROG_RUN, PROG_WAIT
+from .xlsxguard import check_xlsx
 
 DEFAULT_RULES: list[dict[str, Any]] = [
     {"field": "progress", "all": ["TAMAMLANDI"], "value": PROG_DONE, "priority": 10},
@@ -80,6 +81,7 @@ def _num(v) -> float | None:
 
 
 def read_t35(data: bytes) -> list[T35Row]:
+    check_xlsx(io.BytesIO(data))
     wb = load_workbook(io.BytesIO(data), data_only=True)
     ws = wb.active
     out: list[T35Row] = []

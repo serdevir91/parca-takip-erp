@@ -1,3 +1,4 @@
+import { mobileApp } from "../api/mobile";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type ThemeMode = "light" | "dark" | "amoled";
@@ -20,6 +21,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(initial);
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    if (bg) mobileApp()?.setTheme(bg, mode !== "light");
     try {
       localStorage.setItem(KEY, mode);
     } catch {

@@ -52,9 +52,20 @@ Read this file first. Do not re-scan the whole project.
     optional attachment each (`chat_dir/<room>`), read markers (`ChatMember.last_read_id`), soft delete.
     Module `chat` (every role defaults to edit). Chat writes are in `sync.SKIP_PATHS`; clients poll
     `GET /chat/state` instead, whose `key` changes on new messages, room edits/deletions and read markers.
-  - `services/uploads.py`: `store()` (uuid name, size limit), `safe_name`, `is_image`, `remove`.
+  - `services/uploads.py`: `store()` (uuid name, size limit), `safe_name`, `is_image` (extension only, no SVG),
+    `media_for(name)` -> (media type, inline ok). Only images and PDF are served inline; anything else is an attachment.
   - The server has no image library: the browser sends a JPEG `thumb` with each image upload
-    (`src/api/images.ts` `makeThumb`); thumb endpoints fall back to the original. File endpoints accept `?access_token`.
+    (`src/api/images.ts` `makeThumb`); thumb endpoints fall back to the original. File endpoints take the Bearer header only (no `?access_token`).
+- Security (v1.3.0):
+  - `auth.py`: tokens carry `tv` = `User.token_version`; a password change, admin reset or deactivation bumps it and
+    revokes every session. `POST /auth/password` returns a fresh `access_token`. `PUT /auth/me` edits own `full_name`.
+    No forced password change. `MIN_PASSWORD` = 8 (`api/auth.check_password_rules`).
+  - `services/loginguard.py`: in-memory login throttle (5 per user, 30 per IP, 15 min window; 429 + Retry-After).
+  - `config.ensure_jwt_secret`: a weak or default `ERP_JWT_SECRET` is replaced by `data_dir/.jwt_secret`.
+  - `main.py` `security_headers` middleware: nosniff, no-referrer, `X-Frame-Options: DENY`, sandbox CSP on `/api/*`,
+    SPA CSP elsewhere (nginx mirrors it in `frontend/security_headers.conf`). `/api/docs` only with `ERP_API_DOCS`.
+  - `services/xlsafe.neutralize(wb)` before every workbook save (formula injection); `core/xlsxguard.check_xlsx`
+    and the `drawings.iter_zip` limits stop zip bombs.
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
@@ -86,6 +97,11 @@ Read this file first. Do not re-scan the whole project.
 - `src/pages/`: one file per spec §8 screen. The ERP screens are `Planning`, `Purchasing`, `WorkOrders` and `Stock`;
   their shared types, formatters and pickers are in `pages/erp/common.tsx`. The commerce screens `Sales`, `Finance`,
   `Hr` and `Contacts` share types and widgets (`LinesEditor`, `LedgerModal`, `Stat`) in `pages/erp/commerce.tsx`.
+- `src/api/mobile.ts`: `mobileApp()` returns the Android bridge (`window.ParcaTakipApp`) or null; `onBack(handler)`
+  registers back-button handlers (`window.__erpBack`, open dialogs get Escape). `download()` goes through the bridge
+  inside the app. `components/Profile.tsx`: own name + password ("Profilim", opened from the user chip).
+- Mobile UI: `styles.css` `/* === Mobil (telefon) === */` block. At <=800px the sidebar is an off-canvas drawer
+  (`.nav-open`), modals are bottom sheets, tables scroll; `.mobile-only` / `.desk-only` helpers.
 - `src/theme/`: light, dark and AMOLED themes. The theme is set with the `data-theme` attribute and saved in localStorage under `erp_theme`.
 - `src/styles.css`: one block per screen, marked with `/* === Screen === */` comments.
 
@@ -100,6 +116,12 @@ docker compose up -d --build
 ```
 Windows install/update: `KURULUM.bat` runs `deploy/windows_install.ps1` (Docker check, random `.env` secrets, free-port pick, firewall rule). `.gitattributes` keeps LF everywhere except `*.ps1`/`*.bat`; `.ps1` files need a UTF-8 BOM for Windows PowerShell 5.1.
 Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss`. CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
+Android app: `mobile/android` (plain Java, no AndroidX UI, Gradle 9.1 + AGP). `MainActivity` is a WebView over the
+saved server with the `ParcaTakipApp` JS bridge (gated to `setup.html` and the saved server origin), file chooser +
+camera via FileProvider, downloads to `Downloads/ParcaTakip`, back key -> `__erpBack`, GitHub releases update check.
+`Discovery` finds servers (UDP 47811, then a /24 probe on 8000/80/8080). `assets/setup.html` is the first-run screen.
+Version comes from `config.py`. Release signing: gitignored `keystore.properties` + `release.jks`, or `ERP_KEYSTORE_*`
+env (CI secrets; the job skips the APK when they are missing). Build: `JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules

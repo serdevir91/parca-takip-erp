@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import (Firm, Invoice, InvoiceLine, Payment, PurchaseOrder, SalesOrder, SalesOrderLine, User)
-from . import audit
+from . import audit, xlsafe
 from .erp import next_no
 
 SO_STATUS = {"draft": "Taslak", "quoted": "Teklif verildi", "confirmed": "Onaylandı", "delivered": "Teslim edildi",
@@ -337,5 +337,5 @@ def form_xlsx(title: str, info: list[tuple[str, Any]], currency: str, lines: lis
     for col, w in zip("ABCDEFG", (18, 28, 46, 8, 10, 18, 16)):
         ws.column_dimensions[col].width = w
     buf = io.BytesIO()
-    wb.save(buf)
+    xlsafe.neutralize(wb).save(buf)
     return buf.getvalue()

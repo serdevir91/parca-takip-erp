@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
-from ..services import audit, erp
-from ..permissions import require
+from ..services import audit, erp, xlsafe
+from ..permissions import can, require
 from .deps import any_user, get_db, project_or_404
 
 purchasing_view, purchasing_edit = require("purchasing", "view"), require("purchasing", "edit")
@@ -23,13 +23,16 @@ router = APIRouter(tags=["purchasing"])
 
 
 @router.get("/firms")
-def firms(kind: str | None = None, _: User = Depends(any_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def firms(kind: str | None = None, me: User = Depends(any_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """Active firms for pickers (the full card editor is under /admin/firms)."""
     q = select(Firm).where(Firm.active.is_(True)).order_by(Firm.name)
     if kind:
         q = q.where(Firm.kind.in_([kind] if kind == "customer" else [kind, "both"]))
-    return [{"id": f.id, "name": f.name, "kind": f.kind, "contact": f.contact, "phone": f.phone, "email": f.email,
-             "lead_days": f.lead_days} for f in db.scalars(q)]
+    # Contact details only for users who may see the address book
+    details = can(me, "contacts", "view")
+    return [{"id": f.id, "name": f.name, "kind": f.kind, "lead_days": f.lead_days,
+             **({"contact": f.contact, "phone": f.phone, "email": f.email} if details else {})}
+            for f in db.scalars(q)]
 
 
 class LineIn(BaseModel):
@@ -257,7 +260,7 @@ def order_xlsx(po_id: int, _: User = Depends(purchasing_view), db: Session = Dep
     for row in ws.iter_rows(min_row=3, max_row=len(info) + 2, min_col=2, max_col=2):
         row[0].alignment = Alignment(wrap_text=True, vertical="top")
     buf = io.BytesIO()
-    wb.save(buf)
+    xlsafe.neutralize(wb).save(buf)
     buf.seek(0)
     fname = f"{po.no}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

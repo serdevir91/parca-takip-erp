@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from ..models import BomVersion, User
 from ..services.state import ProjectView
-from .deps import any_user, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
 from .projects import project_out
 
 router = APIRouter(prefix="/projects", tags=["dashboard"])
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/projects", tags=["dashboard"])
 
 @router.get("/{pid}/dashboard")
 def dashboard(pid: int, version_id: int | None = None, db: Session = Depends(get_db),
-              _: User = Depends(any_user)) -> dict:
+              _: User = Depends(require("projects", "view"))) -> dict:
     """Dashboard of the current (or a chosen) BOM version. A project without an approved BOM
     returns empty counts."""
     project = project_or_404(db, pid)

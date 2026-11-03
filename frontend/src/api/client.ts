@@ -1,5 +1,6 @@
 /** Thin fetch wrapper: JWT header, JSON, Turkish error messages from FastAPI `detail`. */
 import { desktop, type DesktopFileRequest } from "./desktop";
+import { mobileApp } from "./mobile";
 
 const TOKEN_KEY = "erp_token";
 
@@ -95,6 +96,8 @@ export function upload<T = unknown>(path: string, form: FormData, onProgress?: (
 export async function download(path: string, fallbackName: string): Promise<void> {
   const token = getToken();
   if (desktop()) return desktopFile({ path, token, filename: fallbackName, action: "save" });
+  const app = mobileApp();
+  if (app) return app.download(`${location.origin}/api${path}`, fallbackName, token ?? "");
   const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) {
     let body: unknown;

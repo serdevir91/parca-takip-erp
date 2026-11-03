@@ -79,7 +79,8 @@ def test_drawing_upload_match_and_files(client, admin_headers, data_file):
     assert f.status_code == 200 and f.content.startswith(b"%PDF")
     assert f.headers["content-type"] == "application/pdf" and "inline" in f.headers["content-disposition"]
     token = h["Authorization"].split()[1]
-    assert client.get(f"/api/drawings/{did}/file", params={"access_token": token}).status_code == 200
+    # tokens in URLs are not accepted (they leak into logs and make links replayable)
+    assert client.get(f"/api/drawings/{did}/file", params={"access_token": token}).status_code == 401
     assert client.get(f"/api/drawings/{did}/file").status_code == 401
     t = client.get(f"/api/drawings/{did}/thumb", headers=h)
     assert t.status_code == 200 and t.content.startswith(b"\x89PNG")

@@ -27,6 +27,7 @@ from ..core.normalize import tr_sort_key
 from ..core.status import (COLORS, PROG_WAIT, PROGRESS_CHOICES, STATUS_MAP,
                            STATUS_NO_TEMIN, KIND_HAZIR, KIND_IMALAT, KIND_MONTAJ)
 from ..models import Project
+from . import xlsafe
 from .settings import manufacturers
 from .tracking import material_status_choices
 from .state import FASTENER_COLORS, FASTENER_ORDER_STATUSES, FASTENER_TYPE_ORDER, ProjectView
@@ -747,7 +748,7 @@ def build_fastener_order(db: Session, view: ProjectView) -> Workbook:
 
 def to_bytes(wb: Workbook) -> bytes:
     buf = io.BytesIO()
-    wb.save(buf)
+    xlsafe.neutralize(wb).save(buf)
     return buf.getvalue()
 
 

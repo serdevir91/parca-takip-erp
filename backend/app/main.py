@@ -40,8 +40,36 @@ async def lifespan(_: FastAPI):
     yield
 
 
+_docs = get_settings().api_docs
 app = FastAPI(title="Parça Takip ERP", version=get_settings().app_version, lifespan=lifespan,
-              docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+              docs_url="/api/docs" if _docs else None, openapi_url="/api/openapi.json" if _docs else None,
+              redoc_url=None)
+
+# The SPA: own scripts only (pdf.js needs wasm), inline styles (charts), blob: for previews and the
+# pdf.js worker; connect-src allows the admin-set update feed. API responses (JSON and stored files)
+# never need to run anything, so they get a sandboxed, empty policy: an uploaded HTML or SVG file opened
+# directly cannot run script on the app origin.
+SPA_CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
+           "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http: https:; "
+           "worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+           "form-action 'self'; frame-ancestors 'none'")
+API_CSP = "default-src 'none'; img-src 'self'; sandbox; frame-ancestors 'none'"
+_DOCS_PATHS = ("/api/docs", "/api/openapi.json")
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("Referrer-Policy", "no-referrer")
+    h.setdefault("X-Frame-Options", "DENY")
+    path = request.url.path
+    if path.startswith("/api/") and path not in _DOCS_PATHS:
+        h.setdefault("Content-Security-Policy", API_CSP)
+    elif not path.startswith("/api/"):
+        h.setdefault("Content-Security-Policy", SPA_CSP)
+    return response
 
 
 @app.middleware("http")

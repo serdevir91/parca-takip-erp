@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Parça Takip ERP</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --brand:#2563eb; --err:#c62828; --ok:#2e7d32; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#15181d; --card:#1e2229; --fg:#e8eaee; --muted:#9aa3b2; --line:#2e333c; --brand:#5b8cff; --err:#ef6b6b; --ok:#5fbf6a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:28px 16px 40px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:var(--muted); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-weight:600; font-size:14px; margin-bottom:6px; }
+  input { width:100%; font-size:16px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--fg); }
+  .row { display:flex; gap:8px; margin-top:10px; }
+  button { flex:1; min-height:46px; font-size:15px; font-weight:600; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  button:disabled { opacity:.55; }
+  .msg { margin-top:10px; font-size:14px; min-height:20px; }
+  .msg.err { color:var(--err); } .msg.ok { color:var(--ok); }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:center; gap:8px; padding:10px 0; border-top:1px solid var(--line); }
+  li:first-child { border-top:0; }
+  li .info { flex:1; min-width:0; }
+  li .u { font-weight:600; overflow-wrap:anywhere; }
+  li .n { color:var(--muted); font-size:13px; }
+  li button { flex:0 0 auto; min-height:40px; padding:0 14px; }
+  li button.x { padding:0 10px; color:var(--muted); }
+  .empty { color:var(--muted); font-size:14px; }
+  footer { text-align:center; color:var(--muted); font-size:13px; margin-top:18px; }
+  footer button { flex:none; min-height:40px; padding:0 14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Parça Takip ERP</h1>
+  <p class="sub">Aynı ağdaki ERP sunucusuna bağlanın. Sunucu, masaüstü uygulaması (sunucu modu), Docker ya da Dockersız kurulum olabilir.</p>
+
+  <div class="card">
+    <label for="addr">Sunucu adresi</label>
+    <input id="addr" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="örn. 192.168.1.20:8000">
+    <div class="row">
+      <button class="primary" id="go">Bağlan</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <label>Ağdaki sunucular</label>
+    <ul id="found"><li class="empty">Aramak için “Ağda ara”ya dokunun.</li></ul>
+    <div class="row"><button id="scan">Ağda ara</button></div>
+  </div>
+
+  <div class="card" id="recentCard" hidden>
+    <label>Son kullanılanlar</label>
+    <ul id="recent"></ul>
+  </div>
+
+  <footer>
+    <div id="ver"></div>
+    <button id="upd">Güncellemeleri kontrol et</button>
+  </footer>
+</main>
+<script>
+  var app = window.ParcaTakipApp;
+  var cbs = {}, seq = 0;
+  window.__erpCb = function (id, data) { var f = cbs[id]; delete cbs[id]; if (f) f(data); };
+  function call(method, args, done) {
+    var id = "c" + (++seq); cbs[id] = done;
+    app[method].apply(app, args.concat([id]));
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  function msg(text, cls) { var m = $("msg"); m.textContent = text || ""; m.className = "msg " + (cls || ""); }
+
+  function item(url, note, onForget) {
+    var li = document.createElement("li");
+    var info = document.createElement("div"); info.className = "info";
+    var u = document.createElement("div"); u.className = "u"; u.textContent = url.replace(/^http:\/\//, "");
+    info.appendChild(u);
+    if (note) { var n = document.createElement("div"); n.className = "n"; n.textContent = note; info.appendChild(n); }
+    var b = document.createElement("button"); b.className = "primary"; b.textContent = "Bağlan";
+    b.onclick = function () { connect(url); };
+    li.appendChild(info); li.appendChild(b);
+    if (onForget) {
+      var x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Listeden kaldır";
+      x.onclick = function () { onForget(); li.remove(); };
+      li.appendChild(x);
+    }
+    return li;
+  }
+
+  function connect(raw) {
+    raw = (raw || "").trim();
+    if (!raw) { msg("Sunucu adresini yazın.", "err"); return; }
+    $("go").disabled = true; msg("Bağlantı deneniyor…");
+    call("check", [raw], function (r) {
+      $("go").disabled = false;
+      if (!r) { msg("Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin.", "err"); return; }
+      msg("Bağlandı" + (r.version ? " (sürüm " + r.version + ")" : "") + ".", "ok");
+      app.connect(r.url);
+    });
+  }
+
+  function scan() {
+    var ul = $("found"); $("scan").disabled = true;
+    ul.innerHTML = '<li class="empty">Aranıyor… (birkaç saniye sürebilir)</li>';
+    call("discover", [], function (list) {
+      $("scan").disabled = false; ul.innerHTML = "";
+      if (!list || !list.length) { ul.innerHTML = '<li class="empty">Sunucu bulunamadı. Adresi elle yazın.</li>'; return; }
+      list.forEach(function (s) {
+        ul.appendChild(item(s.url, [s.name, s.version && "sürüm " + s.version].filter(Boolean).join(" · ")));
+      });
+    });
+  }
+
+  $("go").onclick = function () { connect($("addr").value); };
+  $("addr").addEventListener("keydown", function (e) { if (e.key === "Enter") connect($("addr").value); });
+  $("scan").onclick = scan;
+  $("upd").onclick = function () { app.checkUpdate(true); };
+
+  if (!app) {
+    msg("Bu sayfa Android uygulaması içinde açılmalı.", "err");
+  } else {
+    var cfg = {};
+    try { cfg = JSON.parse(app.getConfig()); } catch (e) {}
+    $("ver").textContent = "Uygulama sürümü " + (cfg.version || app.appVersion());
+    if (cfg.server) $("addr").value = cfg.server.replace(/^http:\/\//, "");
+    var recent = cfg.recent || [];
+    if (recent.length) {
+      $("recentCard").hidden = false;
+      recent.forEach(function (u) {
+        $("recent").appendChild(item(u, u === cfg.server ? "Şu anki sunucu" : "", function () {
+          app.forget(u);
+        }));
+      });
+    }
+    var q = new URLSearchParams(location.search);
+    if (q.get("error")) msg("Sunucu açılamadı: " + q.get("error") + ". Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.", "err");
+    else if (!cfg.server) scan();
+  }
+</script>
+</body>
+</html>

@@ -27,6 +27,7 @@ Sistem dört Docker konteynerinden oluşur:
 2. [Kurulum: Linux](#kurulum-linux)
 3. [Kurulum: Windows](#kurulum-windows)
    - [Masaüstü uygulaması](#masaüstü-uygulaması-windows)
+   - [Android uygulaması](#android-uygulaması)
 4. [Docker'sız kurulum](#dockersız-kurulum)
 5. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
 6. [İlk giriş](#ilk-giriş)
@@ -36,9 +37,10 @@ Sistem dört Docker konteynerinden oluşur:
 8. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
 9. [Güncelleme](#güncelleme)
 10. [Roller](#roller)
-11. [Ayarlar (.env)](#ayarlar-env)
-12. [Sorun giderme](#sorun-giderme)
-13. [Geliştirme](#geliştirme)
+11. [Güvenlik](#güvenlik)
+12. [Ayarlar (.env)](#ayarlar-env)
+13. [Sorun giderme](#sorun-giderme)
+14. [Geliştirme](#geliştirme)
 ## Gereksinimler
 
 - 64 bit sunucu, en az 4 GB RAM (8 GB önerilir), çizimler ve yedekler için yeterli disk.
@@ -145,6 +147,27 @@ yenilemek gerekmez. Üst çubuktaki "Canlı" göstergesi bağlantıyı gösterir
 kapalıdır veya ağ kesilmiştir.
 
 Uygulama açılışta yeni sürümü kendisi denetler; Yönetim sayfasında "Güncellemeleri denetle" düğmesi de vardır.
+
+### Android uygulaması
+
+Telefon ve tabletler için Android uygulaması (Android 8.0 ve üstü). Sunucu yine bir bilgisayarda çalışır;
+uygulama aynı ağdaki sunucuya bağlanır.
+
+1. [Releases](https://github.com/serdevir91/parca-takip-erp/releases/latest) sayfasından telefonda
+   `ParcaTakipERP-x.y.z.apk` dosyasını indirin ve açın. Android "bilinmeyen kaynaklar" izni sorarsa
+   tarayıcıya bu izni verin.
+2. İlk açılışta uygulama ağdaki sunucuları kendisi arar. Bulunan sunucuya dokunun ya da adresi elle yazın
+   (örnek `192.168.1.20:8000`). Telefon sunucuyla aynı Wi-Fi ağında olmalıdır.
+3. Kullanıcı adı ve şifrenizle giriş yapın. Son bağlanılan sunucu hatırlanır.
+
+- Menü sol üstteki ☰ düğmesiyle açılır. Telefonun geri tuşu açık pencereyi, menüyü veya sayfayı kapatır.
+- Excel, PDF ve diğer indirmeler telefonun **İndirilenler › ParcaTakip** klasörüne kaydedilir.
+- Fotoğraf eklerken kamera veya galeri seçilebilir.
+- Üst çubuktaki sunucu simgesi ya da giriş ekranındaki "Sunucuyu değiştir" başka sunucuya geçer.
+- Uygulama açılışta yeni sürümü denetler; yeni sürüm varsa indirme sayfasını açar.
+
+Telefonda uygulama kurmadan tarayıcıdan da kullanılabilir: sunucunun adresini açmanız yeterlidir. Arayüz
+telefon ekranına uyar.
 
 ## Docker'sız kurulum
 
@@ -271,7 +294,8 @@ ve sistemi başlatır (`docker compose up -d --no-build`).
 1. Tarayıcıdan `http://SUNUCU_IP` adresini açın.
 2. `.env` içindeki `ERP_ADMIN_USER` / `ERP_ADMIN_PASSWORD` ile giriş yapın (elle kurulumda varsayılan `admin` / `admin`;
    `KURULUM.bat` rastgele şifre üretir ve kurulum sonunda ekrana yazar).
-3. **Hemen Yönetim > Kullanıcılar ekranından yönetici şifresini değiştirin.**
+3. **Hemen yönetici şifresini değiştirin:** sağ üstteki adınıza tıklayın, **Profilim** penceresinde yeni şifreyi
+   girin (en az 8 karakter).
 4. Çalışanlar için kullanıcı açın ve rol verin (bkz. [Roller](#roller)).
 5. Yönetim > Firmalar ekranında üretici ve tedarikçi firmaları kontrol edin.
 6. Yönetim > Ayarlar ekranında parça numarası desenlerini ve satın alınan montajları kontrol edin.
@@ -466,18 +490,43 @@ Kurallar:
 - Yönetici kendi hesabını pasif yapamaz ve kendi yönetici rolünü kaldıramaz.
 - Her değişiklik denetim kaydına yazılır: kim, ne zaman, hangi alan, eski ve yeni değer.
 
+**Profilim:** Her kullanıcı sağ üstteki adına tıklayarak kendi adını ve şifresini değiştirebilir. Şifre
+değişince diğer cihazlardaki oturumlar kapanır.
+
+## Güvenlik
+
+- **Şifreler:** En az 8 karakter. Şifreler bcrypt ile saklanır.
+- **Giriş denemeleri:** Bir kullanıcı adıyla 15 dakikada 5, bir IP adresinden 30 hatalı denemeden sonra giriş
+  geçici olarak engellenir.
+- **Oturumlar:** Şifre değişince, yönetici şifreyi sıfırlayınca veya kullanıcı pasif yapılınca o kullanıcının
+  bütün açık oturumları kapanır.
+- **Oturum anahtarı:** `ERP_JWT_SECRET` boş, varsayılan (`change-me`) veya 32 karakterden kısaysa uygulama veri
+  klasöründe rastgele bir anahtar (`.jwt_secret`) üretir ve onu kullanır.
+- **Dosyalar:** Yüklenen dosyalar yalnızca giriş yapmış ve yetkisi olan kullanıcılara verilir. Resim ve PDF
+  dışındaki dosyalar tarayıcıda açılmaz, indirilir. SVG fotoğraf olarak kabul edilmez.
+- **Excel:** Dışa aktarılan Excel dosyalarında kullanıcının yazdığı formüller metne çevrilir. Aşırı büyük veya
+  bozuk Excel ve ZIP dosyaları reddedilir.
+- **Tarayıcı:** Sunucu güvenlik başlıkları gönderir (CSP, `X-Frame-Options`, `nosniff`); arayüz başka sitelerin
+  içine gömülemez.
+- **API belgeleri** (`/api/docs`) varsayılan olarak kapalıdır; `ERP_API_DOCS=true` ile açılır.
+- **Windows kurulumu:** `.env` ve `ayarlar.env` dosyalarına yalnızca Yöneticiler, SYSTEM ve kurulumu yapan
+  kullanıcı erişebilir.
+
+Uygulama yerel ağ için tasarlanmıştır. İnternete açmayın; uzaktan erişim gerekiyorsa VPN kullanın.
+
 ## Ayarlar (.env)
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
 | `ERP_HTTP_PORT` | `80` | Arayüzün yayınlandığı port |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `erp` / `erp` / `erp` | Veritabanı bilgileri. Şifrede `@ : / ?` karakterlerini kullanmayın. |
-| `ERP_JWT_SECRET` | `change-me` | Oturum anahtarı. Uzun ve rastgele olmalı. Değişirse herkes yeniden giriş yapar. |
+| `ERP_JWT_SECRET` | `change-me` | Oturum anahtarı. Uzun ve rastgele olmalı; zayıfsa uygulama kendisi üretir (bkz. [Güvenlik](#güvenlik)). Değişirse herkes yeniden giriş yapar. |
 | `ERP_ADMIN_USER` / `ERP_ADMIN_PASSWORD` | `admin` / `admin` | İlk yönetici (yalnızca ilk açılışta) |
 | `ERP_BACKUP_TIME` | `02:00` | Günlük yedek saati |
 | `ERP_BACKUP_KEEP_DAYS` | `14` | Kaç günlük yedek saklanır |
 | `ERP_BACKUP_PATH` | `erpbackups` | Yedeklerin yeri: volume adı veya klasör yolu |
 | `ERP_MAX_UPLOAD_MB` | `2048` | En büyük yükleme |
+| `ERP_API_DOCS` | `false` | `true` ise `/api/docs` API belgeleri açılır |
 | `ERP_UPDATE_FEED_URL` | boş | Yerel ağdaki sürüm bilgisi adresi (güncelleme bildirimi) |
 | `TZ` | `Europe/Istanbul` | Saat dilimi |
 | `ERP_IMAGE_PREFIX` / `ERP_TAG` | `parca-takip` / `latest` | İmaj adı ve sürümü |
@@ -515,7 +564,16 @@ ERP_DATABASE_URL=sqlite:///./dev.db ERP_DATA_DIR=./data ERP_BACKUP_DIR=./backups
 # Frontend (http://localhost:5173, /api isteklerini backend'e yönlendirir)
 cd frontend
 npm ci && npm run dev
+
+# Android uygulaması (JDK 17 ve Android SDK gerekir)
+cd mobile/android
+./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease    # imza: keystore.properties veya ERP_KEYSTORE_* ortam değişkenleri
 ```
+
+Android sürümü imzalanırken her zaman aynı anahtar kullanılmalıdır; aksi halde telefonlar güncellemeyi
+kuramaz. CI, `v*` etiketinde APK'yı `ERP_KEYSTORE_B64` (base64 `release.jks`), `ERP_KEYSTORE_PASSWORD`,
+`ERP_KEY_ALIAS` ve `ERP_KEY_PASSWORD` depo sırlarıyla imzalar; sırlar yoksa APK adımını atlar.
 
 Komut satırı araçları (`python -m app.cli`):
 

@@ -25,6 +25,9 @@ def hash_password(pw: str) -> str:
     return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode()
 
 
+# Checked when the user name is unknown, so a failed login takes as long either way
+_DUMMY_HASH = bcrypt.hashpw(b"dummy-password", bcrypt.gensalt()).decode()
+
 def verify_password(pw: str, hashed: str) -> bool:
     try:
         return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode())
@@ -32,26 +35,34 @@ def verify_password(pw: str, hashed: str) -> bool:
         return False
 
 
+def dummy_verify(pw: str) -> None:
+    verify_password(pw, _DUMMY_HASH)
+
+
 def create_token(user: User) -> str:
     s = get_settings()
     exp = datetime.now(timezone.utc) + timedelta(hours=s.jwt_expire_hours)
-    return jwt.encode({"sub": str(user.id), "role": user.role, "exp": exp}, s.jwt_secret, algorithm="HS256")
+    return jwt.encode({"sub": str(user.id), "tv": user.token_version or 0, "exp": exp}, s.jwt_secret,
+                      algorithm="HS256")
 
 
-def _decode(token: str) -> int:
+def _decode(token: str) -> tuple[int, int]:
     try:
         payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-        return int(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        return int(payload["sub"]), int(payload.get("tv", 0))
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz veya süresi doldu")
 
 
 def user_from_token(token: str | None, db: Session) -> User:
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Giriş yapılmadı")
-    user = db.get(User, _decode(token))
+    uid, tv = _decode(token)
+    user = db.get(User, uid)
     if user is None or not user.active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Kullanıcı bulunamadı veya pasif")
+    if tv != (user.token_version or 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum sona erdi, tekrar giriş yapın")
     return user
 
 

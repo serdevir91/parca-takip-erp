@@ -10,6 +10,10 @@ CHUNK = 1024 * 1024
 IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"}
 # Shown inline by browsers (heic/heif are kept but only downloadable)
 PREVIEW_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "bmp"}
+# The only types served with their own media type; everything else is application/octet-stream as an
+# attachment. Never trust the uploader's Content-Type: text/html or image/svg+xml would run scripts.
+SAFE_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
+              "webp": "image/webp", "bmp": "image/bmp", "pdf": "application/pdf"}
 
 
 class UploadTooLarge(ValueError):
@@ -21,7 +25,14 @@ def ext_of(name: str) -> str:
 
 
 def is_image(name: str, content_type: str | None = None) -> bool:
-    return ext_of(name) in IMAGE_EXTS or bool(content_type and content_type.startswith("image/"))
+    """By extension only; `content_type` comes from the client and is ignored."""
+    return ext_of(name) in IMAGE_EXTS
+
+
+def media_for(name: str) -> tuple[str, bool]:
+    """(media type, may be shown inline) for a stored file, decided by its extension."""
+    t = SAFE_TYPES.get(ext_of(name))
+    return (t, True) if t else ("application/octet-stream", False)
 
 
 def safe_name(name: str | None, fallback: str = "dosya") -> str:

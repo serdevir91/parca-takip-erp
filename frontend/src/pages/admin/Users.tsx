@@ -18,7 +18,7 @@ type Catalog = {
 };
 type RoleOpt = { value: string; label: string };
 
-const MIN_PASSWORD = 6;
+const MIN_PASSWORD = 8;
 const FALLBACK_ROLES = ["admin", "designer", "planner", "viewer"];
 
 export default function UsersTab() {

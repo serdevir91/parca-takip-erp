@@ -203,7 +203,9 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
         t = Path(tmp)
         with tarfile.open(path, "r") as tar:
             tar.extractall(t, filter="data")
-        dump = t / manifest["db_file"]
+        dump = (t / str(manifest["db_file"])).resolve()
+        if Path(t).resolve() not in dump.parents:
+            raise ValueError("Yedek dosyası bozuk: veritabanı dosyası yolu geçersiz")
         if manifest["db_kind"] == "sqlite":
             if url.get_backend_name() != "sqlite":
                 raise BackupError("SQLite yedeği PostgreSQL'e geri yüklenemez")

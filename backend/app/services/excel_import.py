@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..core.bomparse import TEMIN_CHOICES
 from ..core.status import PROG_WAIT, PROGRESS_CHOICES
+from ..core.xlsxguard import check_xlsx
 from ..models import FastenerSetting, MissingRow, Project, Tracking, User
 from . import audit
 from .bomimport import TRACKING_FIELDS
@@ -179,6 +180,7 @@ def _parse_key(raw_key: str, pno: str) -> tuple[str, str] | None:
 def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
     """Compare the workbook with the DB. Nothing is written."""
     try:
+        check_xlsx(path)
         wb = load_workbook(path, data_only=False, read_only=False)
     except Exception as e:                                      # noqa: BLE001 - any parse failure
         raise ImportError_("Excel dosyası okunamadı") from e

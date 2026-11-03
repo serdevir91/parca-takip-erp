@@ -17,6 +17,7 @@ from ..permissions import catalog, clean_overrides, effective, require
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
 from ..services import audit, backup as backup_svc
 from ..services.settings import get_setting, part_no_patterns, purchased_assemblies, set_setting
+from .auth import check_password_rules
 from .deps import admin, get_db
 
 contacts_view, contacts_edit = require("contacts", "view"), require("contacts", "edit")
@@ -27,7 +28,7 @@ FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
 FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
                     "customer": "Müşteri"}
 SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules")
-MIN_PASSWORD = 6
+
 
 
 # ---------- users ----------
@@ -63,8 +64,7 @@ def _check_role(role: str) -> None:
 
 
 def _check_password(pw: str) -> None:
-    if len(pw) < MIN_PASSWORD:
-        raise HTTPException(400, f"Şifre en az {MIN_PASSWORD} karakter olmalı")
+    check_password_rules(pw)
 
 
 def _user_or_404(db: Session, user_id: int) -> User:
@@ -143,6 +143,8 @@ def update_user(user_id: int, body: UserUpdate, me: User = Depends(admin),
         changes["permissions"] = clean_overrides(body.permissions) or None
     _guard_self(me, u, changes.get("role", u.role), changes.get("active", u.active))
     _guard_last_admin(db, u, changes.get("role", u.role), changes.get("active", u.active))
+    if changes.get("active") is False and u.active:
+        u.token_version = (u.token_version or 0) + 1
     audit.record_changes(db, me, u, changes, "user", u.id)
     db.commit()
     return user_out(u)
@@ -154,6 +156,7 @@ def reset_password(user_id: int, body: PasswordReset, me: User = Depends(admin),
     u = _user_or_404(db, user_id)
     _check_password(body.password)
     u.password_hash = hash_password(body.password)
+    u.token_version = (u.token_version or 0) + 1
     audit.record(db, me, "user", u.id, "password", None, "sıfırlandı")
     db.commit()
     return {"ok": True}

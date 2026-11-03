@@ -128,17 +128,16 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depe
     return {"ok": True}
 
 
-def _file_user(token: str | None = Depends(oauth2), access_token: str | None = Query(None),
-               db: Session = Depends(get_db)) -> User:
-    return user_from_token(token or access_token, db)
+def _file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+    return user_from_token(token, db)
 
 
 def _send(p: Photo, path: str | None, thumb: bool) -> FileResponse:
     if not path or not Path(path).is_file():
         raise HTTPException(404, "Dosya bulunamadı")
-    media = "image/jpeg" if thumb and path == p.thumb_path else (p.content_type or "application/octet-stream")
+    media, inline = ("image/jpeg", True) if thumb and path == p.thumb_path else uploads.media_for(p.filename)
     return FileResponse(path, media_type=media, filename=None if thumb else p.filename,
-                        content_disposition_type="inline", headers={"Cache-Control": "private, max-age=86400"})
+                        content_disposition_type="inline" if inline else "attachment", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.get("/photos/{photo_id}/file")

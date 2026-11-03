@@ -308,8 +308,8 @@ class DesktopApp:
                 return {"ok": False, "error": "Port 1-65535 arasında olmalı"}
             if not self.data_dir_has_db(data_dir):
                 admin_password = str(form.get("admin_password") or "")
-                if len(admin_password) < 4:
-                    return {"ok": False, "error": "Yönetici şifresi en az 4 karakter olmalı"}
+                if len(admin_password) < 8:
+                    return {"ok": False, "error": "Yönetici şifresi en az 8 karakter olmalı"}
             cfg.update(mode="server", data_dir=data_dir, port=port)
             cfg.setdefault("jwt_secret", secrets.token_urlsafe(48))
         elif mode == "client":
