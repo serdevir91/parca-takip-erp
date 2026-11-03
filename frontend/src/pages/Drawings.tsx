@@ -5,7 +5,8 @@ import { Page, useProject } from "../components/Layout";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
 import PdfViewer from "../components/PdfViewer";
 import { errText, useToast } from "../components/Toast";
-import { api, ApiError, blobUrl, download, getToken, upload } from "../api/client";
+import { api, ApiError, blobUrl, desktopFile, download, getToken, upload } from "../api/client";
+import { desktop } from "../api/desktop";
 import { useAuth } from "../api/auth";
 
 // ---------- API types (backend/app/services/drawings.py drawing_out / project_listing / _result) ----------
@@ -67,6 +68,7 @@ const viaLabel = (v: string | null | undefined) => (v ? VIA_LABELS[v] ?? v : "")
 /** POST that returns a file (zip); `download()` only does GET. */
 async function postDownload(path: string, body: unknown, fallbackName: string): Promise<void> {
   const token = getToken();
+  if (desktop()) return desktopFile({ path, token, filename: fallbackName, action: "save", method: "POST", body });
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, { method: "POST", headers, body: JSON.stringify(body) });

@@ -1,0 +1,85 @@
+# Windows desktop app: PyInstaller bundle + Inno Setup installer.
+# Manual run (Actions > Desktop > Run workflow) keeps the installer as a build artifact;
+# a v* tag also publishes it as a GitHub release, which the app's update check reads.
+name: Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            desktop/requirements.txt
+      - name: Install Python packages
+        working-directory: desktop
+        run: python -m pip install -r requirements.txt
+
+      - name: Version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path backend/app/config.py -Pattern 'app_version: str = "([^"]+)"').Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME.TrimStart("v") -ne $v) {
+            throw "Tag $env:GITHUB_REF_NAME does not match app_version $v in backend/app/config.py"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Bundle (PyInstaller)
+        run: pyinstaller desktop/parca_takip.spec --noconfirm --distpath dist --workpath build
+
+      - name: Smoke test the bundle
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "smoke"
+          $p = Start-Process -FilePath dist\ParcaTakipERP\ParcaTakipERP.exe -ArgumentList "--smoke", "`"$dir`"" -Wait -PassThru
+          Get-Content (Join-Path $dir "smoke.json") -ErrorAction SilentlyContinue
+          Get-Content (Join-Path $env:APPDATA "ParcaTakipERP\desktop.log") -Tail 40 -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "smoke test failed ($($p.ExitCode))" }
+
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile dist\MicrosoftEdgeWebview2Setup.exe
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" desktop\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParcaTakipERP-Setup-${{ steps.ver.outputs.version }}
+          path: dist/ParcaTakipERP-Setup-*.exe
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create $env:GITHUB_REF_NAME (Get-ChildItem dist\ParcaTakipERP-Setup-*.exe).FullName `
+            --title "Parça Takip ERP $env:GITHUB_REF_NAME" --notes-file desktop/RELEASE_NOTES.md

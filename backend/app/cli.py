@@ -250,7 +250,8 @@ def migrate() -> None:
     from alembic.config import Config
 
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    # The desktop bundle ships the scripts as "migrations" so they cannot shadow the alembic package
+    cfg.set_main_option("script_location", os.environ.get("ERP_MIGRATIONS_DIR") or str(BACKEND_DIR / "alembic"))
     insp = inspect(engine)
     if insp.has_table("users") and not insp.has_table("alembic_version"):
         command.stamp(cfg, "head")
@@ -270,6 +271,9 @@ def serve(host: str, port: int, backup: bool) -> None:
               file=sys.stderr, flush=True)
     if backup:
         threading.Thread(target=backup_daemon, args=(cfg.backup_time,), name="backup", daemon=True).start()
+    from .services import discovery
+
+    discovery.start_responder(port, cfg.app_version)
     print(f"Parça Takip ERP: http://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
     uvicorn.run("app.main:app", host=host, port=port, workers=1, proxy_headers=True,
                 forwarded_allow_ips="*", timeout_keep_alive=75, log_level="info")

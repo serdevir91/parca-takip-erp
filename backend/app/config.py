@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     jwt_expire_hours: int = 12
     admin_user: str = "admin"
     admin_password: str = "admin"
-    app_version: str = "1.0.0"
+    app_version: str = "1.1.0"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048

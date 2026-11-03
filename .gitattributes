@@ -14,3 +14,4 @@
 
 # Sample SolidWorks exports: keep byte-for-byte (CRLF, encoding)
 *.csv -text
+*.iss text eol=crlf

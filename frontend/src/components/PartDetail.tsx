@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { api, blobUrl, download } from "../api/client";
+import { api, blobUrl, desktopFile, download, getToken } from "../api/client";
+import { desktop } from "../api/desktop";
 import { statusStyle } from "../theme/theme";
 import { errText, useToast } from "./Toast";
 
@@ -193,6 +194,13 @@ function DrawingCard({ d }: { d: Drawing }) {
   const open = async () => {
     if (!inline) {
       try { await download(`/drawings/${d.id}/file`, d.filename); } catch (e) { toast(errText(e), true); }
+      return;
+    }
+    if (desktop()) {
+      // The desktop window has no tabs: open the file in its default program (PDF reader, image viewer)
+      try {
+        await desktopFile({ path: `/drawings/${d.id}/file`, token: getToken(), filename: d.filename, action: "open" });
+      } catch (e) { toast(errText(e), true); }
       return;
     }
     const w = window.open("", "_blank");

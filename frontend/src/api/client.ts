@@ -1,4 +1,6 @@
 /** Thin fetch wrapper: JWT header, JSON, Turkish error messages from FastAPI `detail`. */
+import { desktop, type DesktopFileRequest } from "./desktop";
+
 const TOKEN_KEY = "erp_token";
 
 export class ApiError extends Error {
@@ -92,6 +94,7 @@ export function upload<T = unknown>(path: string, form: FormData, onProgress?: (
 /** Download a protected file (Excel export, drawing) using the JWT and save it. */
 export async function download(path: string, fallbackName: string): Promise<void> {
   const token = getToken();
+  if (desktop()) return desktopFile({ path, token, filename: fallbackName, action: "save" });
   const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) {
     let body: unknown;
@@ -119,4 +122,12 @@ export async function blobUrl(path: string): Promise<string> {
   const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new ApiError(res.status, `Dosya alınamadı (${res.status})`);
   return URL.createObjectURL(await res.blob());
+}
+
+/** Desktop app: the Python side fetches the file and saves it ("Farklı kaydet") or opens it. */
+export async function desktopFile(req: DesktopFileRequest): Promise<void> {
+  const d = desktop();
+  if (!d) throw new ApiError(0, "Masaüstü uygulaması bulunamadı");
+  const r = await d.file_request(req);
+  if (!r.ok && !r.cancelled) throw new ApiError(r.status ?? 0, r.error || "İndirme başarısız");
 }
