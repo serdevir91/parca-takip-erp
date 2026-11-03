@@ -17,7 +17,10 @@ from ..models import Project, User
 from ..services import excel_export as ex
 from ..services import excel_import as im
 from ..services.state import ProjectView
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+parts_view, parts_edit = require("parts", "view"), require("parts", "edit")
 
 router = APIRouter(prefix="/excel", tags=["excel"])
 
@@ -39,21 +42,21 @@ def _send(project: Project, kind: str, wb: Any) -> StreamingResponse:
 
 
 @router.get("/{project_id}/takip-listesi")
-def takip_listesi(project_id: int, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def takip_listesi(project_id: int, db: Session = Depends(get_db), _: User = Depends(parts_view)):
     """Full tracking list: summary, all rows, fastener detail and summary."""
     p, v = _view(db, project_id)
     return _send(p, "takip-listesi", ex.build_takip_listesi(db, v))
 
 
 @router.get("/{project_id}/parca-takip")
-def parca_takip(project_id: int, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def parca_takip(project_id: int, db: Session = Depends(get_db), _: User = Depends(parts_view)):
     """Parts-only list (one line per part number)."""
     p, v = _view(db, project_id)
     return _send(p, "parca-takip", ex.build_parca_takip(db, v))
 
 
 @router.get("/{project_id}/baglanti-siparis")
-def baglanti_siparis(project_id: int, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def baglanti_siparis(project_id: int, db: Session = Depends(get_db), _: User = Depends(parts_view)):
     """Fastener order form."""
     p, v = _view(db, project_id)
     return _send(p, "baglanti-siparis", ex.build_fastener_order(db, v))
@@ -64,7 +67,7 @@ class VisibleIn(BaseModel):
 
 
 @router.post("/{project_id}/gorunen")
-def gorunen(project_id: int, body: VisibleIn, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def gorunen(project_id: int, body: VisibleIn, db: Session = Depends(get_db), _: User = Depends(parts_view)):
     """Parça Takip limited to the part numbers currently shown (filtered) in the UI."""
     if not body.part_nos:
         raise HTTPException(400, "Dışa aktarılacak parça seçilmedi")
@@ -100,7 +103,7 @@ async def _save_upload(file: UploadFile) -> str:
 
 @router.post("/{project_id}/import")
 async def import_preview(project_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
-                         _: User = Depends(editor)) -> dict[str, Any]:
+                         _: User = Depends(parts_edit)) -> dict[str, Any]:
     """Diff of an edited export against the DB: changes, unknown part numbers, invalid values. Writes nothing."""
     p = project_or_404(db, project_id)
     path = await _save_upload(file)
@@ -126,7 +129,7 @@ class ApplyIn(BaseModel):
 
 @router.post("/{project_id}/import/apply")
 def import_apply(project_id: int, body: ApplyIn, db: Session = Depends(get_db),
-                 user: User = Depends(editor)) -> dict[str, Any]:
+                 user: User = Depends(parts_edit)) -> dict[str, Any]:
     """Apply the selected preview changes (each one audited); changes edited meanwhile are skipped."""
     p = project_or_404(db, project_id)
     if p.current_version_id is None:

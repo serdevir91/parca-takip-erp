@@ -14,7 +14,10 @@ from ..services import audit
 from ..services.settings import get_setting, set_setting, t35_config
 from ..services.state import ProjectView
 from ..services.tracking import apply_changes, clean_changes, material_status_choices, read_upload_sync
-from .deps import admin, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import admin, get_db, project_or_404
+
+control_view, control_edit = require("control", "view"), require("control", "edit")
 
 router = APIRouter(tags=["t35"])
 
@@ -63,7 +66,7 @@ def _bom_parts(view: ProjectView) -> tuple[dict[str, dict[str, Any]], dict[str, 
 
 @router.post("/projects/{pid}/t35/preview")
 def preview(pid: int, file: UploadFile = File(...), db: Session = Depends(get_db),
-                  user: User = Depends(editor)) -> dict[str, Any]:
+                  user: User = Depends(control_edit)) -> dict[str, Any]:
     """Compare the uploaded list with the current BOM and propose tracking updates. Nothing is saved.
 
     Sync on purpose: openpyxl parsing and DB work run in the threadpool, not on the event loop."""
@@ -101,7 +104,7 @@ def preview(pid: int, file: UploadFile = File(...), db: Session = Depends(get_db
 
 
 @router.post("/projects/{pid}/t35/apply")
-def apply(pid: int, body: ApplyIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict[str, Any]:
+def apply(pid: int, body: ApplyIn, db: Session = Depends(get_db), user: User = Depends(control_edit)) -> dict[str, Any]:
     """Write the selected preview changes to tracking (each field audited)."""
     project = project_or_404(db, pid)
     view = ProjectView.load(db, project)

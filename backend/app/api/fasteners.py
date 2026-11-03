@@ -14,7 +14,10 @@ from ..models import FastenerRule, FastenerSetting, User
 from ..services import audit, bomimport
 from ..services.settings import fastener_matcher
 from ..services.state import FASTENER_COLORS, FASTENER_ORDER_STATUSES, ProjectView
-from .deps import admin, any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import admin, get_db, project_or_404
+
+fasteners_view, fasteners_edit = require("fasteners", "view"), require("fasteners", "edit")
 
 router = APIRouter(tags=["fasteners"])
 
@@ -87,7 +90,7 @@ def check_rule(body: RuleIn) -> dict[str, Any]:
 
 # ---------- project views ----------
 @router.get("/projects/{pid}/fasteners")
-def summary(pid: int, db: Session = Depends(get_db), user: User = Depends(any_user)) -> dict[str, Any]:
+def summary(pid: int, db: Session = Depends(get_db), user: User = Depends(fasteners_view)) -> dict[str, Any]:
     """Unique fasteners (type, std, size) with spare and order quantities."""
     view = ProjectView.load(db, project_or_404(db, pid))
     items = view.fasteners()
@@ -102,13 +105,13 @@ def summary(pid: int, db: Session = Depends(get_db), user: User = Depends(any_us
 
 
 @router.get("/projects/{pid}/fasteners/rows")
-def rows(pid: int, db: Session = Depends(get_db), user: User = Depends(any_user)) -> list[dict[str, Any]]:
+def rows(pid: int, db: Session = Depends(get_db), user: User = Depends(fasteners_view)) -> list[dict[str, Any]]:
     """Every fastener BOM row, including those inside purchased assemblies (not counted)."""
     return ProjectView.load(db, project_or_404(db, pid)).fastener_rows()
 
 
 @router.get("/projects/{pid}/fasteners/settings")
-def get_settings_(pid: int, db: Session = Depends(get_db), user: User = Depends(any_user)) -> list[dict[str, Any]]:
+def get_settings_(pid: int, db: Session = Depends(get_db), user: User = Depends(fasteners_view)) -> list[dict[str, Any]]:
     project_or_404(db, pid)
     return [{"key": s.key, **{f: getattr(s, f) for f in SETTING_FIELDS}}
             for s in db.scalars(select(FastenerSetting).where(FastenerSetting.project_id == pid)
@@ -117,7 +120,7 @@ def get_settings_(pid: int, db: Session = Depends(get_db), user: User = Depends(
 
 @router.put("/projects/{pid}/fasteners/settings")
 def put_settings(pid: int, body: SettingsIn, db: Session = Depends(get_db),
-                 user: User = Depends(editor)) -> dict[str, Any]:
+                 user: User = Depends(fasteners_edit)) -> dict[str, Any]:
     """Set spare %, supplier, unit, price, order status or note for one or more fastener keys."""
     view = ProjectView.load(db, project_or_404(db, pid))
     known = {r.fastener_key for r in view.rows if r.fastener_key}
@@ -154,7 +157,7 @@ def put_settings(pid: int, body: SettingsIn, db: Session = Depends(get_db),
 
 # ---------- rules (admin) ----------
 @router.get("/fastener-rules")
-def list_rules(db: Session = Depends(get_db), user: User = Depends(any_user)) -> list[dict[str, Any]]:
+def list_rules(db: Session = Depends(get_db), user: User = Depends(fasteners_view)) -> list[dict[str, Any]]:
     return [rule_out(r) for r in db.scalars(select(FastenerRule).order_by(FastenerRule.priority, FastenerRule.id))]
 
 
@@ -207,7 +210,7 @@ def reorder(body: ReorderIn, db: Session = Depends(get_db), user: User = Depends
 
 
 @router.post("/fastener-rules/test")
-def test_text(body: TestIn, db: Session = Depends(get_db), user: User = Depends(any_user)) -> dict[str, Any]:
+def test_text(body: TestIn, db: Session = Depends(get_db), user: User = Depends(fasteners_view)) -> dict[str, Any]:
     """Run each line of `text` through one draft rule or the saved rule set."""
     lines = [ln.strip() for ln in body.text.splitlines() if ln.strip()]
     if not lines:

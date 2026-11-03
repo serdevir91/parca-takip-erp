@@ -32,12 +32,14 @@ def viewer_headers(client, admin_headers):
 
 # ---------- guards ----------
 @pytest.mark.parametrize("method,path", [
-    ("get", "/api/admin/users"), ("get", "/api/admin/firms"), ("get", "/api/admin/settings"),
+    ("get", "/api/admin/users"), ("post", "/api/admin/firms"), ("get", "/api/admin/settings"),
     ("get", "/api/admin/audit"), ("get", "/api/admin/backups"), ("post", "/api/admin/backups"),
     ("put", "/api/admin/settings/status_rules"), ("delete", "/api/admin/users/1"),
 ])
 def test_non_admin_forbidden(client, viewer_headers, method, path):
     kw = {"json": {"value": {"big_drop_ratio": 0.5}}} if method == "put" else {}
+    if path.endswith("/firms"):
+        kw = {"json": {"name": "X"}}
     r = getattr(client, method)(path, headers=viewer_headers, **kw)
     assert r.status_code == 403, r.text
 
@@ -148,7 +150,7 @@ def test_firm_crud(client, admin_headers):
     assert client.post("/api/admin/firms", headers=admin_headers,
                        json={"name": name.lower(), "kind": "supplier"}).status_code == 409
     assert client.post("/api/admin/firms", headers=admin_headers,
-                       json={"name": _uid("F"), "kind": "customer"}).status_code == 400
+                       json={"name": _uid("F"), "kind": "musteri"}).status_code == 400
 
     sup = client.get("/api/admin/firms", headers=admin_headers, params={"kind": "supplier"}).json()
     assert any(f["id"] == fid for f in sup)
@@ -395,3 +397,36 @@ def test_cli_create_admin_and_backup(client, tmp_path, monkeypatch, capsys):
     assert rc in (0, 1)
     if rc == 0:
         assert len(list(out.glob("erp_*.tar"))) == 1
+
+
+# ---------- per-module permissions ----------
+def test_permission_overrides(client, admin_headers):
+    cat = client.get("/api/admin/permissions", headers=admin_headers).json()
+    assert {m["key"] for m in cat["modules"]} >= {"stock", "sales", "finance", "admin"}
+    name = _uid("perm")
+    r = client.post("/api/admin/users", headers=admin_headers,
+                    json={"username": name, "password": "perm1234", "role": "viewer",
+                          "permissions": {"stock": "edit", "parts": "none", "bogus": "edit", "sales": "x"}})
+    assert r.status_code == 201, r.text
+    uid = r.json()["id"]
+    assert r.json()["overrides"] == {"stock": "edit", "parts": "none"}
+    h = _login(client, name, "perm1234")
+    me = client.get("/api/auth/me", headers=h).json()
+    assert me["permissions"]["stock"] == "edit" and me["permissions"]["parts"] == "none"
+    assert me["permissions"]["admin"] == "none"
+    assert client.post("/api/stock", headers=h, json={"code": _uid("P"), "name": "x"}).status_code == 201
+    assert client.get("/api/admin/users", headers=h).status_code == 403
+    # {} clears the overrides: back to the viewer defaults
+    assert client.put(f"/api/admin/users/{uid}", headers=admin_headers, json={"permissions": {}}).status_code == 200
+    assert client.post("/api/stock", headers=h, json={"code": _uid("P"), "name": "x"}).status_code == 403
+
+
+# ---------- live sync ----------
+def test_sync_rev_goes_up_after_writes(client, admin_headers):
+    before = client.get("/api/sync").json()["rev"]
+    client.get("/api/admin/users", headers=admin_headers)
+    assert client.get("/api/sync").json()["rev"] == before            # reads do not count
+    client.post("/api/admin/firms", headers=admin_headers, json={"name": _uid("Firma")})
+    assert client.get("/api/sync").json()["rev"] == before + 1
+    client.post("/api/admin/firms", headers=admin_headers, json={"name": ""})  # 4xx does not count
+    assert client.get("/api/sync").json()["rev"] == before + 1

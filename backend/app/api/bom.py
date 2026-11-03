@@ -14,7 +14,10 @@ from ..models import BomRow, BomVersion, PartAlias, Project, Tracking, User
 from ..services import audit, bomimport
 from ..services.state import ProjectView
 from ..services.tracking import move_state, read_upload_sync
-from .deps import any_user, designer, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+projects_view, projects_edit = require("projects", "view"), require("projects", "edit")
 from .projects import version_brief
 
 router = APIRouter(prefix="/projects", tags=["bom"])
@@ -55,7 +58,7 @@ def _bad(e: bomimport.BomImportError) -> HTTPException:
 # ---------- versions ----------
 @router.post("/{pid}/bom/upload", status_code=201)
 def upload(pid: int, file: UploadFile = File(...), note: str = Form(""),
-                 db: Session = Depends(get_db), user: User = Depends(designer)) -> dict:
+                 db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     project = project_or_404(db, pid)
     if project.archived:
         raise HTTPException(400, "Arşivlenmiş projeye BOM yüklenemez")
@@ -74,14 +77,14 @@ def upload(pid: int, file: UploadFile = File(...), note: str = Form(""),
 
 
 @router.get("/{pid}/bom/versions")
-def list_versions(pid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> list[dict]:
+def list_versions(pid: int, db: Session = Depends(get_db), _: User = Depends(projects_view)) -> list[dict]:
     project = project_or_404(db, pid)
     vs = db.scalars(select(BomVersion).where(BomVersion.project_id == project.id).order_by(BomVersion.seq.desc()))
     return [version_out(project, v) for v in vs]
 
 
 @router.get("/{pid}/bom/versions/{vid}")
-def get_version(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+def get_version(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(projects_view)) -> dict:
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
     if v.status == "pending" and v.previous_version_id != project.current_version_id:
@@ -92,7 +95,7 @@ def get_version(pid: int, vid: int, db: Session = Depends(get_db), _: User = Dep
 
 
 @router.get("/{pid}/bom/versions/{vid}/rows")
-def version_rows(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+def version_rows(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(projects_view)) -> dict:
     """All rows of a version in BOM order (tree view: level, depth, parent_level, qty, total_qty)."""
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
@@ -101,7 +104,7 @@ def version_rows(pid: int, vid: int, db: Session = Depends(get_db), _: User = De
 
 
 @router.get("/{pid}/bom/versions/{vid}/file")
-def version_file(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def version_file(pid: int, vid: int, db: Session = Depends(get_db), _: User = Depends(projects_view)):
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
     path = Path(v.file_path) if v.file_path else None
@@ -121,7 +124,7 @@ class ApproveIn(BaseModel):
 
 @router.post("/{pid}/bom/versions/{vid}/approve")
 def approve(pid: int, vid: int, body: ApproveIn | None = None, db: Session = Depends(get_db),
-            user: User = Depends(designer)) -> dict:
+            user: User = Depends(projects_edit)) -> dict:
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
     if project.archived:
@@ -137,7 +140,7 @@ def approve(pid: int, vid: int, body: ApproveIn | None = None, db: Session = Dep
 
 
 @router.post("/{pid}/bom/versions/{vid}/reject")
-def reject(pid: int, vid: int, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict:
+def reject(pid: int, vid: int, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
     try:
@@ -150,7 +153,7 @@ def reject(pid: int, vid: int, db: Session = Depends(get_db), user: User = Depen
 
 
 @router.post("/{pid}/bom/undo")
-def undo(pid: int, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict:
+def undo(pid: int, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     """Undo the last approved upload. Tracking edits made after that approval are lost."""
     project = project_or_404(db, pid)
     try:
@@ -177,7 +180,7 @@ class AliasIn(BaseModel):
 
 @router.get("/{pid}/aliases")
 def list_aliases(pid: int, all: bool = False, db: Session = Depends(get_db),
-                 _: User = Depends(any_user)) -> list[dict]:
+                 _: User = Depends(projects_view)) -> list[dict]:
     """Aliases are global; by default only those touching this project's tracked parts are listed."""
     project = project_or_404(db, pid)
     q = select(PartAlias).order_by(PartAlias.part_no, PartAlias.alias)
@@ -188,7 +191,7 @@ def list_aliases(pid: int, all: bool = False, db: Session = Depends(get_db),
 
 
 @router.post("/{pid}/aliases", status_code=201)
-def create_alias(pid: int, body: AliasIn, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict:
+def create_alias(pid: int, body: AliasIn, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     """Manual "same part" mapping. With move_state the old number's tracking and missing rows
     move to the current number (as when accepting a suggestion at approval)."""
     project = project_or_404(db, pid)
@@ -218,7 +221,7 @@ def create_alias(pid: int, body: AliasIn, db: Session = Depends(get_db), user: U
 
 
 @router.delete("/{pid}/aliases/{aid}")
-def delete_alias(pid: int, aid: int, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict:
+def delete_alias(pid: int, aid: int, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     """Removes only the mapping; tracking already moved to the current number stays there."""
     project = project_or_404(db, pid)
     a = db.get(PartAlias, aid)

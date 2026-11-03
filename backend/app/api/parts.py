@@ -18,7 +18,10 @@ from ..services.state import FASTENER_COLORS, ProjectView, row_types, temin_choi
 from ..services.state import FASTENER_ORDER_STATUSES
 from ..services.tracking import (apply_changes, check_progress, clean_changes, material_status_choices,
                                  resolve_alias, resolve_aliases, tracking_map, tracking_of, tracking_view)
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+parts_view, parts_edit = require("parts", "view"), require("parts", "edit")
 
 router = APIRouter(prefix="/projects", tags=["parts"])
 
@@ -127,7 +130,7 @@ def list_parts(pid: int, view: str = Query("flat", pattern="^(flat|tree)$"), q: 
                is_new: bool | None = None, in_purchased: bool | None = None, has_drawing: bool | None = None,
                fastener: bool | None = None, archived: bool = False, version_id: int | None = None,
                limit: int | None = Query(None, ge=1), offset: int = Query(0, ge=0),
-               db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+               db: Session = Depends(get_db), _: User = Depends(parts_view)) -> dict:
     """flat: one line per part number (summed total qty); tree: every BOM row in order.
     archived=true lists parts removed from the BOM whose tracking is kept."""
     project = project_or_404(db, pid)
@@ -151,7 +154,7 @@ def list_parts(pid: int, view: str = Query("flat", pattern="^(flat|tree)$"), q: 
 
 
 @router.get("/{pid}/parts/choices")
-def choices(pid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+def choices(pid: int, db: Session = Depends(get_db), _: User = Depends(parts_view)) -> dict:
     project_or_404(db, pid)
     statuses = list(dict.fromkeys([*(s for m in STATUS_MAP.values() for s in m.values()), STATUS_NO_TEMIN,
                                    STATUS_IN_PURCHASED]))
@@ -167,7 +170,7 @@ def choices(pid: int, db: Session = Depends(get_db), _: User = Depends(any_user)
 
 # ---------- edit ----------
 @router.post("/{pid}/parts/bulk")
-def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict:
+def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
     """Multi-select edit: same values for every selected part ("İlerlemeyi ayarla", "Temin şeklini ayarla")."""
     project = project_or_404(db, pid)
     changes = clean_changes(db, _patch_changes(body.changes))
@@ -190,7 +193,7 @@ def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User 
 
 @router.patch("/{pid}/parts/{part_no:path}")
 def edit_part(pid: int, part_no: str, body: TrackingPatch, db: Session = Depends(get_db),
-              user: User = Depends(editor)) -> dict:
+              user: User = Depends(parts_edit)) -> dict:
     project = project_or_404(db, pid)
     pno = resolve_alias(db, part_no)
     t = tracking_of(db, project.id, pno)
@@ -218,7 +221,7 @@ def _missing_or_404(db: Session, pid: int, mid: int) -> MissingRow:
 
 @router.get("/{pid}/missing")
 def list_missing(pid: int, part_no: str | None = None, db: Session = Depends(get_db),
-                 _: User = Depends(any_user)) -> dict:
+                 _: User = Depends(parts_view)) -> dict:
     project = project_or_404(db, pid)
     rows = ProjectView.load(db, project).missing_views()
     if part_no:
@@ -228,7 +231,7 @@ def list_missing(pid: int, part_no: str | None = None, db: Session = Depends(get
 
 
 @router.post("/{pid}/missing", status_code=201)
-def create_missing(pid: int, body: MissingIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict:
+def create_missing(pid: int, body: MissingIn, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
     project = project_or_404(db, pid)
     pno = resolve_alias(db, body.part_no.strip())
     if tracking_of(db, project.id, pno) is None:
@@ -244,7 +247,7 @@ def create_missing(pid: int, body: MissingIn, db: Session = Depends(get_db), use
 
 @router.patch("/{pid}/missing/{mid}")
 def update_missing(pid: int, mid: int, body: MissingPatch, db: Session = Depends(get_db),
-                   user: User = Depends(editor)) -> dict:
+                   user: User = Depends(parts_edit)) -> dict:
     project = project_or_404(db, pid)
     m = _missing_or_404(db, project.id, mid)
     changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
@@ -258,7 +261,7 @@ def update_missing(pid: int, mid: int, body: MissingPatch, db: Session = Depends
 
 
 @router.delete("/{pid}/missing/{mid}")
-def delete_missing(pid: int, mid: int, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict:
+def delete_missing(pid: int, mid: int, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
     project = project_or_404(db, pid)
     m = _missing_or_404(db, project.id, mid)
     audit.record(db, user, "missing", m.part_no, "qty", m.qty, None, project.id, action="delete")
@@ -270,7 +273,7 @@ def delete_missing(pid: int, mid: int, db: Session = Depends(get_db), user: User
 # ---------- detail (path route last: part numbers may contain '/') ----------
 @router.get("/{pid}/parts/{part_no:path}")
 def part_detail(pid: int, part_no: str, version_id: int | None = None, db: Session = Depends(get_db),
-                _: User = Depends(any_user)) -> dict:
+                _: User = Depends(parts_view)) -> dict:
     """Info, drawings, status history, assemblies it is used in, missing rows."""
     project = project_or_404(db, pid)
     _check_version(db, project, version_id)

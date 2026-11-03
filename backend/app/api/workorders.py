@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from ..models import Project, User, WorkOrder
 from ..services import audit, erp
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+workorders_view, workorders_edit = require("workorders", "view"), require("workorders", "edit")
 
 router = APIRouter(tags=["work-orders"])
 
@@ -74,7 +77,7 @@ def _new(db: Session, me: User, **kw: Any) -> WorkOrder:
 
 
 @router.get("/work-orders")
-def list_work_orders(project_id: int | None = None, status: str | None = None, _: User = Depends(any_user),
+def list_work_orders(project_id: int | None = None, status: str | None = None, _: User = Depends(workorders_view),
                      db: Session = Depends(get_db)) -> dict[str, Any]:
     q = select(WorkOrder).order_by(WorkOrder.id.desc())
     if project_id is not None:
@@ -88,7 +91,7 @@ def list_work_orders(project_id: int | None = None, status: str | None = None, _
 
 
 @router.post("/work-orders", status_code=201)
-def create_work_order(body: WoIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_work_order(body: WoIn, me: User = Depends(workorders_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.project_id is not None:
         project_or_404(db, body.project_id)
     data = body.model_dump()
@@ -100,7 +103,7 @@ def create_work_order(body: WoIn, me: User = Depends(editor), db: Session = Depe
 
 
 @router.put("/work-orders/{wo_id}")
-def update_work_order(wo_id: int, body: WoUpdate, me: User = Depends(editor),
+def update_work_order(wo_id: int, body: WoUpdate, me: User = Depends(workorders_edit),
                       db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
     if w.status in ("done", "cancelled"):
@@ -117,7 +120,7 @@ def update_work_order(wo_id: int, body: WoUpdate, me: User = Depends(editor),
 
 
 @router.post("/work-orders/{wo_id}/status")
-def work_order_status(wo_id: int, body: StatusIn, me: User = Depends(editor),
+def work_order_status(wo_id: int, body: StatusIn, me: User = Depends(workorders_edit),
                       db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
     erp.set_wo_status(db, me, w, body.status)
@@ -126,7 +129,7 @@ def work_order_status(wo_id: int, body: StatusIn, me: User = Depends(editor),
 
 
 @router.post("/work-orders/{wo_id}/complete")
-def complete(wo_id: int, body: CompleteIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def complete(wo_id: int, body: CompleteIn, me: User = Depends(workorders_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
     erp.complete_work(db, me, w, body.qty, body.note)
     db.commit()
@@ -134,7 +137,7 @@ def complete(wo_id: int, body: CompleteIn, me: User = Depends(editor), db: Sessi
 
 
 @router.delete("/work-orders/{wo_id}")
-def delete_work_order(wo_id: int, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def delete_work_order(wo_id: int, me: User = Depends(workorders_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
     if w.status != "planned":
         raise HTTPException(400, "Yalnızca planlanmış iş emri silinebilir; başlamış olanı iptal edin")
@@ -145,7 +148,7 @@ def delete_work_order(wo_id: int, me: User = Depends(editor), db: Session = Depe
 
 
 @router.post("/projects/{pid}/requirements/work-orders", status_code=201)
-def need_to_work_orders(pid: int, body: FromNeedIn, me: User = Depends(editor),
+def need_to_work_orders(pid: int, body: FromNeedIn, me: User = Depends(workorders_edit),
                         db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """One planned work order per chosen part for its shortage."""
     project = project_or_404(db, pid)

@@ -14,7 +14,10 @@ from ..core.status import PROG_DONE
 from ..models import ControlIssue, User
 from ..services import audit
 from ..services.state import ProjectView
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+control_view, control_edit = require("control", "view"), require("control", "edit")
 
 router = APIRouter(tags=["control"])
 
@@ -74,7 +77,7 @@ def _stored(db: Session, pid: int) -> dict[str, ControlIssue]:
 
 @router.get("/projects/{pid}/control")
 def control_list(pid: int, status: str | None = Query(None, description="Açık | Çözüldü"),
-                 db: Session = Depends(get_db), user: User = Depends(any_user)) -> dict[str, Any]:
+                 db: Session = Depends(get_db), user: User = Depends(control_view)) -> dict[str, Any]:
     view = ProjectView.load(db, project_or_404(db, pid))
     stored = _stored(db, pid)
     items: list[dict[str, Any]] = []
@@ -120,7 +123,7 @@ def _find_or_create(db: Session, view: ProjectView, key: str, user: User) -> Con
 
 
 @router.post("/projects/{pid}/control/resolve")
-def resolve(pid: int, body: ResolveIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict[str, Any]:
+def resolve(pid: int, body: ResolveIn, db: Session = Depends(get_db), user: User = Depends(control_edit)) -> dict[str, Any]:
     """Mark an issue as solved (Çözüldü) with an optional note."""
     view = ProjectView.load(db, project_or_404(db, pid))
     row = _find_or_create(db, view, body.key, user)
@@ -135,7 +138,7 @@ def resolve(pid: int, body: ResolveIn, db: Session = Depends(get_db), user: User
 
 @router.post("/projects/{pid}/control/unresolve")
 def unresolve(pid: int, body: ResolveIn, db: Session = Depends(get_db),
-              user: User = Depends(editor)) -> dict[str, Any]:
+              user: User = Depends(control_edit)) -> dict[str, Any]:
     """Reopen an issue (Açık); a non-empty note replaces the stored one."""
     project_or_404(db, pid)
     row = db.scalar(select(ControlIssue).where(ControlIssue.project_id == pid, ControlIssue.key == body.key))
@@ -152,7 +155,7 @@ def unresolve(pid: int, body: ResolveIn, db: Session = Depends(get_db),
 
 @router.post("/projects/{pid}/control/issues", status_code=201)
 def create_manual(pid: int, body: ManualIn, db: Session = Depends(get_db),
-                  user: User = Depends(editor)) -> dict[str, Any]:
+                  user: User = Depends(control_edit)) -> dict[str, Any]:
     project_or_404(db, pid)
     if body.severity not in SEVERITIES:
         raise HTTPException(400, f"Geçersiz önem derecesi. Seçenekler: {', '.join(SEVERITIES)}")
@@ -169,7 +172,7 @@ def create_manual(pid: int, body: ManualIn, db: Session = Depends(get_db),
 
 
 @router.delete("/projects/{pid}/control/issues/{iid}")
-def delete_manual(pid: int, iid: int, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict[str, Any]:
+def delete_manual(pid: int, iid: int, db: Session = Depends(get_db), user: User = Depends(control_edit)) -> dict[str, Any]:
     row = db.get(ControlIssue, iid)
     if row is None or row.project_id != pid:
         raise HTTPException(404, "Kontrol maddesi bulunamadı")

@@ -6,11 +6,13 @@ import logging
 import pkgutil
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from starlette.concurrency import run_in_threadpool
 
 from . import api as api_pkg
 from .config import get_settings
 from .db import SessionLocal, engine
+from .services import sync
 from .services.bootstrap import seed_defaults
 
 log = logging.getLogger("erp")
@@ -40,6 +42,20 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Parça Takip ERP", version=get_settings().app_version, lifespan=lifespan,
               docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+
+
+@app.middleware("http")
+async def live_sync(request: Request, call_next):
+    response = await call_next(request)
+    if sync.counts(request.method, request.url.path, response.status_code):
+        await run_in_threadpool(sync.bump, engine)
+    return response
+
+
+@app.get("/api/sync", tags=["system"])
+def sync_rev() -> dict:
+    """Write counter for live refresh on other computers (no login needed: it is just a number)."""
+    return {"rev": sync.current(engine)}
 
 
 @app.get("/api/health", tags=["system"])

@@ -16,7 +16,10 @@ from ..models import Drawing, DrawingVersion, User
 from ..services import audit
 from ..services import drawings as svc
 from ..services.state import ProjectView
-from .deps import designer, get_db, project_or_404
+from ..permissions import can, require
+from .deps import get_db, project_or_404
+
+drawings_edit = require("drawings", "edit")
 
 router = APIRouter(tags=["drawings"])
 
@@ -24,7 +27,10 @@ router = APIRouter(tags=["drawings"])
 def file_user(token: str | None = Depends(oauth2), access_token: str | None = Query(None),
               db: Session = Depends(get_db)) -> User:
     """Bearer header, or `?access_token=` so <img>/<iframe>/download links work."""
-    return user_from_token(token or access_token, db)
+    user = user_from_token(token or access_token, db)
+    if not can(user, "drawings", "view"):
+        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+    return user
 
 
 class AssignIn(BaseModel):
@@ -70,7 +76,7 @@ def _send(v: DrawingVersion) -> FileResponse:
 
 @router.post("/projects/{pid}/drawings", status_code=201)
 def upload(pid: int, files: list[UploadFile] = File(...), db: Session = Depends(get_db),
-                 user: User = Depends(designer)) -> dict[str, Any]:
+                 user: User = Depends(drawings_edit)) -> dict[str, Any]:
     """Upload one or more drawings (PDF/DWG/DXF/images) or zip archives of them.
 
     Sync on purpose: hashing, disk copies, zip extraction and DB work run in the threadpool."""
@@ -154,7 +160,7 @@ def detail(did: int, db: Session = Depends(get_db), user: User = Depends(file_us
 
 @router.post("/drawings/{did}/assign")
 def assign(did: int, body: AssignIn, db: Session = Depends(get_db),
-           user: User = Depends(designer)) -> dict[str, Any]:
+           user: User = Depends(drawings_edit)) -> dict[str, Any]:
     """Manually match (or unmatch) a drawing to a part number."""
     d = _drawing_or_404(db, did)
     pno: str | None = None
@@ -195,7 +201,7 @@ def thumb(did: int, db: Session = Depends(get_db), user: User = Depends(file_use
 
 
 @router.delete("/drawings/versions/{vid}")
-def delete_version(vid: int, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict[str, Any]:
+def delete_version(vid: int, db: Session = Depends(get_db), user: User = Depends(drawings_edit)) -> dict[str, Any]:
     """Delete one version; the drawing is removed with its last version."""
     v = _version_or_404(db, vid)
     d = svc.delete_version(db, v, user)
@@ -207,7 +213,7 @@ def delete_version(vid: int, db: Session = Depends(get_db), user: User = Depends
 
 
 @router.delete("/drawings/{did}")
-def delete_drawing(did: int, db: Session = Depends(get_db), user: User = Depends(designer)) -> dict[str, Any]:
+def delete_drawing(did: int, db: Session = Depends(get_db), user: User = Depends(drawings_edit)) -> dict[str, Any]:
     svc.delete_drawing(db, _drawing_or_404(db, did), user)
     db.commit()
     return {"deleted": True}

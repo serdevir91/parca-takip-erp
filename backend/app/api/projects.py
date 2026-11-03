@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..models import BomVersion, Project, Tracking, User
 from ..services import audit
-from .deps import admin, any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import admin, any_user, get_db, project_or_404
+
+projects_view, projects_edit = require("projects", "view"), require("projects", "edit")
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -64,7 +67,7 @@ def list_projects(include_archived: bool = False, db: Session = Depends(get_db),
 
 
 @router.post("", status_code=201)
-def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = Depends(editor)) -> dict:
+def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     name = body.name.strip()
     if not name:
         raise HTTPException(400, "Proje adı boş olamaz")
@@ -85,7 +88,7 @@ def get_project(pid: int, db: Session = Depends(get_db), _: User = Depends(any_u
 
 @router.patch("/{pid}")
 def update_project(pid: int, body: ProjectPatch, db: Session = Depends(get_db),
-                   user: User = Depends(editor)) -> dict:
+                   user: User = Depends(projects_edit)) -> dict:
     p = project_or_404(db, pid)
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
     if "name" in changes:

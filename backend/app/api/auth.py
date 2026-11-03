@@ -9,15 +9,17 @@ from sqlalchemy.orm import Session
 
 from ..auth import create_token, hash_password, verify_password
 from ..models import ROLE_LABELS, User
+from ..permissions import effective
 from ..services import audit
 from .deps import any_user, get_db
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def user_out(u: User) -> dict:
     return {"id": u.id, "username": u.username, "full_name": u.full_name, "role": u.role,
-            "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active}
+            "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active, "permissions": effective(u)}
 
 
 @router.post("/login")

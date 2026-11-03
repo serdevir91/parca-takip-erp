@@ -130,6 +130,69 @@ def _seed_erp(db, project: Project, user: User | None) -> None:
     if item.qty == 0:
         item.min_qty = 20
         erp.move(db, user, item, "in", 8, note="Açılış", unit_cost=95.0)
+    _seed_commerce(db, project, user, po if buy else None, make)
+
+
+def _seed_commerce(db, project: Project, user: User | None, po, made: list) -> None:
+    """Demo sales, invoices, payments and work hours (needs a user for the document authors)."""
+    from datetime import date, timedelta
+
+    from .models import Employee, Firm, Payment, SalesOrder, TimeEntry, WorkOrder
+    from .services import commerce
+
+    if user is None:
+        return
+    today = date.today()
+    cust = db.scalar(select(Firm).where(Firm.name == "Demo Makine Müşterisi Ltd."))
+    if cust is None:
+        cust = Firm(name="Demo Makine Müşterisi Ltd.", kind="customer", contact="Satın alma", phone="0216 444 00 00",
+                    email="satinalma@example.com", tax_office="Ümraniye", tax_no="9876543210", note="Örnek veri")
+        db.add(cust)
+        db.flush()
+    lines = [{"code": project.root_part_no or "MAKINE", "description": f"{project.name} makinesi", "qty": 1,
+              "unit_price": 850000.0},
+             {"description": "Montaj ve devreye alma", "unit": "Gün", "qty": 5, "unit_price": 12000.0}]
+    orders = []
+    for status, disc, days in (("confirmed", 5.0, 30), ("quoted", 0.0, 15)):
+        so = SalesOrder(no=commerce.next_no(db, SalesOrder, "SS"), firm_id=cust.id, firm_name=cust.name,
+                        project_id=project.id, status="draft", order_date=today - timedelta(days=12),
+                        valid_until=today + timedelta(days=days), due_date=today + timedelta(days=45),
+                        discount_pct=disc, created_by=user.username, note="Örnek veri")
+        commerce.set_so_lines(so, lines if status == "confirmed" else lines[1:])
+        db.add(so)
+        db.flush()
+        commerce.set_so_status(db, user, so, "quoted")
+        if status == "confirmed":
+            commerce.set_so_status(db, user, so, "confirmed")
+        orders.append(so)
+    inv = commerce.invoice_from_so(db, user, orders[0])
+    inv.status, inv.due_date = "issued", today + timedelta(days=20)
+    db.add(Payment(direction="in", firm_id=cust.id, firm_name=cust.name, invoice_id=inv.id,
+                   pay_date=today - timedelta(days=2), amount=300000.0, method="Havale/EFT", note="Avans",
+                   created_by=user.username))
+    if po is not None:
+        pinv = commerce.invoice_from_po(db, user, po, "TDR-2026-0412", 20.0)
+        pinv.status, pinv.due_date = "issued", today - timedelta(days=3)
+    people = []
+    for name, title, dept, rate in (("Ahmet Yılmaz", "Montaj ustası", "Üretim", 320.0),
+                                    ("Elif Kaya", "Tasarım mühendisi", "Mühendislik", 480.0),
+                                    ("Murat Demir", "CNC operatörü", "Üretim", 290.0)):
+        e = db.scalar(select(Employee).where(Employee.name == name))
+        if e is None:
+            e = Employee(name=name, title=title, department=dept, hourly_cost=rate,
+                         start_date=today - timedelta(days=400), note="Örnek veri")
+            db.add(e)
+            db.flush()
+        people.append(e)
+    wo = db.scalar(select(WorkOrder).where(WorkOrder.project_id == project.id).order_by(WorkOrder.id))
+    for d in range(1, 8):
+        day = today - timedelta(days=d)
+        if day.weekday() >= 5:
+            continue
+        for i, e in enumerate(people):
+            db.add(TimeEntry(employee_id=e.id, work_date=day, hours=8.0 if i != 1 else 6.0, project_id=project.id,
+                             work_order_id=wo.id if wo and i == 2 else None, hourly_cost=e.hourly_cost,
+                             note="Örnek veri", created_by=user.username))
 
 
 def seed(data_dir: Path, force: bool = False) -> None:
@@ -175,7 +238,7 @@ def seed(data_dir: Path, force: bool = False) -> None:
                 for i, f in enumerate(files["v"], 1):
                     _upload_and_approve(db, p, f, user, f"Demo: v{i}")
                 _seed_erp(db, p, user)
-                print(f"'{name}' oluşturuldu: 3 BOM sürümü, örnek sipariş, iş emri ve stok")
+                print(f"'{name}' oluşturuldu: 3 BOM sürümü, örnek sipariş, iş emri, stok, satış, fatura, personel")
             audit.record(db, user, "project", p.id, "seed", None, name, p.id, action="create")
         db.commit()
 

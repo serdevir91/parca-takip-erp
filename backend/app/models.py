@@ -2,9 +2,10 @@
 
 Part status lives on Tracking (project + part number) so it survives BOM
 version changes. BomRow rows are immutable snapshots of an uploaded CSV.
-ERP modules (purchase orders, stock, work orders) attach to Project / Firm
-through their own tables and refer to parts by part number (fasteners by
-their type|std|size key), so they never touch the BOM snapshots.
+ERP modules (purchase orders, stock, work orders, sales, invoices, payments,
+employees and time entries) attach to Project / Firm through their own tables
+and refer to parts by part number (fasteners by their type|std|size key), so
+they never touch the BOM snapshots.
 """
 from __future__ import annotations
 
@@ -37,6 +38,8 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(128), default="")
     password_hash: Mapped[str] = mapped_column(String(128))
     role: Mapped[str] = mapped_column(String(16), default=ROLE_VIEWER)
+    # Per-module overrides of the role defaults, see app/permissions.py; None = role defaults only
+    permissions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -203,7 +206,7 @@ class FastenerSetting(Base):
 
 
 class Firm(Base):
-    """Manufacturers / suppliers. kind: manufacturer | supplier | both."""
+    """Cari kart: manufacturers, suppliers and customers. kind: manufacturer | supplier | both | customer."""
     __tablename__ = "firms"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True)
@@ -396,3 +399,143 @@ class WorkOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SyncState(Base):
+    """One row (id=1). rev goes up after every successful write request, so open screens on other
+    computers know to refetch (GET /api/sync)."""
+    __tablename__ = "sync_state"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rev: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SalesOrder(Base):
+    """Teklif / satış siparişi. status: draft | quoted | confirmed | delivered | cancelled | lost."""
+    __tablename__ = "sales_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    no: Mapped[str] = mapped_column(String(30), unique=True)
+    firm_id: Mapped[int | None] = mapped_column(ForeignKey("firms.id", ondelete="SET NULL"), nullable=True)
+    firm_name: Mapped[str] = mapped_column(String(200), default="")
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    order_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)     # teklif geçerlilik
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)        # teslim tarihi
+    currency: Mapped[str] = mapped_column(String(8), default="TRY")
+    tax_rate: Mapped[float] = mapped_column(Float, default=20.0)              # KDV %
+    discount_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    lines: Mapped[list["SalesOrderLine"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", order_by="SalesOrderLine.seq")
+
+
+class SalesOrderLine(Base):
+    __tablename__ = "sales_order_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    so_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    code: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="Adet")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    order: Mapped[SalesOrder] = relationship(back_populates="lines")
+
+
+class Invoice(Base):
+    """Fatura. kind: sales (satış, bizim kestiğimiz) | purchase (alış, tedarikçinin faturası).
+    status: draft | issued | cancelled; paid/partial/overdue come from the payments."""
+    __tablename__ = "invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), default="sales", index=True)
+    no: Mapped[str] = mapped_column(String(40), default="", index=True)     # supplier's number for purchase
+    firm_id: Mapped[int | None] = mapped_column(ForeignKey("firms.id", ondelete="SET NULL"), nullable=True,
+                                                index=True)
+    firm_name: Mapped[str] = mapped_column(String(200), default="")
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    sales_order_id: Mapped[int | None] = mapped_column(ForeignKey("sales_orders.id", ondelete="SET NULL"),
+                                                       nullable=True)
+    purchase_order_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_orders.id", ondelete="SET NULL"),
+                                                          nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    invoice_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="TRY")
+    tax_rate: Mapped[float] = mapped_column(Float, default=20.0)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    lines: Mapped[list["InvoiceLine"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.seq")
+
+
+class InvoiceLine(Base):
+    __tablename__ = "invoice_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    code: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="Adet")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    invoice: Mapped[Invoice] = relationship(back_populates="lines")
+
+
+class Payment(Base):
+    """Tahsilat (direction in, from a customer) or ödeme (direction out, to a supplier)."""
+    __tablename__ = "payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    direction: Mapped[str] = mapped_column(String(4), default="in", index=True)
+    firm_id: Mapped[int | None] = mapped_column(ForeignKey("firms.id", ondelete="SET NULL"), nullable=True,
+                                                index=True)
+    firm_name: Mapped[str] = mapped_column(String(200), default="")
+    invoice_id: Mapped[int | None] = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    pay_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String(8), default="TRY")
+    method: Mapped[str] = mapped_column(String(30), default="Havale/EFT")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+
+
+class Employee(Base):
+    __tablename__ = "employees"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(100), default="")
+    department: Mapped[str] = mapped_column(String(100), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    email: Mapped[str] = mapped_column(String(120), default="")
+    hourly_cost: Mapped[float | None] = mapped_column(Float, nullable=True)   # ₺/saat, işçilik maliyeti
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class TimeEntry(Base):
+    """Çalışma saati: who worked how long on which project / work order. Cost = hours * hourly_cost
+    at entry time (kept, so later rate changes do not rewrite history)."""
+    __tablename__ = "time_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    hours: Mapped[float] = mapped_column(Float, default=0.0)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
+                                                   nullable=True, index=True)
+    work_order_id: Mapped[int | None] = mapped_column(ForeignKey("work_orders.id", ondelete="SET NULL"),
+                                                      nullable=True, index=True)
+    hourly_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

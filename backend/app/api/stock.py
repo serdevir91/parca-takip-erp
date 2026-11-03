@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..models import Project, StockItem, StockMove, User
 from ..services import audit, erp
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import get_db, project_or_404
+
+stock_view, stock_edit = require("stock", "view"), require("stock", "edit")
 
 router = APIRouter(tags=["stock"])
 
@@ -53,7 +56,7 @@ def _item_or_404(db: Session, item_id: int) -> StockItem:
 
 
 @router.get("/stock")
-def list_stock(q: str = "", low: bool = False, _: User = Depends(any_user),
+def list_stock(q: str = "", low: bool = False, _: User = Depends(stock_view),
                db: Session = Depends(get_db)) -> dict[str, Any]:
     stmt = select(StockItem).order_by(StockItem.code)
     if q.strip():
@@ -67,7 +70,7 @@ def list_stock(q: str = "", low: bool = False, _: User = Depends(any_user),
 
 
 @router.post("/stock", status_code=201)
-def create_item(body: ItemIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_item(body: ItemIn, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     code = body.code.strip()
     if db.scalar(select(StockItem).where(StockItem.code == code)):
         raise HTTPException(409, "Bu kodla stok kartı zaten var")
@@ -85,7 +88,7 @@ def create_item(body: ItemIn, me: User = Depends(editor), db: Session = Depends(
 
 
 @router.put("/stock/{item_id}")
-def update_item(item_id: int, body: ItemUpdate, me: User = Depends(editor),
+def update_item(item_id: int, body: ItemUpdate, me: User = Depends(stock_edit),
                 db: Session = Depends(get_db)) -> dict[str, Any]:
     i = _item_or_404(db, item_id)
     changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
@@ -100,7 +103,7 @@ def update_item(item_id: int, body: ItemUpdate, me: User = Depends(editor),
 
 
 @router.delete("/stock/{item_id}")
-def delete_item(item_id: int, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def delete_item(item_id: int, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     i = _item_or_404(db, item_id)
     if abs(i.qty) > erp.EPS:
         raise HTTPException(400, "Stokta miktar olan kart silinemez; önce sayım ile sıfırlayın")
@@ -111,7 +114,7 @@ def delete_item(item_id: int, me: User = Depends(editor), db: Session = Depends(
 
 
 @router.post("/stock/{item_id}/moves")
-def add_move(item_id: int, body: MoveIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def add_move(item_id: int, body: MoveIn, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Manual move. receipt/production are booked by purchase orders and work orders only."""
     i = _item_or_404(db, item_id)
     if body.kind not in ("in", "out", "count", "issue"):
@@ -130,7 +133,7 @@ def add_move(item_id: int, body: MoveIn, me: User = Depends(editor), db: Session
 
 
 @router.get("/stock/{item_id}/moves")
-def item_moves(item_id: int, _: User = Depends(any_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def item_moves(item_id: int, _: User = Depends(stock_view), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     i = _item_or_404(db, item_id)
     names = dict(db.execute(select(Project.id, Project.name)).all())
     moves = db.scalars(select(StockMove).where(StockMove.item_id == i.id).order_by(StockMove.id.desc()).limit(1000))
@@ -138,7 +141,7 @@ def item_moves(item_id: int, _: User = Depends(any_user), db: Session = Depends(
 
 
 @router.get("/stock-moves")
-def recent_moves(project_id: int | None = None, limit: int = 500, _: User = Depends(any_user),
+def recent_moves(project_id: int | None = None, limit: int = 500, _: User = Depends(stock_view),
                  db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     stmt = select(StockMove, StockItem).join(StockItem).order_by(StockMove.id.desc()).limit(min(max(limit, 1), 5000))
     if project_id is not None:

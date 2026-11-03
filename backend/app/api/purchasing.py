@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
 from ..services import audit, erp
-from .deps import any_user, editor, get_db, project_or_404
+from ..permissions import require
+from .deps import any_user, get_db, project_or_404
+
+purchasing_view, purchasing_edit = require("purchasing", "view"), require("purchasing", "edit")
+planning_view, stock_edit = require("planning", "view"), require("stock", "edit")
 
 router = APIRouter(tags=["purchasing"])
 
@@ -23,7 +27,7 @@ def firms(kind: str | None = None, _: User = Depends(any_user), db: Session = De
     """Active firms for pickers (the full card editor is under /admin/firms)."""
     q = select(Firm).where(Firm.active.is_(True)).order_by(Firm.name)
     if kind:
-        q = q.where(Firm.kind.in_([kind, "both"]))
+        q = q.where(Firm.kind.in_([kind] if kind == "customer" else [kind, "both"]))
     return [{"id": f.id, "name": f.name, "kind": f.kind, "contact": f.contact, "phone": f.phone, "email": f.email,
              "lead_days": f.lead_days} for f in db.scalars(q)]
 
@@ -98,7 +102,7 @@ def _out(db: Session, po: PurchaseOrder, with_lines: bool = True) -> dict[str, A
 
 @router.get("/purchase-orders")
 def list_orders(project_id: int | None = None, status: str | None = None, firm_id: int | None = None,
-                _: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+                _: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     q = select(PurchaseOrder).order_by(PurchaseOrder.id.desc())
     if project_id is not None:
         q = q.where(PurchaseOrder.project_id == project_id)
@@ -114,7 +118,7 @@ def list_orders(project_id: int | None = None, status: str | None = None, firm_i
 
 
 @router.post("/purchase-orders", status_code=201)
-def create_order(body: PoIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_order(body: PoIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     firm = _firm(db, body.firm_id)
     if body.project_id is not None:
         project_or_404(db, body.project_id)
@@ -131,12 +135,12 @@ def create_order(body: PoIn, me: User = Depends(editor), db: Session = Depends(g
 
 
 @router.get("/purchase-orders/{po_id}")
-def get_order(po_id: int, _: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_order(po_id: int, _: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     return _out(db, _po_or_404(db, po_id))
 
 
 @router.put("/purchase-orders/{po_id}")
-def update_order(po_id: int, body: PoUpdate, me: User = Depends(editor),
+def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
     if po.status in ("received", "cancelled"):
@@ -166,7 +170,7 @@ def update_order(po_id: int, body: PoUpdate, me: User = Depends(editor),
 
 
 @router.post("/purchase-orders/{po_id}/status")
-def order_status(po_id: int, body: StatusIn, me: User = Depends(editor),
+def order_status(po_id: int, body: StatusIn, me: User = Depends(purchasing_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
     erp.set_po_status(db, me, po, body.status)
@@ -175,7 +179,7 @@ def order_status(po_id: int, body: StatusIn, me: User = Depends(editor),
 
 
 @router.post("/purchase-orders/{po_id}/receive")
-def receive(po_id: int, body: ReceiveIn, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def receive(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
     by_id = {l.id: l for l in po.lines}
     items: list[tuple[PurchaseOrderLine, float]] = []
@@ -193,7 +197,7 @@ def receive(po_id: int, body: ReceiveIn, me: User = Depends(editor), db: Session
 
 
 @router.delete("/purchase-orders/{po_id}")
-def delete_order(po_id: int, me: User = Depends(editor), db: Session = Depends(get_db)) -> dict[str, Any]:
+def delete_order(po_id: int, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
     if po.status != "draft":
         raise HTTPException(400, "Yalnızca taslak sipariş silinebilir; gönderilmiş siparişi iptal edin")
@@ -204,7 +208,7 @@ def delete_order(po_id: int, me: User = Depends(editor), db: Session = Depends(g
 
 
 @router.get("/purchase-orders/{po_id}/xlsx")
-def order_xlsx(po_id: int, _: User = Depends(any_user), db: Session = Depends(get_db)) -> StreamingResponse:
+def order_xlsx(po_id: int, _: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> StreamingResponse:
     """Sipariş formu to send to the supplier."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -268,7 +272,7 @@ class FromNeedIn(BaseModel):
 
 
 @router.get("/projects/{pid}/requirements")
-def requirements(pid: int, _: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+def requirements(pid: int, _: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = erp.requirements(db, project_or_404(db, pid))
     return {"rows": rows,
             "summary": {"items": len(rows), "shortage": sum(1 for r in rows if r["shortage"] > 0),
@@ -277,7 +281,7 @@ def requirements(pid: int, _: User = Depends(any_user), db: Session = Depends(ge
 
 
 @router.post("/projects/{pid}/requirements/purchase-order", status_code=201)
-def need_to_order(pid: int, body: FromNeedIn, me: User = Depends(editor),
+def need_to_order(pid: int, body: FromNeedIn, me: User = Depends(purchasing_edit),
                   db: Session = Depends(get_db)) -> dict[str, Any]:
     """Draft purchase order for the shortage of the chosen items."""
     project = project_or_404(db, pid)
@@ -311,7 +315,7 @@ class IssueIn(BaseModel):
 
 
 @router.post("/projects/{pid}/requirements/issue")
-def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(editor),
+def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(stock_edit),
                     db: Session = Depends(get_db)) -> dict[str, Any]:
     """Stoktan karşıla: issue free stock to the project (qty omitted = what the analysis suggests)."""
     project = project_or_404(db, pid)
@@ -329,5 +333,5 @@ def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(editor),
 
 
 @router.get("/projects/{pid}/costs")
-def costs(pid: int, _: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+def costs(pid: int, _: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     return erp.project_costs(db, project_or_404(db, pid))

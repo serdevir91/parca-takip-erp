@@ -20,8 +20,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..core.status import KIND_IMALAT, PROG_DONE, PROG_RUN, PROG_WAIT
-from ..models import (FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove,
-                      Tracking, User, WorkOrder)
+from ..models import (Employee, FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove,
+                      TimeEntry, Tracking, User, WorkOrder)
 from . import audit
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import apply_changes, tracking_of
@@ -43,8 +43,8 @@ def _num(v: float) -> float:
     return round(v + 0.0, 6)
 
 
-def next_no(db: Session, model: type[PurchaseOrder] | type[WorkOrder], prefix: str) -> str:
-    """SA-2026-0001 style numbers, counting per year."""
+def next_no(db: Session, model: Any, prefix: str) -> str:
+    """SA-2026-0001 style numbers, counting per year (model: any table with a `no` column)."""
     base = f"{prefix}-{date.today().year}-"
     used = [n[len(base):] for n in db.scalars(select(model.no).where(model.no.like(f"{base}%")))]
     last = max((int(n) for n in used if n.isdigit()), default=0)
@@ -440,6 +440,17 @@ def project_costs(db: Session, project: Project) -> dict[str, Any]:
             continue
         v = -m.qty * m.unit_cost
         rows.append({"source": "Stoktan", "firm": "(Stok)", "group": groups.get(code, "(BOM dışı)"),
+                     "committed": v, "actual": v})
+    wo_parts = dict(db.execute(select(WorkOrder.id, WorkOrder.part_no)
+                               .where(WorkOrder.project_id == project.id)).all())
+    for t, emp in db.execute(select(TimeEntry, Employee.name).join(Employee)
+                             .where(TimeEntry.project_id == project.id)):
+        if t.hourly_cost is None:
+            missing_price += 1
+            continue
+        v = t.hours * t.hourly_cost
+        rows.append({"source": "İşçilik", "firm": emp, "group": groups.get(wo_parts.get(t.work_order_id or 0, ""),
+                                                                            "(Genel işçilik)"),
                      "committed": v, "actual": v})
 
     def roll(key: str) -> list[dict[str, Any]]:

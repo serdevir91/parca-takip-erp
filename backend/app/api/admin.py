@@ -13,15 +13,19 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import hash_password
+from ..permissions import catalog, clean_overrides, effective, require
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
 from ..services import audit, backup as backup_svc
 from ..services.settings import get_setting, part_no_patterns, purchased_assemblies, set_setting
 from .deps import admin, get_db
 
+contacts_view, contacts_edit = require("contacts", "view"), require("contacts", "edit")
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-FIRM_KINDS = ("manufacturer", "supplier", "both")
-FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi"}
+FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
+FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
+                    "customer": "Müşteri"}
 SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules")
 MIN_PASSWORD = 6
 
@@ -30,7 +34,8 @@ MIN_PASSWORD = 6
 def user_out(u: User) -> dict[str, Any]:
     return {"id": u.id, "username": u.username, "full_name": u.full_name, "role": u.role,
             "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active,
-            "created_at": u.created_at.isoformat() if u.created_at else None}
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "overrides": clean_overrides(u.permissions), "permissions": effective(u)}
 
 
 class UserCreate(BaseModel):
@@ -38,12 +43,14 @@ class UserCreate(BaseModel):
     password: str
     full_name: str = ""
     role: str = "viewer"
+    permissions: dict[str, str] | None = None
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
     role: str | None = None
     active: bool | None = None
+    permissions: dict[str, str] | None = None  # {} clears every override
 
 
 class PasswordReset(BaseModel):
@@ -89,6 +96,12 @@ def list_roles(_: User = Depends(admin)) -> list[dict[str, str]]:
     return [{"value": r, "label": ROLE_LABELS[r]} for r in ROLES]
 
 
+@router.get("/permissions")
+def permission_catalog(_: User = Depends(admin)) -> dict:
+    """Modules, levels and the role defaults for the permission matrix."""
+    return catalog()
+
+
 @router.get("/users")
 def list_users(_: User = Depends(admin), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     return [user_out(u) for u in db.scalars(select(User).order_by(User.username))]
@@ -104,7 +117,8 @@ def create_user(body: UserCreate, me: User = Depends(admin), db: Session = Depen
     if db.scalar(select(User).where(func.lower(User.username) == username.lower())):
         raise HTTPException(409, "Bu kullanıcı adı zaten var")
     u = User(username=username, full_name=body.full_name.strip(), role=body.role,
-             password_hash=hash_password(body.password), active=True)
+             password_hash=hash_password(body.password), active=True,
+             permissions=clean_overrides(body.permissions) or None)
     db.add(u)
     db.flush()
     audit.record(db, me, "user", u.id, "username", None, username, action="create")
@@ -125,6 +139,8 @@ def update_user(user_id: int, body: UserUpdate, me: User = Depends(admin),
         changes["role"] = body.role
     if body.active is not None:
         changes["active"] = body.active
+    if body.permissions is not None:
+        changes["permissions"] = clean_overrides(body.permissions) or None
     _guard_self(me, u, changes.get("role", u.role), changes.get("active", u.active))
     _guard_last_admin(db, u, changes.get("role", u.role), changes.get("active", u.active))
     audit.record_changes(db, me, u, changes, "user", u.id)
@@ -191,7 +207,7 @@ class FirmUpdate(BaseModel):
 
 def _check_kind(kind: str) -> None:
     if kind not in FIRM_KINDS:
-        raise HTTPException(400, "Firma türü üretici, tedarikçi veya ikisi birden olmalı")
+        raise HTTPException(400, "Firma türü üretici, tedarikçi, ikisi birden veya müşteri olmalı")
 
 
 def _firm_name_taken(db: Session, name: str, exclude_id: int | None = None) -> bool:
@@ -207,7 +223,7 @@ def _firm_or_404(db: Session, firm_id: int) -> Firm:
 
 
 @router.get("/firms")
-def list_firms(kind: str | None = None, _: User = Depends(admin),
+def list_firms(kind: str | None = None, _: User = Depends(contacts_view),
                db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     q = select(Firm).order_by(Firm.name)
     if kind:
@@ -216,7 +232,7 @@ def list_firms(kind: str | None = None, _: User = Depends(admin),
 
 
 @router.post("/firms", status_code=201)
-def create_firm(body: FirmIn, me: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_firm(body: FirmIn, me: User = Depends(contacts_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     name = body.name.strip()
     if not name:
         raise HTTPException(400, "Firma adı boş olamaz")
@@ -232,7 +248,7 @@ def create_firm(body: FirmIn, me: User = Depends(admin), db: Session = Depends(g
 
 
 @router.put("/firms/{firm_id}")
-def update_firm(firm_id: int, body: FirmUpdate, me: User = Depends(admin),
+def update_firm(firm_id: int, body: FirmUpdate, me: User = Depends(contacts_edit),
                 db: Session = Depends(get_db)) -> dict[str, Any]:
     f = _firm_or_404(db, firm_id)
     changes = body.model_dump(exclude_none=True)
@@ -250,7 +266,7 @@ def update_firm(firm_id: int, body: FirmUpdate, me: User = Depends(admin),
 
 
 @router.delete("/firms/{firm_id}")
-def delete_firm(firm_id: int, me: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
+def delete_firm(firm_id: int, me: User = Depends(contacts_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Tracking rows keep the firm name as text, so deleting a firm loses no history."""
     f = _firm_or_404(db, firm_id)
     audit.record(db, me, "firm", f.id, "name", f.name, None, action="delete")
