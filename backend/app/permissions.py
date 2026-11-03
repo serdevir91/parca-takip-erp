@@ -27,6 +27,7 @@ MODULES: list[tuple[str, str, str]] = [
     ("contacts", "Cari kartlar (müşteri, tedarikçi)", "Ticari"),
     ("sales", "Satış (teklif, sipariş)", "Ticari"),
     ("finance", "Fatura ve ödemeler", "Ticari"),
+    ("chat", "Sohbet (mesaj ve dosya)", "Sistem"),
     ("admin", "Yönetim (kullanıcılar, ayarlar, yedek)", "Sistem"),
 ]
 MODULE_KEYS = [m[0] for m in MODULES]
@@ -35,11 +36,12 @@ _ENG = ("projects", "parts", "fasteners", "drawings", "control")
 _OPS = ("planning", "purchasing", "workorders", "stock", "hr", "contacts", "sales", "finance")
 ROLE_DEFAULTS: dict[str, dict[str, str]] = {
     ROLE_ADMIN: {k: EDIT for k in MODULE_KEYS},
-    ROLE_DESIGNER: {**{k: EDIT for k in _ENG}, **{k: VIEW for k in _OPS}, "admin": NONE},
+    ROLE_DESIGNER: {**{k: EDIT for k in _ENG}, **{k: VIEW for k in _OPS}, "chat": EDIT, "admin": NONE},
     # Planning/purchasing edits part tracking (progress, procurement) but does not upload BOMs or drawings
     ROLE_PLANNER: {**{k: VIEW for k in _ENG}, "parts": EDIT, "fasteners": EDIT, "control": EDIT,
-                   **{k: EDIT for k in _OPS}, "admin": NONE},
-    ROLE_VIEWER: {**{k: VIEW for k in MODULE_KEYS}, "admin": NONE},
+                   **{k: EDIT for k in _OPS}, "chat": EDIT, "admin": NONE},
+    # Everyone may chat; "view" on chat means read-only (no sending)
+    ROLE_VIEWER: {**{k: VIEW for k in MODULE_KEYS}, "chat": EDIT, "admin": NONE},
 }
 
 

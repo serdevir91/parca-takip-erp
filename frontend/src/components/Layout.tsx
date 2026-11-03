@@ -1,15 +1,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, Layers,
-  ListTree, LogOut, Menu, Moon, RefreshCw, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
+  ListTree, LogOut, Menu, MessageCircle, Moon, RefreshCw, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
 import type { Project } from "../types";
+import type { ChatState } from "../pages/Chat";
+import { useToast } from "./Toast";
 
 export function useProject() {
   const { pid } = useParams();
@@ -41,7 +43,12 @@ const GROUPS: Group[] = [
       { to: "/finance", label: "Fatura ve ödeme", icon: Wallet, module: "finance" },
     ],
   },
-  { title: "Sistem", items: [{ to: "/admin", label: "Yönetim", icon: Settings, module: "admin" }] },
+  {
+    title: "Sistem", items: [
+      { to: "/chat", label: "Sohbet", icon: MessageCircle, module: "chat" },
+      { to: "/admin", label: "Yönetim", icon: Settings, module: "admin" },
+    ],
+  },
 ];
 
 const PROJECT_ITEMS: Item[] = [
@@ -90,6 +97,41 @@ function useLiveSync() {
   return { online: !q.isError && q.data != null, lastSync: q.dataUpdatedAt };
 }
 
+/** Chat has its own poll (chat writes do not bump the global rev): unread badge, "(n)" in the tab title,
+ *  a toast for new messages outside the chat screen, and a refetch of open chat screens. */
+function useChatPoll(enabled: boolean) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const onChat = useLocation().pathname.startsWith("/chat");
+  const last = useRef<ChatState | null>(null);
+  const q = useQuery({
+    queryKey: ["chat", "state"],
+    queryFn: () => api.get<ChatState>("/chat/state"),
+    refetchInterval: 4000,
+    refetchIntervalInBackground: true,
+    retry: false,
+    enabled,
+  });
+  const st = q.data;
+  useEffect(() => {
+    if (!st) return;
+    const prev = last.current;
+    if (prev && prev.key !== st.key) {
+      void qc.invalidateQueries({ predicate: (x) => x.queryKey[0] === "chat" && x.queryKey[1] !== "state" });
+      if (!onChat && st.last_id > prev.last_id && st.unread > prev.unread) {
+        toast(`Yeni mesaj · ${st.unread} okunmamış (Sohbet)`);
+      }
+    }
+    last.current = st;
+  }, [st, qc, onChat, toast]);
+  const unread = enabled ? st?.unread ?? 0 : 0;
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\+?\) /, "");
+    document.title = unread ? `(${unread > 99 ? "99+" : unread}) ${base}` : base;
+  }, [unread]);
+  return unread;
+}
+
 const THEME_NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "amoled", amoled: "light" };
 
 export default function Layout() {
@@ -100,6 +142,7 @@ export default function Layout() {
   const { pid } = useParams();
   const { project } = useProject();
   const live = useLiveSync();
+  const unread = useChatPoll(can("chat"));
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const toggle = () => {
     setCollapsed((c) => {
@@ -116,6 +159,7 @@ export default function Layout() {
     <NavLink key={to} to={to} end={i.end} title={collapsed ? i.label : undefined}>
       <i.icon size={17} strokeWidth={1.9} aria-hidden />
       <span className="nav-label">{i.label}</span>
+      {i.to === "/chat" && unread > 0 && <span className="nav-badge">{unread > 99 ? "99+" : unread}</span>}
     </NavLink>
   );
   const ThemeIcon = mode === "light" ? Sun : Moon;

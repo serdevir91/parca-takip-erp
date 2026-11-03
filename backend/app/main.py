@@ -20,7 +20,7 @@ log = logging.getLogger("erp")
 
 def _ensure_dirs() -> None:
     cfg = get_settings()
-    for d in (cfg.bom_dir, cfg.drawing_dir, cfg.thumb_dir):
+    for d in (cfg.bom_dir, cfg.drawing_dir, cfg.thumb_dir, cfg.photo_dir, cfg.chat_dir):
         try:
             d.mkdir(parents=True, exist_ok=True)
         except OSError as e:  # pragma: no cover - read-only dev machines

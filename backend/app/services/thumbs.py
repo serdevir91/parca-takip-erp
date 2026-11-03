@@ -13,7 +13,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-THUMB_WIDTH = 320          # px, longest side target for the list preview
+THUMB_WIDTH = 480          # px, longest side target for the list and gallery preview
 
 try:  # pragma: no cover - import guard
     import pypdfium2 as _pdfium

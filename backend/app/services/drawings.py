@@ -228,7 +228,7 @@ def drawing_out(d: Drawing, revs: dict[str, str] | None = None, versions: bool =
         "uploaded_at": cur.uploaded_at.isoformat() if cur and cur.uploaded_at else None,
         "bom_rev": bom_rev,
         "rev_mismatch": bool(d.part_no) and (d.part_no in revs) and rev_mismatch(d.rev, bom_rev),
-        "inline": d.ext in INLINE_EXTS, "has_thumb": d.ext == "pdf",
+        "inline": d.ext in INLINE_EXTS, "has_thumb": d.ext in INLINE_EXTS,
     }
     if versions:
         out["versions"] = [version_out(v) for v in sorted(d.versions, key=lambda v: -v.version_no)]
@@ -315,9 +315,12 @@ def delete_drawing(db: Session, d: Drawing, user: User | None) -> None:
 
 
 def thumb_for(db: Session, v: DrawingVersion) -> Path | None:
-    """Cached first-page PNG for a PDF version, generated on first request."""
+    """Cached first-page PNG for a PDF version, generated on first request. PNG/JPG drawings are their
+    own preview."""
     if v.thumb_path and Path(v.thumb_path).is_file():
         return Path(v.thumb_path)
+    if v.drawing.ext in INLINE_EXTS and v.drawing.ext != "pdf":
+        return Path(v.storage_path) if Path(v.storage_path).is_file() else None
     if v.drawing.ext != "pdf":
         return None
     dst = get_settings().thumb_dir / f"dv{v.id}.png"

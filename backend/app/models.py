@@ -539,3 +539,69 @@ class TimeEntry(Base):
     note: Mapped[str] = mapped_column(String(300), default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Photo(Base):
+    """A product photo, attached to a part number (global like drawings) or a stock item (by id)."""
+    __tablename__ = "photos"
+    __table_args__ = (Index("ix_photos_entity", "entity", "entity_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity: Mapped[str] = mapped_column(String(20))        # part | stock
+    entity_key: Mapped[str] = mapped_column(String(200))   # part_no or stock item id
+    filename: Mapped[str] = mapped_column(String(300))
+    content_type: Mapped[str] = mapped_column(String(100), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    storage_path: Mapped[str] = mapped_column(String(500))
+    # Small JPEG made by the browser at upload time; the original is served when it is missing
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    caption: Mapped[str] = mapped_column(String(300), default="")
+    uploaded_by: Mapped[str] = mapped_column(String(64), default="")
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChatRoom(Base):
+    """A conversation: kind "direct" (exactly two users, dm_key "<low id>:<high id>") or "group"."""
+    __tablename__ = "chat_rooms"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), default="group")
+    name: Mapped[str] = mapped_column(String(120), default="")
+    dm_key: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Time of the last message, for sorting the room list
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    members: Mapped[list["ChatMember"]] = relationship(back_populates="room", cascade="all, delete-orphan")
+
+
+class ChatMember(Base):
+    __tablename__ = "chat_members"
+    __table_args__ = (UniqueConstraint("room_id", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)   # may rename the group and manage members
+    last_read_id: Mapped[int] = mapped_column(Integer, default=0)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    room: Mapped[ChatRoom] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
+
+
+class ChatMessage(Base):
+    """kind: text (may carry one file), system (member changes, written by the server)."""
+    __tablename__ = "chat_messages"
+    __table_args__ = (Index("ix_chat_messages_room", "room_id", "id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    username: Mapped[str] = mapped_column(String(120), default="")   # display name at send time
+    kind: Mapped[str] = mapped_column(String(10), default="text")
+    body: Mapped[str] = mapped_column(Text, default="")
+    file_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -35,7 +35,7 @@ Read this file first. Do not re-scan the whole project.
     - Hooks: a sent PO or started WO sets tracking to "Devam ediyor" and fasteners to "Sipariş Verildi";
       when issued >= required, parts become "Tamamlandı" and fasteners "Teslim Edildi".
 - `app/permissions.py`: per-module levels `none`/`view`/`edit` for projects, parts, fasteners, drawings, control,
-  planning, purchasing, workorders, stock, hr, contacts, sales, finance and admin. Role defaults plus per-user
+  planning, purchasing, workorders, stock, hr, contacts, sales, finance, chat and admin. Role defaults plus per-user
   overrides in `users.permissions` (JSON); admin always has full access. Guard endpoints with
   `Depends(require("<module>", "edit"))`; `/api/admin/permissions` serves the catalog to the UI.
 - `app/services/sync.py` + the `live_sync` middleware in `main.py`: every successful write bumps `sync_state.rev`
@@ -45,6 +45,16 @@ Read this file first. Do not re-scan the whole project.
   means the firm owes us: + issued sales invoice, + payment out; - issued purchase invoice, - payment in.
   Routers: `api/sales.py`, `api/finance.py`, `api/hr.py` (employees, time entries; labour cost flows into
   `erp.project_costs` as source "İşçilik") and `api/overview.py` (home page KPIs, filtered by permission).
+- Photos and chat:
+  - `api/photos.py`: several photos per part number (entity "part", key = part_no, global like drawings) or stock
+    item (entity "stock", key = item id). Permission follows the parts/stock module. Files go to `photo_dir`.
+  - `api/chat.py` (prefix `/chat`): direct rooms (`dm_key` "low:high") and groups with admins, messages with one
+    optional attachment each (`chat_dir/<room>`), read markers (`ChatMember.last_read_id`), soft delete.
+    Module `chat` (every role defaults to edit). Chat writes are in `sync.SKIP_PATHS`; clients poll
+    `GET /chat/state` instead, whose `key` changes on new messages, room edits/deletions and read markers.
+  - `services/uploads.py`: `store()` (uuid name, size limit), `safe_name`, `is_image`, `remove`.
+  - The server has no image library: the browser sends a JPEG `thumb` with each image upload
+    (`src/api/images.ts` `makeThumb`); thumb endpoints fall back to the original. File endpoints accept `?access_token`.
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
@@ -63,10 +73,16 @@ Read this file first. Do not re-scan the whole project.
   - `DataGrid`: virtualized, with Excel-like column filters, inline edit and selection.
   - `Layout`: `Page`, `useProject`.
   - `Toast`, `PdfViewer`, the import modals and `UpdateCheck`.
+  - `viewer/`: `Viewer` (gallery of `ViewItem`s, picks `PdfViewer` or `ImageLightbox`, thumbnail strip, ← →),
+    `ImageLightbox` (transform-based wheel/pinch zoom, pan, rotate), `gestures.ts` (`useGestures`) and `Thumb`
+    (cached, lazy object-URL thumbnails of protected API files; `forgetThumb` after delete).
+  - `Photos`: photo grid + multi upload for one part number or stock item.
 - `Layout` also has the grouped, collapsible sidebar, `PageHeader` and `useLiveSync()` (polls `/api/sync` every
   4 s and invalidates all queries when the rev changes).
 - Routes: `/` is `Home` (dashboard), `/projects` the project list, `/p/:pid/*` the project screens, then
-  `/purchasing`, `/work-orders`, `/stock`, `/hr`, `/contacts`, `/sales`, `/finance` and `/admin`.
+  `/purchasing`, `/work-orders`, `/stock`, `/hr`, `/contacts`, `/sales`, `/finance`, `/chat` (`?r=<room>`) and `/admin`.
+- `Layout` also runs `useChatPoll` (`/chat/state` every 4 s): unread badge, "(n)" tab title, new-message toast,
+  and it invalidates `["chat", …]` queries when the key changes.
 - `src/pages/`: one file per spec §8 screen. The ERP screens are `Planning`, `Purchasing`, `WorkOrders` and `Stock`;
   their shared types, formatters and pickers are in `pages/erp/common.tsx`. The commerce screens `Sales`, `Finance`,
   `Hr` and `Contacts` share types and widgets (`LinesEditor`, `LedgerModal`, `Stat`) in `pages/erp/commerce.tsx`.

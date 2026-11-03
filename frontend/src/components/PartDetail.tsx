@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { api, blobUrl, desktopFile, download, getToken } from "../api/client";
-import { desktop } from "../api/desktop";
+import { api, download } from "../api/client";
+import { useAuth } from "../api/auth";
 import { statusStyle } from "../theme/theme";
+import Photos from "./Photos";
 import { errText, useToast } from "./Toast";
+import Thumb from "./viewer/Thumb";
+import Viewer, { type ViewItem } from "./viewer/Viewer";
 
 /** One row of GET /projects/{pid}/parts (flat or tree) or an archived tracking row. */
 export type PartRow = {
@@ -55,19 +58,27 @@ const fmtNum = (n: number | null | undefined) => (n === null || n === undefined 
 const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : typeof v === "boolean" ? (v ? "Evet" : "Hayır") : String(v));
 const ACTIONS: Record<string, string> = { create: "Oluşturuldu", delete: "Silindi", update: "Değişti", import: "İçe aktarıldı" };
 
+export const drawingItem = (d: { id: number; filename: string; ext: string; rev?: string | null }): ViewItem => ({
+  key: d.id, name: d.filename, path: `/drawings/${d.id}/file`, thumb: `/drawings/${d.id}/thumb`,
+  kind: (d.ext || "").toLowerCase() === "pdf" ? "pdf" : "image", caption: d.rev ? `Rev ${d.rev}` : undefined,
+});
+
 export default function PartDetail({ pid, partNo, onClose }: { pid: number; partNo: string; onClose: () => void }) {
+  const canPhoto = useAuth().can("parts", "edit");
+  const [viewing, setViewing] = useState<number | null>(null);
   const q = useQuery({
     queryKey: ["parts", pid, "detail", partNo],
     queryFn: () => api.get<Detail>(`/projects/${pid}/parts/${encodeURIComponent(partNo)}`),
   });
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const k = (e: KeyboardEvent) => e.key === "Escape" && viewing === null && onClose();
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
+  }, [onClose, viewing]);
 
   const d = q.data;
+  const viewable = (d?.drawings ?? []).filter((x) => INLINE.has((x.ext || "").toLowerCase()));
   const p = d?.part;
   return (
     <div className="drawer part-detail" role="dialog" aria-label={`Parça detayı ${partNo}`}>
@@ -112,9 +123,16 @@ export default function PartDetail({ pid, partNo, onClose }: { pid: number; part
             )}
             {d.drawings.length === 0 ? <div className="muted">Teknik resim yok.</div> : (
               <div className="part-drawings">
-                {d.drawings.map((dr) => <DrawingCard key={dr.id} d={dr} />)}
+                {d.drawings.map((dr) => (
+                  <DrawingCard key={dr.id} d={dr} onOpen={() => setViewing(viewable.findIndex((x) => x.id === dr.id))} />
+                ))}
               </div>
             )}
+          </section>
+
+          <section>
+            <h4>Fotoğraflar</h4>
+            <Photos entity="part" entityKey={partNo} canEdit={canPhoto} />
           </section>
 
           <section>
@@ -171,55 +189,29 @@ export default function PartDetail({ pid, partNo, onClose }: { pid: number; part
           </section>
         </>
       )}
+      {viewing !== null && viewing >= 0 && (
+        <Viewer items={viewable.map(drawingItem)} start={viewing} onClose={() => setViewing(null)} />
+      )}
     </div>
   );
 }
 
-function DrawingCard({ d }: { d: Drawing }) {
+function DrawingCard({ d, onOpen }: { d: Drawing; onOpen: () => void }) {
   const toast = useToast();
-  const [thumb, setThumb] = useState<string | null>(null);
   const ext = (d.ext || "").toLowerCase();
   const inline = INLINE.has(ext);
-
-  useEffect(() => {
-    let url: string | null = null;
-    let alive = true;
-    const path = ext === "pdf" ? `/drawings/${d.id}/thumb` : ext === "png" || ext === "jpg" || ext === "jpeg" ? `/drawings/${d.id}/file` : null;
-    if (path) {
-      blobUrl(path).then((u) => { url = u; if (alive) setThumb(u); else URL.revokeObjectURL(u); }).catch(() => { /* no preview */ });
-    }
-    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [d.id, ext]);
-
-  const open = async () => {
-    if (!inline) {
-      try { await download(`/drawings/${d.id}/file`, d.filename); } catch (e) { toast(errText(e), true); }
-      return;
-    }
-    if (desktop()) {
-      // The desktop window has no tabs: open the file in its default program (PDF reader, image viewer)
-      try {
-        await desktopFile({ path: `/drawings/${d.id}/file`, token: getToken(), filename: d.filename, action: "open" });
-      } catch (e) { toast(errText(e), true); }
-      return;
-    }
-    const w = window.open("", "_blank");
-    try {
-      const u = await blobUrl(`/drawings/${d.id}/file`);
-      if (w) w.location.href = u; else window.location.assign(u);
-      setTimeout(() => URL.revokeObjectURL(u), 60_000);
-    } catch (e) {
-      w?.close();
-      toast(errText(e), true);
-    }
+  const open = () => {
+    if (inline) onOpen();
+    else void download(`/drawings/${d.id}/file`, d.filename).catch((e) => toast(errText(e), true));
   };
-
   return (
     <div className="card part-drawing">
-      {thumb ? <img src={thumb} alt={d.filename} onClick={open} /> : <div className="part-drawing-ph" onClick={open}>{ext.toUpperCase()}</div>}
+      <div className="part-drawing-img" onClick={open} title={inline ? "Büyütmek için tıklayın" : "İndir"}>
+        <Thumb path={inline ? `/drawings/${d.id}/thumb` : null} label={d.filename} />
+      </div>
       <div style={{ wordBreak: "break-all" }}><b>{d.filename}</b></div>
       <div className="muted">Rev {d.rev || "—"} · sürüm {d.current_version}{d.match_via ? ` · ${d.match_via === "manual" ? "elle eşleşti" : "otomatik"}` : ""}</div>
-      <button className="btn small" onClick={open}>{inline ? "Aç" : "İndir"}</button>
+      <button className="btn small" onClick={open}>{inline ? "İncele" : "İndir"}</button>
     </div>
   );
 }

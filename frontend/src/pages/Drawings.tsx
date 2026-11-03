@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Page, useProject } from "../components/Layout";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
-import PdfViewer from "../components/PdfViewer";
+import PreviewThumb from "../components/viewer/Thumb";
+import Viewer, { type ViewItem } from "../components/viewer/Viewer";
 import { errText, useToast } from "../components/Toast";
 import { api, ApiError, blobUrl, desktopFile, download, getToken, upload } from "../api/client";
 import { desktop } from "../api/desktop";
 import { useAuth } from "../api/auth";
+import { LayoutGrid, List } from "lucide-react";
 
 // ---------- API types (backend/app/services/drawings.py drawing_out / project_listing / _result) ----------
 type Suggestion = { part_no: string; score: number };
@@ -42,9 +44,14 @@ type Row = {
   versions: number | null; uploaded_by: string; uploaded_at: string; main_group: string; via: string; suggestion: string;
 };
 type Filter = "all" | "matched" | "unmatched" | "rev" | "no_drawing";
-type Viewer = { kind: "pdf" | "image"; src: string; title: string; name: string };
+type Opened = { items: ViewItem[]; start: number };
 
-const IMAGE_EXTS = new Set(["png", "jpg", "jpeg"]);
+const IMAGE_EXTS_OR_PDF = new Set(["pdf", "png", "jpg", "jpeg"]);
+const dwItem = (d: DrawingOut): ViewItem => ({
+  key: d.id, name: d.filename, path: `/drawings/${d.id}/file`, thumb: d.has_thumb ? `/drawings/${d.id}/thumb` : undefined,
+  kind: d.ext === "pdf" ? "pdf" : "image",
+  caption: [d.part_no, d.rev ? `Rev ${d.rev}` : ""].filter(Boolean).join(" · "),
+});
 const VIA_LABELS: Record<string, string> = { exact: "Otomatik", normalized: "Otomatik (normalize)", alias: "Alias", manual: "Elle" };
 const STATUS_LABELS: Record<UploadResult["status"], string> = {
   created: "Yeni", new_version: "Yeni sürüm", unchanged: "Değişmedi", rejected: "Reddedildi",
@@ -348,39 +355,6 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
 }
 
 // ---------- image modal ----------
-function ImageViewer({ src, title, onClose, onDownload }: { src: string; title: string; onClose: () => void; onDownload: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    let u: string | null = null;
-    blobUrl(src).then((x) => { u = x; if (alive) setUrl(x); else URL.revokeObjectURL(x); }).catch((e) => alive && setErr(errText(e)));
-    return () => { alive = false; if (u) URL.revokeObjectURL(u); };
-  }, [src]);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
-  return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal pdfv" onClick={(e) => e.stopPropagation()}>
-        <div className="row pdfv-bar">
-          <b className="pdfv-title">{title}</b>
-          <span className="spacer" style={{ flex: 1 }} />
-          <button className="btn small" onClick={onDownload}>İndir</button>
-          <button className="btn small" onClick={onClose}>Kapat</button>
-        </div>
-        <div className="pdfv-body">
-          {err ? <div className="error" style={{ padding: 16 }}>{err}</div>
-            : url ? <img src={url} alt={title} style={{ maxWidth: "100%" }} />
-            : <div className="muted pdfv-loading">Yükleniyor…</div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------- detail drawer ----------
 function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
   d0: DrawingOut; partNos: string[]; canDesign: boolean; onClose: () => void;
@@ -519,7 +493,14 @@ export default function Drawings() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<DrawingOut | null>(null);
-  const [viewer, setViewer] = useState<Viewer | null>(null);
+  const [viewer, setViewer] = useState<Opened | null>(null);
+  const [mode, setMode] = useState<"list" | "gallery">(() => {
+    try { return localStorage.getItem("erp_dw_view") === "gallery" ? "gallery" : "list"; } catch { return "list"; }
+  });
+  const setView = (m: "list" | "gallery") => {
+    setMode(m);
+    try { localStorage.setItem("erp_dw_view", m); } catch { /* private mode */ }
+  };
   const [showUpload, setShowUpload] = useState(false);
   const [selection, setSelection] = useState<RowSelectionState>({});
   const [visible, setVisible] = useState<Row[]>([]);
@@ -599,13 +580,22 @@ export default function Drawings() {
 
   useEffect(() => { setSelection({}); }, [filter]);
 
+  // Viewable drawings in the current filter: the viewer steps through them with ← →
+  const gallery = useMemo(() => rows.filter((r) => r.d && IMAGE_EXTS_OR_PDF.has(r.d.ext)).map((r) => r.d!), [rows]);
   const openFile = useCallback((d: DrawingOut, v?: VersionOut) => {
-    const src = v ? `/drawings/versions/${v.id}/file` : `/drawings/${d.id}/file`;
-    const title = v ? `${d.filename} · v${v.version_no}` : d.filename;
-    if (d.ext === "pdf") setViewer({ kind: "pdf", src, title, name: d.filename });
-    else if (IMAGE_EXTS.has(d.ext)) setViewer({ kind: "image", src, title, name: d.filename });
-    else void download(src, d.filename).catch((e) => toast(errText(e), true));
-  }, [toast]);
+    if (!IMAGE_EXTS_OR_PDF.has(d.ext)) {
+      const src = v ? `/drawings/versions/${v.id}/file` : `/drawings/${d.id}/file`;
+      void download(src, d.filename).catch((e) => toast(errText(e), true));
+      return;
+    }
+    const kind = d.ext === "pdf" ? "pdf" as const : "image" as const;
+    if (v) {
+      setViewer({ items: [{ key: `v${v.id}`, name: `${d.filename} · v${v.version_no}`, path: `/drawings/versions/${v.id}/file`, kind }], start: 0 });
+      return;
+    }
+    const list = gallery.some((x) => x.id === d.id) ? gallery : [d];
+    setViewer({ items: list.map(dwItem), start: list.findIndex((x) => x.id === d.id) });
+  }, [toast, gallery]);
 
   const assignQuick = useMutation({
     mutationFn: ({ id, part_no }: { id: number; part_no: string }) => api.post(`/drawings/${id}/assign`, { part_no }),
@@ -714,6 +704,10 @@ export default function Drawings() {
             </span>
           )}
           <span className="spacer" style={{ flex: 1 }} />
+          <div className="seg" role="group" aria-label="Görünüm">
+            <button className={mode === "list" ? "on" : ""} onClick={() => setView("list")} title="Liste"><List size={15} /> Liste</button>
+            <button className={mode === "gallery" ? "on" : ""} onClick={() => setView("gallery")} title="Küçük resimler"><LayoutGrid size={15} /> Galeri</button>
+          </div>
           {canDesign && (
             <button className={"btn" + (showUpload ? "" : " primary")} onClick={() => setShowUpload((s) => !s)}>
               {showUpload ? "Yükleme panelini gizle" : "Resim yükle"}
@@ -735,6 +729,31 @@ export default function Drawings() {
       ) : listQ.isError ? (
         <div className="error" style={{ padding: 16 }}>
           {errText(listQ.error)} <button className="btn small" onClick={() => void listQ.refetch()}>Tekrar dene</button>
+        </div>
+      ) : mode === "gallery" ? (
+        <div className="dw-gallery-wrap">
+          <div className="row" style={{ marginBottom: 8 }}>
+            <input type="search" placeholder="Parça no veya dosya adı ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
+            <span className="muted">{rows.length.toLocaleString("tr-TR")} kayıt · küçük resme tıklayınca büyür</span>
+          </div>
+          {!rows.length && <div className="empty">{filter === "no_drawing" ? "Resmi olmayan imalat parçası yok." : "Resim yok."}</div>}
+          <div className="dw-gallery">
+            {rows.map((r) => (
+              <div key={r.key} className={`card dw-card${r.kind !== "matched" ? " warn-card" : ""}`}>
+                <div className="dw-card-img" onClick={() => (r.d ? openFile(r.d) : undefined)}
+                  title={r.d ? (r.d.inline ? "Büyütmek için tıklayın" : "İndir") : ""}>
+                  {r.d ? <PreviewThumb path={r.d.has_thumb ? `/drawings/${r.d.id}/thumb` : null} label={r.d.filename} />
+                    : <span className="thumb-ph">Resim yok</span>}
+                  {r.d?.rev_mismatch && <span className="badge warn dw-card-badge">Rev farkı</span>}
+                </div>
+                <div className="dw-card-body" onClick={() => r.d && setSelected(r.d)}>
+                  <b className="mono">{r.part_no || "Eşleşmedi"}</b>
+                  <span className="muted" title={r.filename}>{r.filename || r.main_group}</span>
+                  {r.d && <span className="muted">Rev {r.rev || "—"} · {r.ext}{r.versions && r.versions > 1 ? ` · ${r.versions} sürüm` : ""}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <DataGrid<Row>
@@ -776,14 +795,7 @@ export default function Drawings() {
         <DetailDrawer key={selected.id} d0={selected} partNos={partNos} canDesign={canDesign}
           onClose={() => setSelected(null)} onOpen={openFile} onChanged={refresh} />
       )}
-      {viewer?.kind === "pdf" && (
-        <PdfViewer src={viewer.src} title={viewer.title} onClose={() => setViewer(null)}
-          onDownload={() => void download(viewer.src, viewer.name).catch((e) => toast(errText(e), true))} />
-      )}
-      {viewer?.kind === "image" && (
-        <ImageViewer src={viewer.src} title={viewer.title} onClose={() => setViewer(null)}
-          onDownload={() => void download(viewer.src, viewer.name).catch((e) => toast(errText(e), true))} />
-      )}
+      {viewer && <Viewer items={viewer.items} start={viewer.start} onClose={() => setViewer(null)} />}
     </Page>
   );
 }

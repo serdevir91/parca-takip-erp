@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { useAuth } from "../api/auth";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
 import { Page } from "../components/Layout";
+import Photos from "../components/Photos";
 import { errText, useToast } from "../components/Toast";
 import { Field, Loading, Modal, fmtDate } from "./admin/shared";
 import { ITEM_KINDS, ProjectSelect, fmtMoney, fmtQty, numOrNull, type StockItem, type StockMove } from "./erp/common";
@@ -103,6 +104,7 @@ function Items() {
 
 function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) {
   const toast = useToast();
+  const { can } = useAuth();
   const refresh = useRefresh();
   const [code, setCode] = useState(item?.code ?? "");
   const [name, setName] = useState(item?.name ?? "");
@@ -145,6 +147,12 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
         {!item && <Field label="Açılış miktarı"><input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} /></Field>}
       </div>
       <div style={{ marginTop: 10 }}><Field label="Not"><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
+      {item && (
+        <div style={{ marginTop: 12 }}>
+          <h4 style={{ margin: "0 0 6px" }}>Fotoğraflar</h4>
+          <Photos entity="stock" entityKey={String(item.id)} canEdit={can("stock", "edit")} />
+        </div>
+      )}
     </Modal>
   );
 }

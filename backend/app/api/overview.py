@@ -20,7 +20,7 @@ router = APIRouter(tags=["overview"])
 ENTITY_LABELS = {"tracking": "Parça", "bom": "BOM", "drawing": "Teknik resim", "purchase_order": "Satın alma",
                  "work_order": "İş emri", "stock": "Stok", "sales_order": "Satış", "invoice": "Fatura",
                  "payment": "Ödeme", "employee": "Personel", "time_entry": "Zaman", "firm": "Cari kart",
-                 "user": "Kullanıcı", "project": "Proje"}
+                 "user": "Kullanıcı", "project": "Proje", "photo": "Fotoğraf"}
 
 
 def _count(db: Session, q: Any) -> int:

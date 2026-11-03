@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Download, Maximize, X, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { ApiError, getToken } from "../api/client";
 import { errText } from "./Toast";
+import { useGestures } from "./viewer/gestures";
+import type { NavProps } from "./viewer/ImageLightbox";
 
 // Bundled worker: no external resources (offline LAN).
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -26,20 +29,32 @@ type Props = {
   title: string;
   onClose: () => void;
   onDownload?: () => void;
+  /** Previous/next file when opened from a gallery */
+  nav?: NavProps;
+  footer?: ReactNode;
+  actions?: ReactNode;
 };
 
-/** Modal PDF viewer rendering one page at a time on a canvas with the locally bundled pdf.js. */
-export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
+/** Modal PDF viewer with the locally bundled pdf.js. Wheel or pinch zooms around the cursor, dragging
+ *  pans, double click toggles fit/zoom. Zooming first stretches the current bitmap (instant), then
+ *  re-renders sharply off screen so the page never flashes blank. */
+export default function PdfViewer({ src, title, onClose, onDownload, nav, footer, actions }: Props) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [scale, setScale] = useState(1);
+  const [renderScale, setRenderScale] = useState(0);
   const [fit, setFit] = useState(true);
   const [rendering, setRendering] = useState(false);
+  const [base, setBase] = useState<{ w: number; h: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const [boxWidth, setBoxWidth] = useState(0);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  // Page point (PDF units) that must stay under the cursor (cx, cy) after the next zoom
+  const anchor = useRef<{ px: number; py: number; cx: number; cy: number } | null>(null);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
 
   // Load the document; destroy it on close / source change.
   useEffect(() => {
@@ -51,6 +66,7 @@ export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
     setPage(1);
     setPageInput("1");
     setFit(true);
+    setBase(null);
     fetchBytes(src, ctl.signal)
       .then((buf) => {
         if (ctl.signal.aborted) return;
@@ -76,43 +92,85 @@ export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
     };
   }, [src]);
 
-  // Track available width for "fit width".
+  // Track the available area for "fit".
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setBoxWidth(el.clientWidth));
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
-    setBoxWidth(el.clientWidth);
+    setBox({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
 
-  // Render the current page.
+  // Page size at scale 1.
   useEffect(() => {
-    if (!doc || !canvasRef.current) return;
+    if (!doc) return;
+    let alive = true;
+    doc.getPage(page).then((pg) => {
+      if (!alive) return;
+      const v = pg.getViewport({ scale: 1 });
+      setBase({ w: v.width, h: v.height });
+    }).catch((e: unknown) => alive && setError(errText(e)));
+    return () => { alive = false; };
+  }, [doc, page]);
+
+  // Fit the whole page (drawings are usually landscape sheets: fit both sides, not only the width).
+  useEffect(() => {
+    if (!fit || !base || box.w <= 0) return;
+    const s = Math.min((box.w - 24) / base.w, (box.h - 24) / base.h);
+    setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)));
+  }, [fit, base, box]);
+
+  // Show the new size at once (CSS stretch) and keep the anchor point under the cursor.
+  useLayoutEffect(() => {
+    const c = canvasRef.current;
+    const el = boxRef.current;
+    if (!c || !el || !base) return;
+    c.style.width = `${Math.floor(base.w * scale)}px`;
+    c.style.height = `${Math.floor(base.h * scale)}px`;
+    const a = anchor.current;
+    anchor.current = null;
+    if (a) {
+      const cr = c.getBoundingClientRect();
+      const br = el.getBoundingClientRect();
+      el.scrollLeft += cr.left - br.left + a.px * scale - a.cx;
+      el.scrollTop += cr.top - br.top + a.py * scale - a.cy;
+    }
+  }, [scale, base]);
+
+  // Sharp re-render a moment after zooming stops.
+  useEffect(() => {
+    const t = setTimeout(() => setRenderScale(scale), 160);
+    return () => clearTimeout(t);
+  }, [scale]);
+
+  useEffect(() => {
+    if (!doc || !renderScale || !canvasRef.current) return;
     let cancelled = false;
     let rt: RenderTask | null = null;
     setRendering(true);
     doc.getPage(page).then((pg) => {
       if (cancelled) return;
-      const base = pg.getViewport({ scale: 1 });
-      let s = scale;
-      if (fit && boxWidth > 0) {
-        s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, (boxWidth - 24) / base.width));
-        if (Math.abs(s - scale) > 0.001) setScale(s);
-      }
-      const vp = pg.getViewport({ scale: s });
+      const vp = pg.getViewport({ scale: renderScale });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      canvas.width = Math.floor(vp.width * dpr);
-      canvas.height = Math.floor(vp.height * dpr);
-      canvas.style.width = `${Math.floor(vp.width)}px`;
-      canvas.style.height = `${Math.floor(vp.height)}px`;
-      rt = pg.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
+      // Browsers refuse very large canvases; cap the bitmap, CSS still shows the requested size
+      const k = Math.min(1, 12000 / Math.max(vp.width * dpr, vp.height * dpr));
+      const off = document.createElement("canvas");
+      off.width = Math.floor(vp.width * dpr * k);
+      off.height = Math.floor(vp.height * dpr * k);
+      const octx = off.getContext("2d");
+      if (!octx) return;
+      const t = dpr * k;
+      rt = pg.render({ canvasContext: octx, viewport: vp, transform: t !== 1 ? [t, 0, 0, t, 0, 0] : undefined });
       rt.promise
-        .then(() => { if (!cancelled) setRendering(false); })
+        .then(() => {
+          const c = canvasRef.current;
+          if (cancelled || !c) return;
+          c.width = off.width;
+          c.height = off.height;
+          c.getContext("2d")?.drawImage(off, 0, 0);
+          setRendering(false);
+        })
         .catch((e: unknown) => {
           if (cancelled) return;
           const name = e && typeof e === "object" && "name" in e ? String((e as { name: unknown }).name) : "";
@@ -124,9 +182,7 @@ export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
       cancelled = true;
       rt?.cancel();
     };
-    // scale is an output when fit=true; including it would re-render once more, harmless but wasteful.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, page, fit, fit ? boxWidth : scale]);
+  }, [doc, page, renderScale]);
 
   const pages = doc?.numPages ?? 0;
   const go = useCallback((n: number) => {
@@ -135,47 +191,80 @@ export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
     setPage(p);
     setPageInput(String(p));
   }, [pages]);
-  const zoom = useCallback((f: number) => {
+
+  const zoomAt = useCallback((f: number, cx: number, cy: number) => {
+    const c = canvasRef.current;
+    const el = boxRef.current;
+    if (!c || !el) return;
+    const s = scaleRef.current;
+    const s2 = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * f));
+    if (Math.abs(s2 - s) < 1e-4) return;
+    const cr = c.getBoundingClientRect();
+    const br = el.getBoundingClientRect();
+    anchor.current = { px: (cx - (cr.left - br.left)) / s, py: (cy - (cr.top - br.top)) / s, cx, cy };
     setFit(false);
-    setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * f)));
+    setScale(s2);
   }, []);
+  const zoom = useCallback((f: number) => {
+    const el = boxRef.current;
+    if (el) zoomAt(f, el.clientWidth / 2, el.clientHeight / 2);
+  }, [zoomAt]);
+
+  useGestures(boxRef, {
+    pan: (dx, dy) => { const el = boxRef.current; if (el) { el.scrollLeft -= dx; el.scrollTop -= dy; } },
+    zoom: zoomAt,
+    dbl: (cx, cy) => (fit ? zoomAt(2.5, cx, cy) : setFit(true)),
+  }, !!doc);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight" || e.key === "PageDown") go(page + 1);
-      else if (e.key === "ArrowLeft" || e.key === "PageUp") go(page - 1);
-      else if (e.key === "+" || e.key === "=") zoom(STEP);
+      else if (e.key === "ArrowRight" || e.key === "PageDown") {
+        if (page < pages || !nav) go(page + 1); else nav.next();
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        if (page > 1 || !nav) go(page - 1); else nav.prev();
+      } else if (e.key === "+" || e.key === "=") zoom(STEP);
       else if (e.key === "-") zoom(1 / STEP);
+      else if (e.key === "0") setFit(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, zoom, page, onClose]);
+  }, [go, zoom, page, pages, nav, onClose]);
 
   return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal pdfv" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
+    <div className="modal-back viewer-back" onClick={onClose}>
+      <div className="modal pdfv viewer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
         <div className="row pdfv-bar">
           <b className="pdfv-title" title={title}>{title}</b>
           <span className="spacer" style={{ flex: 1 }} />
-          <button className="btn small" disabled={page <= 1} onClick={() => go(page - 1)} title="Önceki sayfa">‹</button>
-          <input className="pdfv-page" value={pageInput} aria-label="Sayfa"
-            onChange={(e) => setPageInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") go(Number(pageInput) || 1); }}
-            onBlur={() => go(Number(pageInput) || page)} />
-          <span className="muted">/ {pages ? pages.toLocaleString("tr-TR") : "–"}</span>
-          <button className="btn small" disabled={!pages || page >= pages} onClick={() => go(page + 1)} title="Sonraki sayfa">›</button>
-          <span className="muted" style={{ marginLeft: 8 }}>|</span>
-          <button className="btn small" onClick={() => zoom(1 / STEP)} title="Uzaklaştır">−</button>
+          {nav && nav.count > 1 && <>
+            <button className="btn small" onClick={nav.prev} title="Önceki dosya"><ChevronLeft size={16} /></button>
+            <span className="muted">Dosya {nav.index + 1} / {nav.count}</span>
+            <button className="btn small" onClick={nav.next} title="Sonraki dosya"><ChevronRight size={16} /></button>
+            <span className="muted">|</span>
+          </>}
+          {pages > 1 && <>
+            <button className="btn small" disabled={page <= 1} onClick={() => go(page - 1)} title="Önceki sayfa">‹</button>
+            <input className="pdfv-page" value={pageInput} aria-label="Sayfa"
+              onChange={(e) => setPageInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") go(Number(pageInput) || 1); }}
+              onBlur={() => go(Number(pageInput) || page)} />
+            <span className="muted">/ {pages.toLocaleString("tr-TR")}</span>
+            <button className="btn small" disabled={page >= pages} onClick={() => go(page + 1)} title="Sonraki sayfa">›</button>
+            <span className="muted">|</span>
+          </>}
+          <button className="btn small" onClick={() => zoom(1 / STEP)} title="Uzaklaştır (−)"><ZoomOut size={16} /></button>
           <span className="muted pdfv-zoom">%{Math.round(scale * 100).toLocaleString("tr-TR")}</span>
-          <button className="btn small" onClick={() => zoom(STEP)} title="Yakınlaştır">+</button>
-          <button className={"btn small" + (fit ? " primary" : "")} onClick={() => setFit(true)}>Genişliğe sığdır</button>
-          <button className="btn small" onClick={() => { setFit(false); setScale(1); }}>%100</button>
-          {onDownload && <button className="btn small" onClick={onDownload}>İndir</button>}
-          <button className="btn small" onClick={onClose} title="Kapat (Esc)">Kapat</button>
+          <button className="btn small" onClick={() => zoom(STEP)} title="Yakınlaştır (+)"><ZoomIn size={16} /></button>
+          <button className={"btn small" + (fit ? " primary" : "")} onClick={() => setFit(true)} title="Sayfayı sığdır (0)"><Maximize size={16} /></button>
+          <button className="btn small" onClick={() => { const el = boxRef.current; if (el) zoomAt(1 / scaleRef.current, el.clientWidth / 2, el.clientHeight / 2); }}>%100</button>
+          {actions}
+          {onDownload && <button className="btn small" onClick={onDownload} title="İndir"><Download size={16} /></button>}
+          <button className="btn small" onClick={onClose} title="Kapat (Esc)"><X size={16} /></button>
         </div>
-        <div className="pdfv-body" ref={boxRef}>
+        <div className="viewer-wrap">
+        <div className="pdfv-body pan-zoom" ref={boxRef}>
           {error ? (
             <div className="error" style={{ padding: 16 }}>PDF açılamadı: {error}</div>
           ) : (
@@ -185,6 +274,12 @@ export default function PdfViewer({ src, title, onClose, onDownload }: Props) {
             </>
           )}
         </div>
+          {nav && nav.count > 1 && <>
+            <button className="viewer-arrow left" onClick={nav.prev} aria-label="Önceki"><ChevronLeft size={28} /></button>
+            <button className="viewer-arrow right" onClick={nav.next} aria-label="Sonraki"><ChevronRight size={28} /></button>
+          </>}
+        </div>
+        {footer}
       </div>
     </div>
   );

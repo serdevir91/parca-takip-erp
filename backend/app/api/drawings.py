@@ -191,13 +191,14 @@ def download_version(vid: int, db: Session = Depends(get_db), user: User = Depen
 
 @router.get("/drawings/{did}/thumb")
 def thumb(did: int, db: Session = Depends(get_db), user: User = Depends(file_user)) -> FileResponse:
-    """First-page PNG of a PDF drawing; 404 when no preview can be made."""
+    """First-page PNG of a PDF drawing (or the PNG/JPG itself); 404 when no preview can be made."""
     d = _drawing_or_404(db, did)
     v = _current(d)
     p = svc.thumb_for(db, v)
     if p is None:
         raise HTTPException(404, "Önizleme yok")
-    return FileResponse(p, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
+    media = "image/png" if p.suffix.lower() == ".png" or d.ext == "pdf" else svc.media_type(d.ext)
+    return FileResponse(p, media_type=media, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.delete("/drawings/versions/{vid}")

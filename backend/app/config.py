@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     jwt_expire_hours: int = 12
     admin_user: str = "admin"
     admin_password: str = "admin"
-    app_version: str = "1.1.0"
+    app_version: str = "1.2.0"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048
@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     @property
     def thumb_dir(self) -> Path:
         return self.data_dir / "thumbs"
+
+    @property
+    def photo_dir(self) -> Path:
+        return self.data_dir / "photos"
+
+    @property
+    def chat_dir(self) -> Path:
+        return self.data_dir / "chat"
 
 
 @lru_cache

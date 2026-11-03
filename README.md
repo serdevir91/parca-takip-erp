@@ -31,6 +31,8 @@ Sistem dört Docker konteynerinden oluşur:
 5. [Offline kurulum (internetsiz sunucu)](#offline-kurulum-internetsiz-sunucu)
 6. [İlk giriş](#ilk-giriş)
 7. [ERP modülleri](#erp-modülleri)
+   - [Fotoğraflar ve resim görüntüleyici](#fotoğraflar-ve-resim-görüntüleyici)
+   - [Sohbet](#sohbet)
 8. [Yedekleme ve geri yükleme](#yedekleme-ve-geri-yükleme)
 9. [Güncelleme](#güncelleme)
 10. [Roller](#roller)
@@ -328,6 +330,37 @@ stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projey
 - **Personel ve zaman:** Personel kartları (saatlik maliyet) ve projeye veya iş emrine yazılan çalışma
   saatleri. İşçilik maliyeti projenin maliyet sekmesine "İşçilik" kaynağıyla eklenir.
 
+### Fotoğraflar ve resim görüntüleyici
+
+- **Parça fotoğrafları:** Parça detayında (Parça listesinde satıra tıklayınca) "Fotoğraflar" bölümü vardır.
+  Bir parça numarasına istediğiniz kadar fotoğraf eklenir: birden fazla dosya seçin, dosyaları bölüme
+  sürükleyin veya telefonda "Çek" ile kamerayı açın. Fotoğraflar parça numarasına bağlıdır, aynı parçayı
+  kullanan bütün projelerde görünür. Her fotoğrafa açıklama yazılabilir.
+- **Stok fotoğrafları:** Stok kartı düzenleme penceresinde aynı bölüm bulunur.
+- **Küçük resimler:** Teknik resimler ekranında "Galeri" düğmesi resimleri büyük küçük resimli kartlar
+  olarak gösterir (PDF, PNG, JPG). Seçim hatırlanır. Liste görünümünde de önizleme sütunu vardır.
+- **Görüntüleyici:** Küçük resme tıklayınca tam ekran açılır. Fare tekerleği veya iki parmakla
+  yakınlaştırılır, sürükleyerek kaydırılır, çift tıklayınca büyür. ← → tuşları veya alttaki şerit ile
+  aynı listedeki diğer resimlere geçilir. Resimler döndürülebilir (R), %100 ve "Ekrana sığdır" düğmeleri
+  vardır. PDF'lerde sayfa geçişi aynı penceredendir.
+- Fotoğraf yükleme sınırı 50 MB'tır. Küçük resmi tarayıcı oluşturur, sunucuya ek yük binmez.
+
+### Sohbet
+
+- Menüde **Sistem › Sohbet**. Kişiye özel mesaj veya grup sohbeti: "Yeni" düğmesi, "Kişiye özel" veya
+  "Grup" sekmesi.
+- Mesajla birlikte dosya gönderilir: 📎 düğmesi, sürükle-bırak veya panodan yapıştırma (ekran görüntüsü).
+  Birden fazla dosya aynı anda seçilebilir. Resimler mesajda küçük resim olarak görünür ve tıklayınca
+  görüntüleyicide açılır; PDF'ler "İncele" ile açılır; diğer dosyalar indirilir. Dosya sınırı 500 MB'tır.
+- Okunmamış mesaj sayısı menüde ve tarayıcı sekmesinin başlığında görünür. Başka bir ekrandayken yeni mesaj
+  gelince bildirim çıkar. Mesajlar birkaç saniye içinde karşı tarafa düşer.
+- Mesajınızın yanında tek tik gönderildi, çift tik herkes okudu demektir. Kendi mesajınızı herkes için
+  silebilirsiniz.
+- Grubu kuran kişi grup yöneticisidir. Yönetici grubu yeniden adlandırır, üye ekler veya çıkarır, başka
+  üyeleri yönetici yapar. Son yönetici ayrılırsa en eski üye yönetici olur. Gruba sonradan eklenen kişi
+  eski mesajları görür.
+- Dosyalar sunucunun veri klasöründe (`chat/`, fotoğraflar `photos/`) tutulur ve yedeğe dahildir.
+
 ## Yedekleme ve geri yükleme
 
 ### Otomatik yedek
@@ -423,7 +456,7 @@ Sorun çıkarsa eski sürüme dönmek için `.env` içindeki `ERP_TAG` değerini
 verebilir: **Yok** (menüde görünmez), **Görüntüle** veya **Düzenle**. "Rol" seçeneği rolün varsayılanını
 kullanır. Modüller: Projeler ve BOM, Parça listesi, Bağlantı elemanları, Teknik resimler, Kontrol listesi,
 İhtiyaç ve maliyet, Satın alma, İş emirleri, Stok, Personel ve zaman, Cari kartlar, Satış, Fatura ve ödemeler,
-Yönetim. Admin rolü her zaman tam yetkilidir. Değişiklik kullanıcının açık ekranına birkaç saniye içinde
+Sohbet, Yönetim. Sohbet bütün rollerde varsayılan olarak açıktır; "Görüntüle" mesajları okur ama yazamaz. Admin rolü her zaman tam yetkilidir. Değişiklik kullanıcının açık ekranına birkaç saniye içinde
 yansır.
 
 Kurallar:
