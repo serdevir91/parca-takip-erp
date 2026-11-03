@@ -17,3 +17,27 @@ export function desktop(): DesktopApi | null {
   const api = (window as unknown as { pywebview?: { api?: Partial<DesktopApi> } }).pywebview?.api;
   return api && typeof api.file_request === "function" ? (api as DesktopApi) : null;
 }
+
+export type DesktopInfo = { version: string; mode: "server" | "client"; base: string; addresses: string[]; data_dir: string; config: string };
+export type DesktopAction = "reload" | "settings" | "open_data" | "update" | "quit";
+type DesktopShell = {
+  app_info(): Promise<DesktopInfo>;
+  app_action(name: DesktopAction): Promise<{ ok: boolean; error?: string }>;
+  set_theme(t: { dark: boolean; caption: string; text: string }): Promise<{ ok: boolean }>;
+};
+
+/** Desktop app 1.5+ (themed "Uygulama" menu and title bar); older apps keep their native menu bar. */
+export function desktopShell(): DesktopShell | null {
+  const api = (window as unknown as { pywebview?: { api?: Partial<DesktopShell> } }).pywebview?.api;
+  return api && typeof api.app_action === "function" ? (api as DesktopShell) : null;
+}
+
+/** pywebview injects its API a moment after the page loads; resolves null in a normal browser. */
+export function whenDesktopShell(timeoutMs = 4000): Promise<DesktopShell | null> {
+  if (desktopShell()) return Promise.resolve(desktopShell());
+  return new Promise((resolve) => {
+    const done = () => resolve(desktopShell());
+    window.addEventListener("pywebviewready", done, { once: true });
+    setTimeout(done, timeoutMs);
+  });
+}

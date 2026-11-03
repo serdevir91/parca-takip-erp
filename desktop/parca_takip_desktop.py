@@ -39,11 +39,13 @@ if FROZEN:
     BACKEND_DIR = BUNDLE                      # app package in the archive, alembic.ini + migrations/ next to it
     MIGRATIONS = BUNDLE / "migrations"
     SPA_DIR = BUNDLE / "frontend_dist"
+    SERVER_SRC = BUNDLE / "server_src"       # backend source for "Sunucuma kur"
     ASSETS = BUNDLE
 else:
     BACKEND_DIR = BUNDLE.parent / "backend"
     MIGRATIONS = BACKEND_DIR / "alembic"
     SPA_DIR = BUNDLE.parent / "frontend" / "dist"
+    SERVER_SRC = BACKEND_DIR
     ASSETS = BUNDLE
     sys.path.insert(0, str(BACKEND_DIR))
 
@@ -261,6 +263,7 @@ class DesktopApp:
         self._cfg = load_config()
         self._window = None
         self._server: EmbeddedServer | None = None
+        self._remote = None      # RemoteInstall of "Sunucuma kur"
         self._base = ""          # URL the window shows: the server root
         self._setup_html = (ASSETS / "setup.html").read_text(encoding="utf-8")
 
@@ -268,7 +271,9 @@ class DesktopApp:
     def get_state(self) -> dict:
         c = self._cfg
         if UI_TEST is not None:
-            UI_TEST.write_text(json.dumps({"ok": True, "version": VERSION, "mode": c.get("mode")}), encoding="utf-8")
+            title_bar = self._paint_title_bar({"dark": True, "caption": "#0f172a", "text": "#e6e9ee"})
+            UI_TEST.write_text(json.dumps({"ok": True, "version": VERSION, "mode": c.get("mode"),
+                                           "title_bar": title_bar}), encoding="utf-8")
             threading.Timer(1.0, self._window.destroy).start()
         data_dir = c.get("data_dir") or default_data_dir()
         return {
@@ -299,6 +304,37 @@ class DesktopApp:
 
         own = {f"http://{ip}:{self._server.port}" for ip in lan_addresses()} if self._server else set()
         return [s for s in discover() if s["url"] not in own]
+
+    # ---- "Sunucuma kur": install the server on a Linux machine over SSH (remote_install.py) ----
+
+    def pick_key_file(self) -> str | None:
+        import webview
+
+        r = self._window.create_file_dialog(webview.FileDialog.OPEN, directory=str(Path.home() / ".ssh"))
+        return r[0] if r else None
+
+    def remote_install(self, form: dict) -> dict:
+        from remote_install import RemoteInstall, build_package
+
+        if self._remote is not None and not self._remote.done:
+            return {"ok": False, "error": "Kurulum sürüyor"}
+        try:
+            job = RemoteInstall(form, ASSETS / "server_install.sh", config_dir() / "known_hosts")
+        except ValueError:
+            return {"ok": False, "error": "Port bir sayı olmalı"}
+        err = job.validate()
+        if err:
+            return {"ok": False, "error": err}
+        try:
+            job.package = build_package(SERVER_SRC, SPA_DIR)
+        except FileNotFoundError as e:
+            return {"ok": False, "error": str(e)}
+        self._remote = job
+        job.start()
+        return {"ok": True}
+
+    def remote_status(self) -> dict:
+        return self._remote.status() if self._remote else {"done": True, "ok": False, "lines": [], "error": ""}
 
     def apply_settings(self, form: dict) -> dict:
         """Save the setup form and connect. A running embedded server cannot switch settings in-process,
@@ -411,6 +447,7 @@ class DesktopApp:
         if not self._window.events.loaded.wait(60):
             log.warning("webview did not report loaded within 60 s")
         log.info("webview ready, mode=%s", self._cfg.get("mode"))
+        self._paint_title_bar(self._cfg.get("theme") or {"dark": True, "caption": "#0f172a", "text": "#e6e9ee"})
         if self._cfg.get("mode") in ("server", "client"):
             self._connect(None)
         elif '<body class="loading">' in (self._window.html or ""):
@@ -518,45 +555,74 @@ class DesktopApp:
             self._server.stop()
         self._window.destroy()
 
-    def _menu(self) -> list:
-        from webview.menu import Menu, MenuAction, MenuSeparator
+    # ---- in-app "Uygulama" menu (frontend/src/components/DesktopMenu.tsx) ----
+    # The native WinForms menu bar was white in every theme, so its actions now live in the themed web UI.
 
-        def reload() -> None:
+    def app_info(self) -> dict:
+        urls = [f"http://{ip}:{self._server.port}" for ip in lan_addresses()] if self._server else []
+        return {"version": VERSION, "mode": "server" if self._server else "client", "base": self._base or "",
+                "addresses": urls, "data_dir": str(self._server.data_dir) if self._server else "",
+                "config": str(CONFIG_FILE)}
+
+    def app_action(self, name: str) -> dict:
+        if name == "reload":
             if self._base:
                 self._window.load_url(self._base + "/")
-
-        def addresses() -> None:
+        elif name == "settings":
+            self.show_settings()
+        elif name == "open_data":
             if self._server is None:
-                self._alert(f"Bağlı sunucu: {self._base or '-'}")
-                return
-            urls = [f"http://{ip}:{self._server.port}" for ip in lan_addresses()]
-            self._alert("Diğer bilgisayarlar tarayıcıdan veya bu uygulamanın \"Ağdaki sunucuya bağlan\" "
-                        "seçeneğiyle şu adreslerden bağlanır:\n\n" + ("\n".join(urls) or "(ağ bağlantısı yok)") +
-                        "\n\nBağlanamıyorlarsa Windows Güvenlik Duvarı'nda bu uygulamaya izin verin.")
+                return {"ok": False, "error": "Veri klasörü yalnızca sunucu modunda bu bilgisayardadır."}
+            open_folder(self._server.data_dir)
+        elif name == "update":
+            threading.Thread(target=self._check_update, args=(False,), daemon=True).start()
+        elif name == "quit":
+            threading.Timer(0.1, self._window.destroy).start()
+        else:
+            return {"ok": False, "error": f"Bilinmeyen işlem: {name}"}
+        return {"ok": True}
 
-        def open_data() -> None:
-            if self._server is not None:
-                open_folder(self._server.data_dir)
-            else:
-                self._alert("Veri klasörü yalnızca sunucu modunda bu bilgisayardadır.")
+    def set_theme(self, theme: dict) -> dict:
+        """Paint the Windows title bar like the app theme; remembered for the next start."""
+        def color(v: object, default: str) -> str:
+            v = str(v or "").strip()
+            return v if re.fullmatch(r"#[0-9a-fA-F]{6}", v) else default
+        t = {"dark": bool(theme.get("dark")), "caption": color(theme.get("caption"), "#0f172a"),
+             "text": color(theme.get("text"), "#e6e9ee")}
+        if self._cfg.get("theme") != t:
+            self._cfg["theme"] = t
+            if self._cfg.get("mode"):
+                save_config({k: v for k, v in self._cfg.items() if not k.startswith("_")})
+        return {"ok": self._paint_title_bar(t)}
 
-        def about() -> None:
-            mode = "Sunucu (veriler bu bilgisayarda)" if self._server else f"İstemci ({self._base or '-'})"
-            self._alert(f"{APP_NAME} masaüstü\nSürüm {VERSION}\nÇalışma şekli: {mode}\nAyarlar: {CONFIG_FILE}")
+    def _paint_title_bar(self, t: dict) -> bool:
+        if not IS_WIN or self._window is None or self._window.native is None:
+            return False
+        try:
+            import ctypes
 
-        return [Menu("Uygulama", [
-            MenuAction("Yeniden yükle", reload),
-            MenuAction("Bağlantı ayarları…", self.show_settings),
-            MenuSeparator(),
-            MenuAction("Ağ adresleri", addresses),
-            MenuAction("Veri klasörünü aç", open_data),
-            MenuSeparator(),
-            MenuAction("Güncellemeleri denetle", lambda: threading.Thread(
-                target=self._check_update, args=(False,), daemon=True).start()),
-            MenuAction("Hakkında", about),
-            MenuSeparator(),
-            MenuAction("Çıkış", lambda: self._window.destroy()),
-        ])]
+            hwnd = ctypes.c_void_p(int(self._window.native.Handle.ToInt64()))
+            dwm = ctypes.windll.dwmapi
+
+            def put(attr: int, value: int) -> bool:
+                v = ctypes.c_int(value)
+                return dwm.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), ctypes.sizeof(v)) == 0
+
+            def colorref(h: str) -> int:  # #RRGGBB -> 0x00BBGGRR
+                return int(h[5:7], 16) << 16 | int(h[3:5], 16) << 8 | int(h[1:3], 16)
+
+            # Dark caption: attribute 20 (Windows 10 20H1+ and 11), 19 on older Windows 10 builds
+            ok = put(20, int(t["dark"])) or put(19, int(t["dark"]))
+            # Windows 11: exact caption, text and border colours (ignored by Windows 10)
+            put(35, colorref(t["caption"]))
+            put(36, colorref(t["text"]))
+            put(34, colorref(t["caption"]))
+            # Repaint the frame now instead of on the next focus change
+            ctypes.windll.user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020)
+            return ok
+        except Exception:  # noqa: BLE001  (cosmetic; never break the app over it)
+            log.exception("title bar theme failed")
+            return False
 
     def run(self) -> None:
         import webview
@@ -575,7 +641,7 @@ class DesktopApp:
         self._window.events.closed += lambda: self._server and self._server.stop()
         icon = ASSETS / "icon.ico"
         webview.start(self._on_start, private_mode=False, storage_path=str(config_dir() / "webview"),
-                      menu=self._menu(), icon=str(icon) if icon.is_file() else None)
+                      icon=str(icon) if icon.is_file() else None)
 
 
 def open_folder(path: Path) -> None:

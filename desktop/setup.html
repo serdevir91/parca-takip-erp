@@ -10,14 +10,15 @@
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text);
          font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
-  .wrap { width: min(640px, calc(100vw - 32px)); }
+  .wrap { width: min(760px, calc(100vw - 32px)); padding: 16px 0; }
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
   .logo { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); display: grid; place-items: center;
           font-weight: 700; font-size: 20px; color: #fff; }
   h1 { font-size: 20px; margin: 0; }
   .muted { color: var(--muted); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  @media (max-width: 620px) { .modes { grid-template-columns: 1fr; } }
   .mode { border: 2px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; background: transparent;
           color: inherit; text-align: left; font: inherit; }
   .mode b { display: block; font-size: 15px; margin-bottom: 4px; }
@@ -37,6 +38,17 @@
   .msg { margin-top: 14px; padding: 10px 12px; border-radius: 8px; display: none; }
   .msg.error { display: block; background: rgba(248, 113, 113, .12); color: var(--error); }
   .msg.ok { display: block; background: rgba(52, 211, 153, .12); color: var(--ok); }
+  input[type=checkbox] { width: auto; flex: none; margin: 0; }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 14px; }
+  .two { display: grid; grid-template-columns: 2fr 1fr; gap: 0 12px; }
+  .two > div { min-width: 0; }
+  pre.log { margin: 14px 0 0; max-height: 220px; overflow: auto; padding: 10px 12px; border-radius: 8px; background: #0b1324;
+            border: 1px solid var(--line); font: 12px/1.45 Consolas, ui-monospace, monospace; white-space: pre-wrap;
+            color: var(--muted); }
+  .step { margin-top: 14px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .step .spin { width: 18px; height: 18px; border-width: 2px; margin: 0; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); }
   .found { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
   .found button { font-size: 12px; padding: 5px 10px; }
   [hidden] { display: none !important; }
@@ -66,6 +78,10 @@
       <button class="mode" data-mode="client" type="button">
         <b>Ağdaki sunucuya bağlan</b>
         <span class="muted">Veriler başka bir bilgisayarda. Bu bilgisayar ona bağlanır, her şey anında eşitlenir.</span>
+      </button>
+      <button class="mode" data-mode="remote" type="button">
+        <b>Sunucuma kur</b>
+        <span class="muted">Linux sunucunuza (Ubuntu, Debian, Rocky…) SSH ile otomatik kurulur, sonra bu bilgisayar ona bağlanır.</span>
       </button>
     </div>
 
@@ -99,6 +115,47 @@
       <div class="found" id="found"></div>
     </div>
 
+    <div id="remote" hidden>
+      <div class="two">
+        <div>
+          <label for="r_host">Sunucu adresi</label>
+          <input id="r_host" placeholder="örnek: 192.168.1.50 veya erp.firma.com" autocomplete="off">
+        </div>
+        <div>
+          <label for="r_ssh_port">SSH portu</label>
+          <input id="r_ssh_port" inputmode="numeric" value="22">
+        </div>
+        <div>
+          <label for="r_user">SSH kullanıcı adı</label>
+          <input id="r_user" value="root" autocomplete="off">
+        </div>
+        <div>
+          <label for="r_port">LAB ERP portu</label>
+          <input id="r_port" inputmode="numeric" value="8000">
+        </div>
+      </div>
+      <label for="r_password">SSH şifresi</label>
+      <input id="r_password" type="password" autocomplete="off">
+      <div class="hint">Kullanıcı root değilse aynı şifre sudo için kullanılır. Şifre kaydedilmez.</div>
+      <label for="r_admin">Yönetici (admin) şifresi</label>
+      <input id="r_admin" type="password" autocomplete="new-password">
+      <div class="hint">Yeni kurulumda zorunlu (en az 8 karakter). Kurulu sunucuyu güncellerken boş bırakılırsa şifre değişmez; veriler korunur.</div>
+      <label class="check"><input type="checkbox" id="r_fw" checked> Sunucunun güvenlik duvarında (ufw / firewalld) bu portu aç</label>
+      <details>
+        <summary>SSH anahtarıyla giriş</summary>
+        <label for="r_key">Özel anahtar dosyası (isteğe bağlı)</label>
+        <div class="row">
+          <input id="r_key" autocomplete="off" placeholder="örnek: C:\Users\ad\.ssh\id_ed25519">
+          <button class="btn" id="r_pick" type="button">Gözat…</button>
+        </div>
+        <div class="hint">Anahtar seçilirse şifre alanı anahtarın parolası ve sudo şifresi olarak kullanılır.</div>
+      </details>
+      <div class="hint" style="margin-top:12px">Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir). Kurulum birkaç dakika sürer.
+        Uygulama <b>/opt/laberp</b>, veriler <b>/var/lib/laberp</b> klasörüne kurulur; <b>laberp</b> hizmeti açılışta kendiliğinden başlar.</div>
+      <div class="step" id="r_step" hidden><div class="spin"></div><span id="r_steptext"></span></div>
+      <pre class="log" id="r_log" hidden></pre>
+    </div>
+
     <div class="msg" id="msg"></div>
     <div class="actions">
       <button class="btn primary" id="go" type="button">Başlat</button>
@@ -114,6 +171,39 @@
     document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
     $("server").hidden = m !== "server";
     $("client").hidden = m !== "client";
+    $("remote").hidden = m !== "remote";
+    $("go").textContent = m === "remote" ? "Kur ve bağlan" : "Başlat";
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function remoteInstall() {
+    const api = window.pywebview.api;
+    const r = await api.remote_install({
+      host: $("r_host").value, ssh_port: $("r_ssh_port").value, user: $("r_user").value,
+      password: $("r_password").value, key_file: $("r_key").value, port: $("r_port").value,
+      admin_password: $("r_admin").value, firewall: $("r_fw").checked,
+    });
+    if (!r.ok) return r;
+    $("r_step").hidden = false; $("r_log").hidden = false;
+    document.querySelectorAll(".mode").forEach((b) => b.disabled = true);
+    let st;
+    for (;;) {
+      st = await api.remote_status();
+      $("r_steptext").textContent = st.step || "";
+      const log = $("r_log"), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+      log.textContent = st.lines.join("\n");
+      if (atEnd) log.scrollTop = log.scrollHeight;
+      if (st.done) break;
+      await sleep(700);
+    }
+    $("r_step").hidden = true;
+    document.querySelectorAll(".mode").forEach((b) => b.disabled = false);
+    if (!st.ok) return { ok: false, error: st.error };
+    show("Sunucu kuruldu: " + st.url + ". Bağlanılıyor…", "ok");
+    $("server_url").value = st.url;
+    const c = await api.apply_settings({ mode: "client", server_url: st.url });
+    if (!c.ok) return { ok: false, error: "Sunucu kuruldu ancak bu bilgisayardan " + st.url + " adresine ulaşılamıyor. " +
+      "Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında " + $("r_port").value + " TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin." };
+    return c;
   }
   async function refreshDb() {
     $("newdb").hidden = await window.pywebview.api.data_dir_has_db($("data_dir").value);
@@ -150,8 +240,17 @@
         $("found").appendChild(b);
       }
     };
+    $("r_pick").onclick = async () => {
+      const f = await window.pywebview.api.pick_key_file();
+      if (f) $("r_key").value = f;
+    };
     $("go").onclick = async () => {
       $("go").disabled = true; show("", "");
+      if (mode === "remote") {
+        const r = await remoteInstall().catch((e) => ({ ok: false, error: String(e) }));
+        if (!r.ok) { show(r.error, "error"); $("go").disabled = false; }
+        return;
+      }
       const r = await window.pywebview.api.apply_settings({
         mode, data_dir: $("data_dir").value, port: $("port").value,
         admin_password: $("admin_password").value, server_url: $("server_url").value,

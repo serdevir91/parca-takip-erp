@@ -8,13 +8,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Employee, Project, TimeEntry, User, WorkOrder
 from ..permissions import require
 from ..services import audit
-from .deps import get_db, project_or_404
+from .deps import any_user, get_db, project_or_404
 
 hr_view, hr_edit = require("hr", "view"), require("hr", "edit")
 
@@ -31,6 +31,7 @@ class EmployeeIn(BaseModel):
     start_date: date | None = None
     active: bool = True
     note: str = ""
+    user_id: int | None = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -43,6 +44,7 @@ class EmployeeUpdate(BaseModel):
     start_date: date | None = None
     active: bool | None = None
     note: str | None = None
+    user_id: int | None = None
 
 
 class TimeIn(BaseModel):
@@ -58,7 +60,7 @@ def _emp_out(e: Employee, hours_30d: float = 0.0) -> dict[str, Any]:
     return {"id": e.id, "name": e.name, "title": e.title, "department": e.department, "phone": e.phone,
             "email": e.email, "hourly_cost": e.hourly_cost,
             "start_date": e.start_date.isoformat() if e.start_date else None, "active": e.active, "note": e.note,
-            "hours_30d": round(hours_30d, 2)}
+            "user_id": e.user_id, "hours_30d": round(hours_30d, 2)}
 
 
 def _emp_or_404(db: Session, emp_id: int) -> Employee:
@@ -66,6 +68,54 @@ def _emp_or_404(db: Session, emp_id: int) -> Employee:
     if e is None:
         raise HTTPException(404, "Personel bulunamadı")
     return e
+
+
+def _check_user(db: Session, user_id: int | None, emp_id: int | None = None) -> None:
+    """A login belongs to at most one personnel card."""
+    if user_id is None:
+        return
+    if db.get(User, user_id) is None:
+        raise HTTPException(404, "Kullanıcı bulunamadı")
+    other = db.scalar(select(Employee).where(Employee.user_id == user_id, Employee.id != (emp_id or 0)))
+    if other is not None:
+        raise HTTPException(409, f"Bu kullanıcı zaten {other.name} kartına bağlı")
+
+
+def _my_card(db: Session, me: User) -> Employee | None:
+    """The card linked to this login; a card with the same e-mail counts when no card is linked yet."""
+    e = db.scalar(select(Employee).where(Employee.user_id == me.id))
+    if e is None and (me.email or "").strip():
+        e = db.scalar(select(Employee).where(Employee.user_id.is_(None),
+                                             func.lower(Employee.email) == me.email.strip().lower()))
+    return e
+
+
+@router.get("/hr/me")
+def my_card(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Every employee sees only their own card and hours, with no hr rights needed."""
+    e = _my_card(db, me)
+    if e is None:
+        return {"employee": None, "rows": [], "total_hours": 0.0, "total_cost": 0.0}
+    since = date.today() - timedelta(days=90)
+    q = (select(TimeEntry).where(TimeEntry.employee_id == e.id, TimeEntry.work_date >= since)
+         .order_by(TimeEntry.work_date.desc(), TimeEntry.id.desc()))
+    projects = dict(db.execute(select(Project.id, Project.name)).all())
+    wos = dict(db.execute(select(WorkOrder.id, WorkOrder.no)).all())
+    rows = [_time_out(t, e.name, projects.get(t.project_id or 0), wos.get(t.work_order_id or 0))
+            for t in db.scalars(q.limit(500))]
+    month = date.today().replace(day=1).isoformat()
+    return {"employee": _emp_out(e, sum(r["hours"] for r in rows
+                                        if r["work_date"] >= (date.today() - timedelta(days=30)).isoformat())),
+            "rows": rows, "total_hours": round(sum(r["hours"] for r in rows), 2),
+            "month_hours": round(sum(r["hours"] for r in rows if r["work_date"] >= month), 2),
+            "total_cost": round(sum(r["cost"] or 0.0 for r in rows), 2)}
+
+
+@router.get("/hr/users")
+def linkable_users(_: User = Depends(hr_edit), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    """Logins for the "Kullanıcı hesabı" picker on the personnel card."""
+    q = select(User).where(User.pending.is_(False)).order_by(User.full_name, User.username)
+    return [{"id": u.id, "username": u.username, "full_name": u.full_name, "email": u.email} for u in db.scalars(q)]
 
 
 @router.get("/employees")
@@ -83,6 +133,7 @@ def list_employees(active: bool | None = None, _: User = Depends(hr_view),
 
 @router.post("/employees", status_code=201)
 def create_employee(body: EmployeeIn, me: User = Depends(hr_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _check_user(db, body.user_id)
     e = Employee(**{**body.model_dump(), "name": body.name.strip()})
     db.add(e)
     db.flush()
@@ -96,7 +147,9 @@ def update_employee(emp_id: int, body: EmployeeUpdate, me: User = Depends(hr_edi
                     db: Session = Depends(get_db)) -> dict[str, Any]:
     e = _emp_or_404(db, emp_id)
     changes = {k: getattr(body, k) for k in body.model_fields_set
-               if getattr(body, k) is not None or k in ("hourly_cost", "start_date")}
+               if getattr(body, k) is not None or k in ("hourly_cost", "start_date", "user_id")}
+    if "user_id" in changes:
+        _check_user(db, changes["user_id"], e.id)
     audit.record_changes(db, me, e, changes, "employee", e.id)
     db.commit()
     return _emp_out(e)

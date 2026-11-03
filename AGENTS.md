@@ -38,13 +38,18 @@ Read this file first. Do not re-scan the whole project.
   planning, purchasing, workorders, stock, hr, contacts, sales, finance, chat and admin. Role defaults plus per-user
   overrides in `users.permissions` (JSON); admin always has full access. Guard endpoints with
   `Depends(require("<module>", "edit"))`; `/api/admin/permissions` serves the catalog to the UI.
+  Since 1.5.0 defaults follow the job: hr and finance are admin-only; designer/viewer have no contacts or sales.
+  Changing `ROLE_DEFAULTS` changes existing users at once (only overrides are stored).
 - `app/services/sync.py` + the `live_sync` middleware in `main.py`: every successful write bumps `sync_state.rev`
   (login, password, test and `*/preview` paths are skipped). `GET /api/sync` (no auth) returns the rev; clients poll it.
 - `app/services/commerce.py`: sales orders (`SS-YYYY-####`), invoices (`FT-YYYY-####` for sales, the supplier's
   number for purchases), payments and firm balances/ledger. Total = sum(qty*price) - discount + KDV. Balance > 0
   means the firm owes us: + issued sales invoice, + payment out; - issued purchase invoice, - payment in.
   Routers: `api/sales.py`, `api/finance.py`, `api/hr.py` (employees, time entries; labour cost flows into
-  `erp.project_costs` as source "İşçilik") and `api/overview.py` (home page KPIs, filtered by permission).
+  `erp.project_costs` as source "İşçilik", one anonymous line without hr rights) and `api/overview.py` (home page
+  KPIs, filtered by permission). `Employee.user_id` links a card to a login; `GET /hr/me` (any user, fallback
+  match by e-mail) is the employee's own card, shown in `pages/MyCard.tsx` ("Personel kartım", nav item only
+  for users without hr).
 - Photos and chat:
   - `api/photos.py`: several photos per part number (entity "part", key = part_no, global like drawings) or stock
     item (entity "stock", key = item id). Permission follows the parts/stock module. Files go to `photo_dir`.
@@ -128,7 +133,7 @@ cd frontend && npx tsc -b && npm run build
 docker compose up -d --build
 ```
 Windows install/update: `KURULUM.bat` runs `deploy/windows_install.ps1` (Docker check, random `.env` secrets, free-port pick, firewall rule). `.gitattributes` keeps LF everywhere except `*.ps1`/`*.bat`; `.ps1` files need a UTF-8 BOM for Windows PowerShell 5.1.
-Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss` (exe `LabERP.exe`, assets `LabERP-Setup-<v>.exe`; it deletes the old `ParcaTakipERP.exe` and shortcuts). Use `_show_html()`, never `window.load_html` directly: before WebView2 is ready pywebview drops `load_html` and shows `window.html` (the 1.4.0 stuck "açılıyor" bug). CI runs `LabERP.exe --ui-test <json>` on a fresh profile (`ERP_DESKTOP_CONFIG_DIR`). CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
+Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss` (exe `LabERP.exe`, assets `LabERP-Setup-<v>.exe`; it deletes the old `ParcaTakipERP.exe` and shortcuts). Use `_show_html()`, never `window.load_html` directly: before WebView2 is ready pywebview drops `load_html` and shows `window.html` (the 1.4.0 stuck "açılıyor" bug). CI runs `LabERP.exe --ui-test <json>` on a fresh profile (`ERP_DESKTOP_CONFIG_DIR`). No native menu since 1.5.0: `components/DesktopMenu.tsx` ("Uygulama", also on the login page) calls the js_api `app_info`/`app_action`/`set_theme`; `set_theme` paints the Windows title bar with DWM attributes 20/19/34/35/36 and is remembered in the config. "Sunucuma kur" (`remote_install.py` + `server_install.sh`, paramiko): packs `server_src` (backend source, bundled by the spec) + `frontend_dist`, uploads over SFTP, runs the script as root (sudo -S via stdin), which sets up `/opt/laberp` venv, `/var/lib/laberp`, `/etc/laberp.env` and systemd `laberp`; host keys TOFU in `config_dir()/known_hosts`. Test it against a systemd Ubuntu container with sshd (colima; arm64 needs a self-built image). CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
 Android app: `mobile/android` (plain Java, no AndroidX UI, Gradle 9.1 + AGP). `MainActivity` is a WebView over the
 saved server with the `ParcaTakipApp` JS bridge (gated to `setup.html` and the saved server origin), file chooser +
 camera via FileProvider, downloads to `Downloads/LAB ERP`, back key -> `__erpBack`, GitHub releases update check.

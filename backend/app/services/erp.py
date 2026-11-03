@@ -410,7 +410,7 @@ def requirements(db: Session, project: Project, raw: bool = False) -> list[dict[
 
 
 # ---------- project cost ----------
-def project_costs(db: Session, project: Project) -> dict[str, Any]:
+def project_costs(db: Session, project: Project, show_people: bool = True) -> dict[str, Any]:
     """Committed (ordered/planned) vs actual (received/produced/issued) cost, by source, firm and main group."""
     pv = ProjectView.load(db, project)
     groups = {code: it["main_group"] or "(Kök)" for code, it in _bom_items(pv).items()}
@@ -449,8 +449,9 @@ def project_costs(db: Session, project: Project) -> dict[str, Any]:
             missing_price += 1
             continue
         v = t.hours * t.hourly_cost
-        rows.append({"source": "İşçilik", "firm": emp, "group": groups.get(wo_parts.get(t.work_order_id or 0, ""),
-                                                                            "(Genel işçilik)"),
+        # Without hr rights labour is one anonymous line, so a person's wage cannot be worked out
+        rows.append({"source": "İşçilik", "firm": emp if show_people else "İşçilik",
+                     "group": groups.get(wo_parts.get(t.work_order_id or 0, ""), "(Genel işçilik)"),
                      "committed": v, "actual": v})
 
     def roll(key: str) -> list[dict[str, Any]]:

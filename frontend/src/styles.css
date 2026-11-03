@@ -120,6 +120,7 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .toast div.err { border-left-color: var(--danger); }
 .login { display: flex; align-items: center; justify-content: center; height: 100%; overflow-y: auto; padding: 16px 0; }
 .login form { margin: auto 0; }
+.login-desk { position: fixed; top: 8px; right: 10px; z-index: 40; }
 .ok-box { background: color-mix(in srgb, var(--ok) 15%, transparent); border: 1px solid var(--ok); border-radius: 6px; padding: 8px 10px; }
 .small-note { font-size: 12px; text-align: center; }
 .login form { width: 320px; display: flex; flex-direction: column; gap: 10px; }
@@ -561,6 +562,8 @@ div.chat-pick-row { cursor: default; }
 .dg-menu-wrap { position: relative; }
 .dg-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 240px; }
 .dg-menu .btn { text-align: left; justify-content: flex-start; }
+.desk-menu-pop { left: auto; right: 0; min-width: 280px; }
+.desk-menu-info { font-size: 12px; padding: 6px 4px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .dg-sheet { margin: 6px 12px; padding: 10px; }
 /* Non-full pages: keep the grid's own scrollbars on screen */
 .content:not(.full) .dg, .content:not(.full) .dg-cards { max-height: calc(100dvh - 190px); min-height: 240px; }

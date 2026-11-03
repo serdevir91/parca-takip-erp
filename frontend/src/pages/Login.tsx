@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { DesktopMenu } from "../components/DesktopMenu";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../api/auth";
 import { api } from "../api/client";
@@ -65,6 +66,7 @@ export default function Login() {
   const signup = mode === "signup";
   return (
     <div className="login">
+      <div className="login-desk"><DesktopMenu /></div>
       <form className="card" onSubmit={submit}>
         <h1 className="login-brand"><span className="brand-logo"><BrandMark size={22} /></span>LAB ERP</h1>
         {signup && <div className="muted">Hesabınız yönetici onayından sonra açılır.</div>}

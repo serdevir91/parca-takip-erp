@@ -148,7 +148,7 @@ def test_overview_respects_permissions(client, admin_headers):
     assert len(o["activity"]) == 30
     name = _u("ov").replace(" ", "_")
     client.post("/api/admin/users", headers=admin_headers, json={
-        "username": name, "password": "ov123456", "role": "viewer", "permissions": {"finance": "none"}})
+        "username": name, "password": "ov123456", "role": "viewer", "permissions": {"sales": "view"}})
     tok = client.post("/api/auth/login", data={"username": name, "password": "ov123456"}).json()["access_token"]
     vh = {"Authorization": f"Bearer {tok}"}
     o = client.get("/api/overview", headers=vh).json()
@@ -156,3 +156,61 @@ def test_overview_respects_permissions(client, admin_headers):
     assert client.get("/api/balances", headers=vh).status_code == 403
     assert client.get("/api/sales-orders", headers=vh).status_code == 200
     assert client.post("/api/sales-orders", headers=vh, json={"firm_name": "x"}).status_code == 403
+
+
+def _login(client, admin_headers, role: str, **extra) -> tuple[dict, int]:
+    name = _u(role).replace(" ", "_")
+    u = client.post("/api/admin/users", headers=admin_headers, json={
+        "username": name, "password": "pw123456", "role": role, **extra})
+    assert u.status_code in (200, 201), u.text
+    tok = client.post("/api/auth/login", data={"username": name, "password": "pw123456"}).json()["access_token"]
+    return {"Authorization": f"Bearer {tok}"}, u.json()["id"]
+
+
+def test_role_defaults_hide_wages_money_and_deals(client, admin_headers):
+    for role in ("viewer", "designer", "planner"):
+        h, _ = _login(client, admin_headers, role)
+        assert client.get("/api/employees", headers=h).status_code == 403, role
+        assert client.get("/api/time-entries", headers=h).status_code == 403, role
+        assert client.get("/api/balances", headers=h).status_code == 403, role
+        o = client.get("/api/overview", headers=h).json()
+        assert "hr" not in o and "finance" not in o, role
+    vh, _ = _login(client, admin_headers, "viewer")
+    assert client.get("/api/sales-orders", headers=vh).status_code == 403
+    ph, _ = _login(client, admin_headers, "planner")
+    assert client.get("/api/sales-orders", headers=ph).status_code == 200
+
+
+def test_employee_sees_only_own_card(client, admin_headers, pid):
+    h = admin_headers
+    me_h, me_id = _login(client, admin_headers, "viewer", email=f"{uuid.uuid4().hex[:6]}@lab.test")
+    mine = client.post("/api/employees", headers=h, json={"name": _u("Ayşe"), "hourly_cost": 300,
+                                                          "user_id": me_id}).json()
+    other = client.post("/api/employees", headers=h, json={"name": _u("Veli"), "hourly_cost": 900}).json()
+    assert mine["user_id"] == me_id
+    # one login, one card
+    dup = client.post("/api/employees", headers=h, json={"name": "x", "user_id": me_id})
+    assert dup.status_code == 409
+    client.post("/api/time-entries", headers=h, json={"employee_id": mine["id"], "hours": 5, "project_id": pid})
+    client.post("/api/time-entries", headers=h, json={"employee_id": other["id"], "hours": 7, "project_id": pid})
+    r = client.get("/api/hr/me", headers=me_h).json()
+    assert r["employee"]["id"] == mine["id"] and r["employee"]["hourly_cost"] == 300
+    assert {x["employee_id"] for x in r["rows"]} == {mine["id"]} and r["total_hours"] == 5
+    # no card: empty answer, not an error
+    nh, _ = _login(client, admin_headers, "viewer")
+    assert client.get("/api/hr/me", headers=nh).json()["employee"] is None
+    # project cost without hr rights: labour shows no names
+    pl, _ = _login(client, admin_headers, "planner")
+    firms = {x["name"] for x in client.get(f"/api/projects/{pid}/costs", headers=pl).json()["by_firm"]}
+    assert other["name"] not in firms and mine["name"] not in firms and "İşçilik" in firms
+    firms = {x["name"] for x in client.get(f"/api/projects/{pid}/costs", headers=h).json()["by_firm"]}
+    assert other["name"] in firms
+    assert client.get("/api/hr/users", headers=me_h).status_code == 403
+    assert any(u["id"] == me_id for u in client.get("/api/hr/users", headers=h).json())
+
+
+def test_card_found_by_email_when_not_linked(client, admin_headers):
+    mail = f"{uuid.uuid4().hex[:6]}@lab.test"
+    me_h, _ = _login(client, admin_headers, "viewer", email=mail)
+    e = client.post("/api/employees", headers=admin_headers, json={"name": _u("Can"), "email": mail.upper()}).json()
+    assert client.get("/api/hr/me", headers=me_h).json()["employee"]["id"] == e["id"]

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, Layers,
+  Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, IdCard, Layers,
   ListTree, LogOut, Menu, MessageCircle, Moon, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
   X,
 } from "lucide-react";
@@ -10,6 +10,7 @@ import { api } from "../api/client";
 import { mobileApp, onBack } from "../api/mobile";
 import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
+import { DesktopMenu } from "./DesktopMenu";
 import Profile from "./Profile";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
 import type { Project } from "../types";
@@ -26,7 +27,8 @@ export function useProject() {
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", designer: "Tasarımcı", planner: "Planlama/Satın alma", viewer: "İzleyici" };
 
-type Item = { to: string; label: string; icon: LucideIcon; module?: Module; end?: boolean };
+// unless: hidden for users who have that module (they get the full screen instead)
+type Item = { to: string; label: string; icon: LucideIcon; module?: Module; unless?: Module; end?: boolean };
 type Group = { title: string; items: Item[] };
 
 const GROUPS: Group[] = [
@@ -37,7 +39,8 @@ const GROUPS: Group[] = [
       { to: "/purchasing", label: "Satın alma", icon: ShoppingCart, module: "purchasing" },
       { to: "/work-orders", label: "İş emirleri", icon: Factory, module: "workorders" },
       { to: "/stock", label: "Stok", icon: Boxes, module: "stock" },
-      { to: "/hr", label: "Personel ve zaman", icon: Clock, module: "hr" },
+      { to: "/hr", label: "Personel ve zaman", icon: Clock, module: "hr", end: true },
+      { to: "/hr/me", label: "Personel kartım", icon: IdCard, unless: "hr" },
     ],
   },
   {
@@ -172,7 +175,7 @@ export default function Layout() {
       return !c;
     });
   };
-  const visible = (i: Item) => !i.module || can(i.module);
+  const visible = (i: Item) => (!i.module || can(i.module)) && !(i.unless && can(i.unless));
   const link = (i: Item, to = i.to) => (
     <NavLink key={to} to={to} end={i.end} title={collapsed ? i.label : undefined}>
       <i.icon size={17} strokeWidth={1.9} aria-hidden />
@@ -233,6 +236,7 @@ export default function Layout() {
             <ThemeIcon size={17} />
             <span className="icon-btn-text">{THEME_LABELS[mode]}</span>
           </button>
+          <DesktopMenu />
           {app && (
             <button className="icon-btn" title="Sunucuyu değiştir" aria-label="Sunucuyu değiştir" onClick={() => app.changeServer()}>
               <Server size={17} />

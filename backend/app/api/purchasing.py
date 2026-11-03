@@ -336,5 +336,5 @@ def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(stock_edit
 
 
 @router.get("/projects/{pid}/costs")
-def costs(pid: int, _: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return erp.project_costs(db, project_or_404(db, pid))
+def costs(pid: int, me: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return erp.project_costs(db, project_or_404(db, pid), show_people=can(me, "hr"))

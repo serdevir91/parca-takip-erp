@@ -21,6 +21,7 @@ const Contacts = lazy(() => import("./pages/Contacts"));
 const Sales = lazy(() => import("./pages/Sales"));
 const Finance = lazy(() => import("./pages/Finance"));
 const Hr = lazy(() => import("./pages/Hr"));
+const MyCard = lazy(() => import("./pages/MyCard"));
 const Chat = lazy(() => import("./pages/Chat"));
 
 function RequireAuth({ children, module }: { children: ReactNode; module?: Module }) {
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="work-orders" element={<M m="workorders"><WorkOrders /></M>} />
         <Route path="stock" element={<M m="stock"><Stock /></M>} />
         <Route path="hr" element={<M m="hr"><Hr /></M>} />
+        <Route path="hr/me" element={<S><MyCard /></S>} />
         <Route path="contacts" element={<M m="contacts"><Contacts /></M>} />
         <Route path="sales" element={<M m="sales"><Sales /></M>} />
         <Route path="finance" element={<M m="finance"><Finance /></M>} />

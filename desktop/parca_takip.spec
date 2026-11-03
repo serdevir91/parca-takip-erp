@@ -18,11 +18,17 @@ a = Analysis(
         (str(BACKEND / "alembic"), "migrations"),
         (str(ROOT / "frontend" / "dist"), "frontend_dist"),
         (str(ROOT / "desktop" / "setup.html"), "."),
+        # "Sunucuma kur" uploads the backend source and this script to a Linux server
+        (str(ROOT / "desktop" / "server_install.sh"), "."),
+        (str(BACKEND / "app"), "server_src/app"),
+        (str(BACKEND / "alembic"), "server_src/alembic"),
+        (str(BACKEND / "alembic.ini"), "server_src"),
+        (str(BACKEND / "requirements.txt"), "server_src"),
         (str(ROOT / "desktop" / "icon.ico"), "."),
     ],
     # Routers are found with pkgutil at runtime and uvicorn loads its protocols by name. The app modules are
     # listed from the files: collect_submodules runs in a subprocess that does not see pathex.
-    hiddenimports=APP_MODULES + collect_submodules("uvicorn") + ["python_multipart", "multipart"],
+    hiddenimports=APP_MODULES + collect_submodules("uvicorn") + ["python_multipart", "multipart", "remote_install"] + collect_submodules("paramiko"),
     excludes=["psycopg", "psycopg_binary", "tkinter", "pytest"],
     noarchive=False,
 )

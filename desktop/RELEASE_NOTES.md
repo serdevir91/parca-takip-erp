@@ -1,6 +1,13 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.0 yenilikleri
+
+- **Sunucuma kur:** Windows uygulamasının ilk ekranında yeni seçenek. Linux sunucunun (Ubuntu, Debian, Rocky, Alma, Fedora) adresini ve SSH bilgilerini girin; LAB ERP sunucuya otomatik kurulur, açılışta kendiliğinden başlayan hizmet olarak çalışır ve bu bilgisayar ona bağlanır. Tekrar çalıştırmak sunucuyu günceller, veriler korunur.
+- **Personel gizliliği:** Personel ve zaman ekranını (saat ücretleri dahil) yalnızca admin ve bu yetkiyi verdiğiniz kişiler görür. Her çalışan "Personel kartım" ekranında yalnızca kendi kartını ve saatlerini görür. Personel kartı, Personel sekmesinde kullanıcı hesabına bağlanır.
+- **İşe göre yetkiler:** Varsayılan roller sıkılaştırıldı. Fatura ve ödemeler yalnızca admin'de. Satış yalnızca Planlama/Satın alma rolünde (görüntüleme). Tasarımcı ve İzleyici cari kartları görmez. Proje maliyetinde işçilik, personel yetkisi olmayanlara isimsiz tek satır olarak görünür. Yönetici gerekirse kullanıcı bazında yetki açabilir.
+- **Windows görünümü:** Beyaz menü çubuğu kaldırıldı. Uygulama menüsü (yeniden yükle, bağlantı ayarları, veri klasörü, güncelleme, kapat) üst çubukta temaya uygun açılır. Pencere başlığı açık, koyu ve siyah temaya göre renklenir.
+
 ## 1.4.1 yenilikleri
 
 - **Yeni ad: LAB ERP.** Yeni logo; Windows, Android ve tarayıcıda aynı ad ve simge. Veriler ve ayarlar aynen kalır.

@@ -39,7 +39,32 @@ Notlar:
   uygulamalar adres değişirse sunucuyu kendileri yeniden bulur.
 - Sunucu her gece yedek alır. Yedekler veri klasöründeki `backups` klasöründedir.
 
-Mac veya Linux sunucu: [README.md › Docker'sız kurulum](README.md#dockersız-kurulum) bölümündeki
+### Linux sunucuya otomatik kurulum (Sunucuma kur)
+
+Şirkette bir Linux sunucu varsa (Ubuntu, Debian, Rocky, Alma, Fedora; kendi sunucunuz veya bulut), Windows
+uygulaması LAB ERP'yi oraya kendisi kurar.
+
+1. Windows bilgisayarda `LabERP-Setup-x.y.z.exe` dosyasını kurup uygulamayı açın.
+2. **Sunucuma kur** seçin. Uygulama zaten kuruluysa üst çubuktaki **Uygulama › Bağlantı ayarları** ile bu
+   ekrana dönün.
+3. Sunucu adresini (örnek `192.168.1.50`), SSH portunu (genellikle `22`), SSH kullanıcı adını ve şifresini
+   yazın. Kullanıcı `root` değilse sudo yetkisi olmalıdır; aynı şifre sudo için kullanılır.
+4. Yönetici (`admin`) şifresini belirleyin (en az 8 karakter).
+5. **Kur ve bağlan** deyin. İlerleme ekranda görünür; kurulum birkaç dakika sürer. Bittiğinde bu bilgisayar
+   sunucuya bağlanır. Diğer cihazlar `http://SUNUCU-ADRESİ:8000` ile bağlanır.
+
+Notlar:
+
+- Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir).
+- Uygulama `/opt/laberp`, veriler ve yedekler `/var/lib/laberp` klasörüne kurulur. `laberp` hizmeti sunucu
+  açılınca kendiliğinden başlar. Durum: `systemctl status laberp`, günlük: `journalctl -u laberp`.
+- Sunucuyu güncellemek için yeni sürüm Windows uygulamasında aynı adımları tekrarlayın. Yönetici şifresini boş
+  bırakırsanız şifre değişmez; veriler korunur.
+- "Güvenlik duvarında bu portu aç" kutusu sunucudaki ufw veya firewalld'da portu açar. Bulut sunucularda
+  sağlayıcının panelindeki güvenlik grubunda da portu (8000/TCP) açmanız gerekir.
+- SSH anahtarıyla giriş için **SSH anahtarıyla giriş** bölümünden özel anahtar dosyasını seçin.
+
+Mac veya Linux sunucuda elle kurulum: [README.md › Docker'sız kurulum](README.md#dockersız-kurulum) bölümündeki
 `python -m app.cli serve` komutu yeterlidir.
 
 ## 2. İstemcileri bağlayın
@@ -80,8 +105,14 @@ Yeni çalışanlar kendi hesaplarını ister, yönetici onaylar.
 2. **Yönetim › Kullanıcılar** sekmesinin en üstünde **Onay bekleyen hesap istekleri** listesi vardır.
 3. **Onayla ve yetki ver** düğmesine basın. Rolü seçin (İzleyici, Planlama/Satın alma, Tasarımcı, Admin)
    ve gerekirse modül yetkilerini tek tek değiştirin (Yok / Görür / Düzenler).
+   Roller işe göre gelir: Personel ve zaman (saat ücretleri) ile Fatura ve ödemeler yalnızca Admin'de açıktır.
+   Başka birine gerekiyorsa o modülü kullanıcıya ayrıca açın.
 4. Kaydedin. Çalışan artık giriş yapabilir.
 5. İstenmeyen istek için **Reddet** deyin; istek silinir.
+
+Her çalışan **Personel kartım** ekranında yalnızca kendi kartını ve çalışma saatlerini görür. Bunun için
+**Personel ve zaman › Personel** sekmesinde kişinin kartını açıp **Kullanıcı hesabı** alanından hesabını seçin
+(kartın e-postası hesabın e-postasıyla aynıysa bağlantı kendiliğinden kurulur).
 
 Yetkiler sonradan da aynı ekrandan değiştirilebilir. Herkesin hesap istemesini kapatmak için
 Kullanıcılar sekmesindeki **Girişte "Hesap oluştur" göster** kutusunun işaretini kaldırın.

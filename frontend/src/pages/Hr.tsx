@@ -9,6 +9,7 @@ import { Field, Loading, Modal } from "./admin/shared";
 import { ProjectSelect, addDays, fmtDay, fmtMoney, numOrNull, today, trIncludes, type WorkOrder } from "./erp/common";
 import { Stat, type Employee, type TimeEntry } from "./erp/commerce";
 
+type HrUser = { id: number; username: string; full_name: string; email: string };
 type TimeResp = { rows: TimeEntry[]; total_hours: number; total_cost: number; by_project: { name: string; hours: number; cost: number }[] };
 const fmtH = (h: number) => `${h.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} sa`;
 
@@ -201,7 +202,7 @@ function PeopleTab() {
           <tbody>
             {rows.map((e) => (
               <tr key={e.id} style={e.active ? undefined : { opacity: 0.6 }}>
-                <td><b>{e.name}</b></td><td>{e.title}</td><td>{e.department}</td>
+                <td><b>{e.name}</b>{e.user_id != null && <span className="badge" style={{ marginLeft: 6 }} title="Kullanıcı hesabına bağlı; kendi kartını görür">hesap</span>}</td><td>{e.title}</td><td>{e.department}</td>
                 <td className="muted">{[e.phone, e.email].filter(Boolean).join(" · ")}</td>
                 <td className="num">{e.hourly_cost == null ? <span className="muted">—</span> : fmtMoney(e.hourly_cost)}</td>
                 <td className="num">{fmtH(e.hours_30d)}</td>
@@ -215,7 +216,8 @@ function PeopleTab() {
           </tbody>
         </table>
       </div>
-      <p className="muted">Saat ücreti, kayıt girildiği andaki değerle saklanır; sonradan değiştirmek eski maliyetleri bozmaz.</p>
+      <p className="muted">Saat ücreti, kayıt girildiği andaki değerle saklanır; sonradan değiştirmek eski maliyetleri bozmaz.
+        Bu ekranı yalnızca "Personel ve zaman" yetkisi olanlar görür; çalışanlar yalnızca kendi kartlarını "Personel kartım" ekranında görür.</p>
       {editing && <EmployeeForm emp={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -227,12 +229,14 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
   const [f, setF] = useState({
     name: emp?.name ?? "", title: emp?.title ?? "", department: emp?.department ?? "", phone: emp?.phone ?? "",
     email: emp?.email ?? "", rate: emp?.hourly_cost == null ? "" : String(emp.hourly_cost), start: emp?.start_date ?? "", note: emp?.note ?? "",
+    user: emp?.user_id == null ? "" : String(emp.user_id),
   });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const users = useQuery({ queryKey: ["hr-users"], queryFn: () => api.get<HrUser[]>("/hr/users") });
   const save = useMutation({
     mutationFn: () => {
       const body = { name: f.name.trim(), title: f.title, department: f.department, phone: f.phone, email: f.email,
-        hourly_cost: numOrNull(f.rate), start_date: f.start || null, note: f.note };
+        hourly_cost: numOrNull(f.rate), start_date: f.start || null, note: f.note, user_id: f.user ? Number(f.user) : null };
       return emp ? api.put<Employee>(`/employees/${emp.id}`, body) : api.post<Employee>("/employees", body);
     },
     onSuccess: () => { toast("Personel kaydedildi"); refresh(); onClose(); },
@@ -254,6 +258,12 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
           <Field label="Saat ücreti (₺, işveren maliyeti)"><input inputMode="decimal" value={f.rate} onChange={set("rate")} /></Field>
           <Field label="İşe giriş"><input type="date" value={f.start} onChange={set("start")} /></Field>
         </div>
+        <Field label="Kullanıcı hesabı (kendi kartını ve saatlerini görür)">
+          <select value={f.user} onChange={set("user")}>
+            <option value="">(Bağlı değil)</option>
+            {(users.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.full_name ? `${u.full_name} (${u.username})` : u.username}</option>)}
+          </select>
+        </Field>
         <Field label="Not"><textarea rows={2} value={f.note} onChange={set("note")} /></Field>
       </div>
     </Modal>
