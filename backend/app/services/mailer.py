@@ -38,7 +38,7 @@ class SmtpConfig:
     username: str = ""
     password: str = ""
     from_addr: str = ""
-    from_name: str = "Parça Takip ERP"
+    from_name: str = "LAB ERP"
 
     @property
     def ready(self) -> bool:
@@ -69,7 +69,7 @@ def save(db: Session, body: dict[str, Any]) -> SmtpConfig:
                    username=str(body.get("username") or "").strip(),
                    password=str(body.get("password") or "") or old.password,
                    from_addr=str(body.get("from_addr") or "").strip(),
-                   from_name=str(body.get("from_name") or "").strip() or "Parça Takip ERP")
+                   from_name=str(body.get("from_name") or "").strip() or "LAB ERP")
     if body.get("clear_password"):
         c.password = ""
     if c.security not in SECURITY:

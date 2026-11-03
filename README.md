@@ -1,4 +1,4 @@
-# Parça Takip ERP
+# LAB ERP
 
 [![Codespaces'te aç](https://github.com/codespaces/badge.svg)](https://codespaces.new/serdevir91/parca-takip-erp?quickstart=1)
 
@@ -135,10 +135,10 @@ otomatik oturum açma ayarlayın veya Linux kurulumu tercih edin.
 Tarayıcı yerine kendi penceresinde açılan Windows uygulamasıdır. Docker, Python veya Node gerekmez.
 
 1. [Releases](https://github.com/serdevir91/parca-takip-erp/releases/latest) sayfasından
-   `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
+   `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 2. İlk açılışta iki seçenek gelir:
    - **Bu bilgisayar sunucu:** Veriler seçilen klasörde tutulur (varsayılan
-     `Belgeler\ParcaTakipERP`). Yeni veritabanında yönetici (`admin`) şifresi bu ekranda belirlenir. Uygulama varsayılan olarak 8000 portunu açar ve her
+     `Belgeler\LabERP`). Yeni veritabanında yönetici (`admin`) şifresi bu ekranda belirlenir. Uygulama varsayılan olarak 8000 portunu açar ve her
      gece yedek alır. Windows Güvenlik Duvarı izin sorarsa **Özel ağlar** için izin verin; yoksa diğer
      cihazlar bağlanamaz.
    - **Ağdaki sunucuya bağlan:** "Ağda sunucu ara" düğmesi aynı ağdaki sunucuları bulur. Adres elle de
@@ -157,7 +157,7 @@ Telefon ve tabletler için Android uygulaması (Android 8.0 ve üstü). Sunucu y
 uygulama aynı ağdaki sunucuya bağlanır.
 
 1. [Releases](https://github.com/serdevir91/parca-takip-erp/releases/latest) sayfasından telefonda
-   `ParcaTakipERP-x.y.z.apk` dosyasını indirin ve açın. Android "bilinmeyen kaynaklar" izni sorarsa
+   `LabERP-x.y.z.apk` dosyasını indirin ve açın. Android "bilinmeyen kaynaklar" izni sorarsa
    tarayıcıya bu izni verin. Bu dosya her telefonda çalışır. İşlemciye özel dosyalar da vardır:
    `-arm64-v8a` (güncel telefonların çoğu), `-armeabi-v7a` (eski 32 bit telefonlar), `-x86_64` / `-x86`
    (emülatör ve bazı tabletler).
@@ -166,7 +166,7 @@ uygulama aynı ağdaki sunucuya bağlanır.
 3. Kullanıcı adı ve şifrenizle giriş yapın. Son bağlanılan sunucu hatırlanır.
 
 - Menü sol üstteki ☰ düğmesiyle açılır. Telefonun geri tuşu açık pencereyi, menüyü veya sayfayı kapatır.
-- Excel, PDF ve diğer indirmeler telefonun **İndirilenler › ParcaTakip** klasörüne kaydedilir.
+- Excel, PDF ve diğer indirmeler telefonun **İndirilenler › LAB ERP** klasörüne kaydedilir.
 - Fotoğraf eklerken kamera veya galeri seçilebilir.
 - Üst çubuktaki sunucu simgesi ya da giriş ekranındaki "Sunucuyu değiştir" başka sunucuya geçer.
 - Uygulama açılışta yeni sürümü denetler; yeni sürüm varsa indirme sayfasını açar.

@@ -1,5 +1,5 @@
 @echo off
-rem Parca Takip ERP - Windows kurulum / guncelleme. Cift tiklayin.
+rem LAB ERP - Windows kurulum / guncelleme. Cift tiklayin.
 rem Guvenlik duvari kurali icin yonetici izni ister.
 chcp 65001 >nul
 net session >nul 2>&1

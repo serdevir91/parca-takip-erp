@@ -93,9 +93,9 @@ def _notify_admins(user_id: int) -> None:
         if not to:
             return
         body = (f"Yeni hesap isteği:\n\nKullanıcı adı: {u.username}\nAd soyad: {u.full_name or '-'}\n"
-                f"E-posta: {u.email or '-'}\n\nOnaylamak için Parça Takip ERP > Yönetim > Kullanıcılar.")
+                f"E-posta: {u.email or '-'}\n\nOnaylamak için LAB ERP > Yönetim > Kullanıcılar.")
         try:
-            mailer.send(cfg, to, f"Parça Takip ERP: {u.username} hesap onayı bekliyor", body)
+            mailer.send(cfg, to, f"LAB ERP: {u.username} hesap onayı bekliyor", body)
         except RuntimeError as e:
             log.warning("sign-up notice not sent: %s", e)
 

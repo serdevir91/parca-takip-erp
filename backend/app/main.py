@@ -41,7 +41,7 @@ async def lifespan(_: FastAPI):
 
 
 _docs = get_settings().api_docs
-app = FastAPI(title="Parça Takip ERP", version=get_settings().app_version, lifespan=lifespan,
+app = FastAPI(title="LAB ERP", version=get_settings().app_version, lifespan=lifespan,
               docs_url="/api/docs" if _docs else None, openapi_url="/api/openapi.json" if _docs else None,
               redoc_url=None)
 

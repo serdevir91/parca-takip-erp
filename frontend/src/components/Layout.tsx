@@ -15,6 +15,7 @@ import { UpdateBanner, useUpdate } from "./UpdateCheck";
 import type { Project } from "../types";
 import type { ChatState } from "../pages/Chat";
 import { useToast } from "./Toast";
+import BrandMark from "./BrandMark";
 
 export function useProject() {
   const { pid } = useParams();
@@ -193,8 +194,8 @@ export default function Layout() {
           <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label="Menüyü kapat">
             <X size={18} />
           </button>
-          <span className="brand-logo">P</span>
-          <span className="nav-label brand-name">Parça Takip <b>ERP</b></span>
+          <span className="brand-logo"><BrandMark /></span>
+          <span className="nav-label brand-name">LAB <b>ERP</b></span>
         </div>
         <nav>
           {GROUPS.map((g) => {

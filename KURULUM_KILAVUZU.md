@@ -1,6 +1,6 @@
 # Kurulum kılavuzu (kolay yol)
 
-Bu kılavuz, Parça Takip ERP'yi ilk kez kuracak kişi içindir. Teknik ayrıntılar ve Docker kurulumu
+Bu kılavuz, LAB ERP'yi ilk kez kuracak kişi içindir. Teknik ayrıntılar ve Docker kurulumu
 [README.md](README.md) dosyasındadır.
 
 Sistem iki parçadan oluşur:
@@ -15,18 +15,18 @@ Tüm cihazlar aynı ağda (aynı modem / Wi-Fi) olmalıdır. İnternet gerekmez.
 
 | Dosya | Ne için |
 |---|---|
-| `ParcaTakipERP-Setup-x.y.z.exe` | Windows uygulaması (sunucu veya istemci) |
-| `ParcaTakipERP-x.y.z.apk` | Android uygulaması (her telefonda çalışır) |
+| `LabERP-Setup-x.y.z.exe` | Windows uygulaması (sunucu veya istemci) |
+| `LabERP-x.y.z.apk` | Android uygulaması (her telefonda çalışır) |
 
 ## 1. Sunucuyu kurun (bir kez)
 
 En kolay yol, bir Windows bilgisayarı sunucu yapmaktır. Docker, Python veya başka bir program gerekmez.
 
-1. `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
+1. `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 2. Kurulum "kimin için kurulsun" diye sorarsa **Tüm kullanıcılar için** seçin ve yönetici iznini onaylayın.
    Böylece kurulum, Windows Güvenlik Duvarı iznini kendisi ekler.
 3. Uygulamayı açın ve **Bu bilgisayar sunucu** seçin.
-4. Veri klasörünü onaylayın (varsayılan `Belgeler\ParcaTakipERP`).
+4. Veri klasörünü onaylayın (varsayılan `Belgeler\LabERP`).
 5. Yönetici (`admin`) şifresini belirleyin. Bu şifreyi unutmayın.
 6. Windows Güvenlik Duvarı izin sorarsa **Özel ağlar** kutusunu işaretleyip **İzin ver** deyin.
 7. Ekranda sunucunun adresi yazar (örnek `http://192.168.1.20:8000`). Bu adresi not edin.
@@ -46,7 +46,7 @@ Mac veya Linux sunucu: [README.md › Docker'sız kurulum](README.md#dockersız-
 
 ### Windows
 
-1. Aynı `ParcaTakipERP-Setup-x.y.z.exe` dosyasını kurun.
+1. Aynı `LabERP-Setup-x.y.z.exe` dosyasını kurun.
 2. Uygulamayı açın ve **Ağdaki sunucuya bağlan** seçin.
 3. **Ağda sunucu ara** düğmesine basın ve çıkan sunucuyu seçin. Çıkmazsa adresi elle yazın
    (örnek `http://192.168.1.20:8000`).
@@ -55,7 +55,7 @@ Mac veya Linux sunucu: [README.md › Docker'sız kurulum](README.md#dockersız-
 
 ### Android
 
-1. Telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip açın. "Bilinmeyen kaynaklar" izni sorulursa
+1. Telefonda `LabERP-x.y.z.apk` dosyasını indirip açın. "Bilinmeyen kaynaklar" izni sorulursa
    tarayıcıya izin verin.
 2. Uygulama ağdaki sunucuyu kendisi arar. Bulunan sunucuya dokunun ya da adresi yazın.
 
@@ -117,7 +117,7 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | Belirti | Çözüm |
 |---|---|
 | "Ağda sunucu ara" hiçbir şey bulmuyor | Sunucu bilgisayarda uygulama açık mı? Aynı Wi-Fi'da mısınız? Adresi elle yazmayı deneyin. |
-| "Sunucuya ulaşılamadı" | Sunucuda Windows Güvenlik Duvarı'nda "Parca Takip ERP" (veya Python) için **Özel** ağ izni olmalı. Ağ profili **Özel** olmalı. |
+| "Sunucuya ulaşılamadı" | Sunucuda Windows Güvenlik Duvarı'nda "LAB ERP" (veya Python) için **Özel** ağ izni olmalı. Ağ profili **Özel** olmalı. |
 | Telefon bağlanamıyor, bilgisayar bağlanıyor | Modemde "misafir ağı" veya "AP/istemci yalıtımı" açık olabilir; telefonu ana Wi-Fi ağına bağlayın. |
 | Adres değişti | Uygulamalar sunucuyu kendileri yeniden arar. Olmazsa "Sunucuyu değiştir" ile yeni adresi seçin. Kalıcı çözüm: modemde sabit IP. |
 | Giriş: "Hesabınız yönetici onayı bekliyor" | Yönetici Yönetim › Kullanıcılar ekranından onaylamalı. |

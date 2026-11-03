@@ -1,4 +1,4 @@
-# Parça Takip ERP frontend: build the SPA, serve it with nginx (no CDN at runtime)
+# LAB ERP frontend: build the SPA, serve it with nginx (no CDN at runtime)
 FROM node:20-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./

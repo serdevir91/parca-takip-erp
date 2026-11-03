@@ -1,5 +1,5 @@
 @echo off
-rem Parca Takip ERP - Dockersiz Windows kurulum / guncelleme. Cift tiklayin.
+rem LAB ERP - Dockersiz Windows kurulum / guncelleme. Cift tiklayin.
 rem Python 3.12 + Node.js kurar (yoksa), uygulamayi Windows acilisinda baslayan gorev olarak kaydeder.
 chcp 65001 >nul
 net session >nul 2>&1

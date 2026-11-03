@@ -337,7 +337,7 @@ def serve(host: str, port: int, backup: bool) -> None:
     from .services import discovery
 
     discovery.start_responder(port, cfg.app_version)
-    print(f"Parça Takip ERP: http://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
+    print(f"LAB ERP: http://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
     # Clients connect directly (no proxy in front), so only a local proxy may set X-Forwarded-For
     uvicorn.run("app.main:app", host=host, port=port, workers=1, proxy_headers=True,
                 forwarded_allow_ips="127.0.0.1", timeout_keep_alive=75, log_level="info")
@@ -358,7 +358,7 @@ def restore(path: Path, yes: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    ap = argparse.ArgumentParser(prog="python -m app.cli", description="Parça Takip ERP komutları")
+    ap = argparse.ArgumentParser(prog="python -m app.cli", description="LAB ERP komutları")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("seed", help="Örnek verilerle demo veritabanı oluştur")
     s.add_argument("--data-dir", type=Path, default=Path(os.environ.get("ERP_SEED_DIR", DEFAULT_SEED_DIR)))

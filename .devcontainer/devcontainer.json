@@ -1,7 +1,7 @@
 // GitHub Codespaces demo: the Docker-free mode (SQLite, one process) with the demo projects.
 // README "Codespaces'te aç" link -> https://codespaces.new/serdevir91/parca-takip-erp?quickstart=1
 {
-  "name": "Parça Takip ERP (demo)",
+  "name": "LAB ERP (demo)",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "20" }
@@ -19,7 +19,7 @@
   "postStartCommand": "bash .devcontainer/start.sh",
   "forwardPorts": [8000],
   "portsAttributes": {
-    "8000": { "label": "Parça Takip ERP", "onAutoForward": "openBrowser" }
+    "8000": { "label": "LAB ERP", "onAutoForward": "openBrowser" }
   },
   "customizations": {
     "codespaces": { "openFiles": ["README.md"] }

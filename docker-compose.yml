@@ -1,4 +1,4 @@
-# Parça Takip ERP - offline LAN deployment.
+# LAB ERP - offline LAN deployment.
 # Start:  docker compose up -d        (settings come from .env, see .env.example)
 # No internet is needed at runtime: images are built once (or loaded with deploy/offline_import.*).
 name: parca-takip

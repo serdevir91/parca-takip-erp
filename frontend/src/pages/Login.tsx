@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../api/auth";
 import { api } from "../api/client";
 import { mobileApp } from "../api/mobile";
+import BrandMark from "../components/BrandMark";
 
 const MIN_PASSWORD = 8;
 
@@ -65,7 +66,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <h1>Parça Takip ERP</h1>
+        <h1 className="login-brand"><span className="brand-logo"><BrandMark size={22} /></span>LAB ERP</h1>
         {signup && <div className="muted">Hesabınız yönetici onayından sonra açılır.</div>}
         <label>
           Kullanıcı adı

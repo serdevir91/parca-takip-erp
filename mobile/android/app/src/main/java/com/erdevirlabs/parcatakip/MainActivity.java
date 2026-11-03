@@ -53,7 +53,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Android shell for Parça Takip ERP: a WebView that opens the LAN server picked on the setup page
+ * Android shell for LAB ERP: a WebView that opens the LAN server picked on the setup page
  * (assets/setup.html) and bridges what a plain WebView cannot do (downloads, LAN discovery, updates).
  */
 public class MainActivity extends Activity {
@@ -395,7 +395,7 @@ public class MainActivity extends Activity {
             ContentValues v = new ContentValues();
             v.put(MediaStore.Downloads.DISPLAY_NAME, name);
             v.put(MediaStore.Downloads.MIME_TYPE, mime);
-            v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ParcaTakip");
+            v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LAB ERP");
             v.put(MediaStore.Downloads.IS_PENDING, 1);
             Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
             if (uri == null) throw new Exception("Dosya oluşturulamadı");
@@ -491,7 +491,7 @@ public class MainActivity extends Activity {
                 if (newer(latest, BuildConfig.VERSION_NAME) && !page.isEmpty()) {
                     ui.post(() -> new AlertDialog.Builder(this)
                             .setTitle("Güncelleme var")
-                            .setMessage("Parça Takip ERP " + latest + " yayınlandı (yüklü: " + BuildConfig.VERSION_NAME + ").\n"
+                            .setMessage("LAB ERP " + latest + " yayınlandı (yüklü: " + BuildConfig.VERSION_NAME + ").\n"
                                     + "APK indirilecek; kurulum için dosyayı açın.")
                             .setPositiveButton("İndir", (d, w) -> openExternal(page))
                             .setNegativeButton("Sonra", null)

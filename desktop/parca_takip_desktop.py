@@ -1,4 +1,4 @@
-"""Parça Takip ERP desktop app: the web UI in a native window (pywebview; Edge WebView2 on Windows).
+"""LAB ERP desktop app (formerly Parça Takip ERP): the web UI in a native window (pywebview; Edge WebView2 on Windows).
 
 Two modes, chosen on the first start and changeable from the "Uygulama" menu:
 - server ("Bu bilgisayar sunucu"): SQLite database on this PC; the API and the UI run inside this
@@ -6,11 +6,12 @@ Two modes, chosen on the first start and changeable from the "Uygulama" menu:
 - client ("Ağdaki sunucuya bağlan"): connects to a running server (Docker, Docker-free or another
   desktop app in server mode).
 
-Settings live in desktop.json under %APPDATA%\\ParcaTakipERP. Updates come from the GitHub releases of
+Settings live in desktop.json under %APPDATA%\\LabERP (%APPDATA%\\ParcaTakipERP on PCs set up before 1.4.1). Updates come from the GitHub releases of
 the project (silent check at startup and "Güncellemeleri denetle" in the menu).
 
 Dev run on macOS/Linux/Windows:  python desktop/parca_takip_desktop.py   (needs frontend/dist)
-Bundle smoke test (CI):           ParcaTakipERP.exe --smoke <empty folder>
+Bundle smoke test (CI):           LabERP.exe --smoke <empty folder>
+Window self-test (CI):            LabERP.exe --ui-test <result.json>   (fresh profile: setup page + JS bridge)
 """
 from __future__ import annotations
 
@@ -48,11 +49,12 @@ else:
 
 from app.config import Settings  # noqa: E402  (no settings are read at import time)
 
-APP_NAME = "Parça Takip ERP"
+APP_NAME = "LAB ERP"
 VERSION = Settings.model_fields["app_version"].default
 REPO = "serdevir91/parca-takip-erp"
 DEFAULT_PORT = 8000
 IS_WIN = sys.platform == "win32"
+UI_TEST: Path | None = None   # --ui-test <result.json>: exit once the setup page talks to Python
 
 
 def config_dir() -> Path:
@@ -62,7 +64,12 @@ def config_dir() -> Path:
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    # Before 1.4.1 the app was "Parça Takip ERP"; keep using its folder where it exists
     d = base / "ParcaTakipERP"
+    if os.environ.get("ERP_DESKTOP_CONFIG_DIR"):
+        d = Path(os.environ["ERP_DESKTOP_CONFIG_DIR"])
+    elif not d.is_dir():
+        d = base / "LabERP"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -87,7 +94,8 @@ def setup_logging() -> None:
 
 # ---------- settings ----------
 def default_data_dir() -> str:
-    return str(Path.home() / "Documents" / "ParcaTakipERP")
+    old = Path.home() / "Documents" / "ParcaTakipERP"
+    return str(old if (old / "erp.db").is_file() else Path.home() / "Documents" / "LabERP")
 
 
 def load_config() -> dict:
@@ -259,6 +267,9 @@ class DesktopApp:
     # --- state for setup.html ---
     def get_state(self) -> dict:
         c = self._cfg
+        if UI_TEST is not None:
+            UI_TEST.write_text(json.dumps({"ok": True, "version": VERSION, "mode": c.get("mode")}), encoding="utf-8")
+            threading.Timer(1.0, self._window.destroy).start()
         data_dir = c.get("data_dir") or default_data_dir()
         return {
             "version": VERSION, "mode": c.get("mode", "server"), "data_dir": data_dir,
@@ -281,7 +292,7 @@ class DesktopApp:
         if not u:
             return {"ok": False, "error": "Sunucu adresini yazın"}
         return {"ok": True, "url": u} if is_erp(u, 5) else {
-            "ok": False, "error": f"{u} adresinde Parça Takip ERP sunucusu bulunamadı"}
+            "ok": False, "error": f"{u} adresinde LAB ERP sunucusu bulunamadı"}
 
     def discover(self) -> list[dict]:
         from app.services.discovery import discover
@@ -328,7 +339,7 @@ class DesktopApp:
         return {"ok": True}
 
     def show_settings(self) -> None:
-        self._window.load_html(self._setup_html)
+        self._show_html(self._setup_html)
 
     def file_request(self, req: dict) -> dict:
         """Fetch /api<path> with the user's token, then save it (dialog) or open it with the default program."""
@@ -384,21 +395,36 @@ class DesktopApp:
         return {"ok": True, "path": str(target)}
 
     # --- internals (not exposed: leading underscore) ---
+    def _loading_html(self) -> str:
+        return self._setup_html.replace("<body>", '<body class="loading">', 1)
+
+    def _show_html(self, html: str) -> None:
+        # While WebView2 is still starting (first run on a new PC takes seconds), pywebview drops
+        # load_html and later shows window.html, the page the window was created with. Keep that in step,
+        # or the window stays on the "açılıyor" screen for good.
+        self._window.html = html
+        self._window.real_url = None
+        self._window.load_html(html)
+
     def _on_start(self) -> None:
+        # Wait for the first page (WebView2 ready) before switching pages; carry on if it never comes
+        if not self._window.events.loaded.wait(60):
+            log.warning("webview did not report loaded within 60 s")
+        log.info("webview ready, mode=%s", self._cfg.get("mode"))
         if self._cfg.get("mode") in ("server", "client"):
             self._connect(None)
-        else:
-            self._window.load_html(self._setup_html)
+        elif '<body class="loading">' in (self._window.html or ""):
+            self._show_html(self._setup_html)
         threading.Thread(target=self._check_update, args=(True,), daemon=True).start()
 
     def _fail(self, msg: str) -> None:
         log.error("%s", msg)
         self._cfg["_error"] = msg
-        self._window.load_html(self._setup_html)
+        self._show_html(self._setup_html)
 
     def _connect(self, admin_password: str | None) -> None:
         c = self._cfg
-        self._window.load_html(self._setup_html.replace("<body>", '<body class="loading">', 1))
+        self._show_html(self._loading_html())
         if c.get("mode") == "client":
             url = c.get("server_url", "")
             if not is_erp(url, 6):
@@ -442,6 +468,7 @@ class DesktopApp:
             self._server = srv
             self._base = srv.local_url
         self._cfg.pop("_error", None)
+        log.info("opening %s", self._base)
         self._window.load_url(self._base + "/")
         return None
 
@@ -477,7 +504,7 @@ class DesktopApp:
             webbrowser.open(rel["url"])
 
     def _install_update(self, url: str) -> None:
-        target = Path(tempfile.gettempdir()) / safe_name(url.rsplit("/", 1)[-1], "ParcaTakipERP-Setup.exe")
+        target = Path(tempfile.gettempdir()) / safe_name(url.rsplit("/", 1)[-1], "LabERP-Setup.exe")
         try:
             req = urllib.request.Request(url, headers={"User-Agent": f"ParcaTakipERP/{VERSION}"})
             with urllib.request.urlopen(req, timeout=600) as r, open(target, "wb") as f:
@@ -537,8 +564,9 @@ class DesktopApp:
         webview.settings["ALLOW_DOWNLOADS"] = True
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
         server_mode = self._cfg.get("mode") == "server"
+        first = self._setup_html if self._cfg.get("mode") not in ("server", "client") else self._loading_html()
         self._window = webview.create_window(
-            APP_NAME, html=self._setup_html.replace("<body>", '<body class="loading">', 1), js_api=self,
+            APP_NAME, html=first, js_api=self,
             width=1440, height=900, min_size=(960, 600), maximized=True, text_select=True,
             confirm_close=server_mode, background_color="#0f172a",
             localization={"global.quitConfirmation":
@@ -589,13 +617,23 @@ def smoke(folder: Path) -> int:
 
 
 def main() -> None:
+    global UI_TEST
     setup_logging()
     log.info("start %s frozen=%s", VERSION, FROZEN)
     if len(sys.argv) >= 3 and sys.argv[1] == "--smoke":
         code = smoke(Path(sys.argv[2]))
         logging.shutdown()
         os._exit(code)  # uvicorn and the backup thread are daemons; skip their shutdown
+    if len(sys.argv) >= 3 and sys.argv[1] == "--ui-test":
+        UI_TEST = Path(sys.argv[2])
+        UI_TEST.unlink(missing_ok=True)
+        # The setup page must call get_state within 120 s, or the window is stuck
+        threading.Timer(120, lambda: (log.error("ui-test: no setup page"), os._exit(1))).start()
     DesktopApp().run()
+    if UI_TEST is not None:
+        ok = UI_TEST.is_file() and json.loads(UI_TEST.read_text(encoding="utf-8")).get("ok")
+        logging.shutdown()
+        os._exit(0 if ok else 1)
     os._exit(0)
 
 

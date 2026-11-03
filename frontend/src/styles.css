@@ -49,6 +49,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .sidebar .brand { display: flex; align-items: center; gap: 8px; padding: 2px 4px 12px; white-space: nowrap; }
 .brand-logo { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 800; flex: none; }
 .brand-name { font-size: 15px; }
+.brand-logo svg { display: block; }
+.login-brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.login-brand .brand-logo { width: 38px; height: 38px; border-radius: 10px; }
 .app.collapsed .brand-logo { display: none; }
 .sidebar nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; color: var(--fg); white-space: nowrap; }
 .sidebar nav a svg { flex: none; color: var(--muted); }

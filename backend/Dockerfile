@@ -1,4 +1,4 @@
-# Parça Takip ERP backend (FastAPI). Build: docker compose build backend
+# LAB ERP backend (FastAPI). Build: docker compose build backend
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

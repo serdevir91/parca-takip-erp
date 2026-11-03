@@ -1,5 +1,11 @@
-Windows masaüstü uygulaması: `ParcaTakipERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
-Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
+Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
+Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
+
+## 1.4.1 yenilikleri
+
+- **Yeni ad: LAB ERP.** Yeni logo; Windows, Android ve tarayıcıda aynı ad ve simge. Veriler ve ayarlar aynen kalır.
+- **Düzeltme:** Windows uygulaması yeni bir bilgisayarda ilk açılışta "açılıyor" ekranında takılı kalmıyor.
+- Açılış uzun sürerse "Bağlantı ayarlarını aç" düğmesi çıkar.
 
 ## 1.4.0 yenilikleri
 
@@ -18,7 +24,7 @@ Android uygulaması: telefonda `ParcaTakipERP-x.y.z.apk` dosyasını indirip kur
 
 ## 1.3.0 yenilikleri
 
-- **Android uygulaması:** Ağdaki sunucuyu kendisi bulur, son sunucuyu hatırlar. İndirmeler İndirilenler › ParcaTakip klasörüne kaydedilir, fotoğraf eklerken kamera kullanılabilir, geri tuşu pencereleri ve menüyü kapatır.
+- **Android uygulaması:** Ağdaki sunucuyu kendisi bulur, son sunucuyu hatırlar. İndirmeler İndirilenler › LAB ERP klasörüne kaydedilir, fotoğraf eklerken kamera kullanılabilir, geri tuşu pencereleri ve menüyü kapatır.
 - **Telefona uyumlu arayüz:** Telefonda kayan yan menü, alttan açılan pencereler, kaydırılabilir tablolar ve büyük dokunma alanları.
 - **Profilim:** Her kullanıcı sağ üstteki adına tıklayarak kendi adını ve şifresini değiştirebilir.
 - **Güvenlik:**

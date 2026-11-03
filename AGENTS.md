@@ -1,6 +1,6 @@
-# Parça Takip ERP: agent notes
+# LAB ERP: agent notes
 
-Offline LAN part-tracking ERP for a machine-building workshop. It tracks SolidWorks BOM versions, part status, fasteners, drawings and the T-35 control list. The full spec is `docs/SPEC.md` (Turkish), and the sample inputs are in `docs/reference/`.
+Offline LAN part-tracking ERP for a machine-building workshop. Product name **LAB ERP** since 1.4.1 (was "Parça Takip ERP"; repo, package ids, `ParcaTakipApp` bridge, UDP magic, `%APPDATA%\ParcaTakipERP` on old PCs and the Docker-free script paths keep the old name). Logo: `desktop/make_logo.py` writes `icon.ico`, `favicon.svg`, `logo-192.png` and the Android foreground; `components/BrandMark.tsx` and both `setup.html` files inline the same flask path. It tracks SolidWorks BOM versions, part status, fasteners, drawings and the T-35 control list. The full spec is `docs/SPEC.md` (Turkish), and the sample inputs are in `docs/reference/`.
 
 Read this file first. Do not re-scan the whole project.
 
@@ -128,14 +128,14 @@ cd frontend && npx tsc -b && npm run build
 docker compose up -d --build
 ```
 Windows install/update: `KURULUM.bat` runs `deploy/windows_install.ps1` (Docker check, random `.env` secrets, free-port pick, firewall rule). `.gitattributes` keeps LF everywhere except `*.ps1`/`*.bat`; `.ps1` files need a UTF-8 BOM for Windows PowerShell 5.1.
-Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss`. CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
+Windows desktop app: `desktop/parca_takip_desktop.py` (pywebview window; server mode runs the backend in-process on SQLite, client mode opens a LAN server, UDP discovery), `setup.html` first-run screen, PyInstaller `parca_takip.spec`, Inno `installer.iss` (exe `LabERP.exe`, assets `LabERP-Setup-<v>.exe`; it deletes the old `ParcaTakipERP.exe` and shortcuts). Use `_show_html()`, never `window.load_html` directly: before WebView2 is ready pywebview drops `load_html` and shows `window.html` (the 1.4.0 stuck "açılıyor" bug). CI runs `LabERP.exe --ui-test <json>` on a fresh profile (`ERP_DESKTOP_CONFIG_DIR`). CI (`.github/workflows`) builds it on windows-latest; pushing tag `vX.Y.Z` (must equal `app_version` in `backend/app/config.py`) publishes the installer to GitHub Releases with `desktop/RELEASE_NOTES.md`.
 Android app: `mobile/android` (plain Java, no AndroidX UI, Gradle 9.1 + AGP). `MainActivity` is a WebView over the
 saved server with the `ParcaTakipApp` JS bridge (gated to `setup.html` and the saved server origin), file chooser +
-camera via FileProvider, downloads to `Downloads/ParcaTakip`, back key -> `__erpBack`, GitHub releases update check.
+camera via FileProvider, downloads to `Downloads/LAB ERP`, back key -> `__erpBack`, GitHub releases update check.
 `Discovery` finds servers (UDP 47811, then a /24 probe on 8000/80/8080). `assets/setup.html` is the first-run screen.
 Version comes from `config.py`. Release signing: gitignored `keystore.properties` + `release.jks`, or `ERP_KEYSTORE_*`
 env (CI secrets; the job skips the APK when they are missing). `splits.abi` builds arm64-v8a, armeabi-v7a, x86_64, x86 and
-universal; release assets are `ParcaTakipERP-<v>-<abi>.apk` + `ParcaTakipERP-<v>.apk` (upload the universal one last:
+universal; release assets are `LabERP-<v>-<abi>.apk` + `LabERP-<v>.apk` (upload the universal one last:
 1.3.0 clients take the last `.apk` asset). `MainActivity.pickApk` picks the split for `Build.SUPPORTED_ABIS`. Build: `JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 

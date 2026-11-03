@@ -144,7 +144,7 @@ if (Test-Path $envFile) {
   $newInstall = $true
   $d = $DataDir -replace "\\", "/"
   $lines = [string[]]@(
-    "# Parça Takip ERP (Docker'sız) ayarları. Değişiklikten sonra: KURULUM_DOCKERSIZ.bat",
+    "# LAB ERP (Docker'sız) ayarları. Değişiklikten sonra: KURULUM_DOCKERSIZ.bat",
     "ERP_DATABASE_URL=sqlite:///$d/erp.db",
     "ERP_DATA_DIR=$d/data",
     "ERP_BACKUP_DIR=$d/yedek",
@@ -191,7 +191,7 @@ $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccou
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
   -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
-  -Description "Parça Takip ERP web sunucusu ve günlük yedek" -Force | Out-Null
+  -Description "LAB ERP web sunucusu ve günlük yedek" -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
 $ok = $false

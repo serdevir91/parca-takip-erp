@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Parça Takip ERP</title>
+<title>LAB ERP</title>
 <style>
   :root { --bg: #0f172a; --card: #111c33; --line: #24324f; --text: #e2e8f0; --muted: #94a3b8; --accent: #2563eb;
           --accent-2: #1d4ed8; --error: #f87171; --ok: #34d399; }
@@ -49,11 +49,12 @@
 </style>
 </head>
 <body>
-<div class="loader"><div class="spin"></div><div class="muted">Parça Takip ERP açılıyor…</div></div>
+<div class="loader"><div class="spin"></div><div class="muted">LAB ERP açılıyor…</div>
+  <div id="slow" hidden style="margin-top:18px"><div class="muted" style="margin-bottom:10px">Açılış uzun sürüyor. Sunucu kapalı olabilir.</div><button class="btn" id="slow-btn" type="button">Bağlantı ayarlarını aç</button></div></div>
 <div class="wrap">
   <div class="brand">
-    <div class="logo">P</div>
-    <div><h1>Parça Takip ERP</h1><div class="muted" id="ver"></div></div>
+    <div class="logo"><svg width="24" height="26" viewBox="4 3 24 26" aria-hidden="true"><path fill="#fff" d="M12.5 5L19.5 5Q20.5 5 20.5 6Q20.5 7 19.5 7L19 7L19 12.4L25.2 22.6Q26.6 25.3 23.6 26.5L8.4 26.5Q5.4 25.3 6.8 22.6L13 12.4L13 7L12.5 7Q11.5 7 11.5 6Q11.5 5 12.5 5Z"/><path fill="#93c5fd" d="M10.6 18.6L21.4 18.6L23.6 22.3Q24.4 24 22.6 24.4L9.4 24.4Q7.6 24 8.4 22.3Z"/></svg></div>
+    <div><h1>LAB ERP</h1><div class="muted" id="ver"></div></div>
   </div>
   <div class="card">
     <div class="muted" style="margin-bottom:14px">Bu bilgisayar nasıl çalışsın?</div>
@@ -158,7 +159,13 @@
       if (!r.ok) { show(r.error, "error"); $("go").disabled = false; }
     };
   }
-  if (window.pywebview && window.pywebview.api) init(); else window.addEventListener("pywebviewready", init);
+  // Loading screen that takes too long (server unreachable, slow start): offer the settings
+  setTimeout(() => { if (document.body.classList.contains("loading")) $("slow").hidden = false; }, 30000);
+  $("slow-btn").onclick = () => window.pywebview && window.pywebview.api && window.pywebview.api.show_settings();
+  let started = false;
+  const start = () => { if (!started && !document.body.classList.contains("loading")) { started = true; init(); } };
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_state) start();
+  else window.addEventListener("pywebviewready", start);
 </script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-<title>Parça Takip ERP</title>
+<title>LAB ERP</title>
 <style>
   :root { --bg:#f5f6f8; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --brand:#2563eb; --err:#c62828; --ok:#2e7d32; }
   @media (prefers-color-scheme: dark) {
@@ -35,11 +35,13 @@
   .empty { color:var(--muted); font-size:14px; }
   footer { text-align:center; color:var(--muted); font-size:13px; margin-top:18px; }
   footer button { flex:none; min-height:40px; padding:0 14px; margin-top:8px; }
+  .brandh { display:flex; align-items:center; gap:10px; }
+  .brandh .lg { width:40px; height:40px; border-radius:10px; background:#2563eb; display:grid; place-items:center; flex:none; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Parça Takip ERP</h1>
+  <h1 class="brandh"><span class="lg"><svg width="22" height="24" viewBox="4 3 24 26" aria-hidden="true"><path fill="#fff" d="M12.5 5L19.5 5Q20.5 5 20.5 6Q20.5 7 19.5 7L19 7L19 12.4L25.2 22.6Q26.6 25.3 23.6 26.5L8.4 26.5Q5.4 25.3 6.8 22.6L13 12.4L13 7L12.5 7Q11.5 7 11.5 6Q11.5 5 12.5 5Z"/><path fill="#93c5fd" d="M10.6 18.6L21.4 18.6L23.6 22.3Q24.4 24 22.6 24.4L9.4 24.4Q7.6 24 8.4 22.3Z"/></svg></span>LAB ERP</h1>
   <p class="sub">Aynı ağdaki ERP sunucusuna bağlanın. Sunucu, masaüstü uygulaması (sunucu modu), Docker ya da Dockersız kurulum olabilir.</p>
 
   <div class="card">

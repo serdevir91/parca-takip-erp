@@ -30,9 +30,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
-    name="ParcaTakipERP",
+    name="LabERP",
     icon=str(ROOT / "desktop" / "icon.ico"),
     console=False,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="ParcaTakipERP", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="LabERP", upx=False)
