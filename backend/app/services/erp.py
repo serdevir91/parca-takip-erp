@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..core.status import KIND_IMALAT, PROG_DONE, PROG_RUN, PROG_WAIT
 from ..models import (Employee, FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove, SyncState,
-                      TimeEntry, Tracking, User, WorkOrder)
+                      TimeEntry, Tracking, User, WorkOrder, WorkOrderMaterial)
 from . import audit, system
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import apply_changes, tracking_of
@@ -31,8 +31,10 @@ EPS = 1e-9
 PO_STATUS = {"draft": "Taslak", "sent": "Gönderildi", "partial": "Kısmi teslim",
              "received": "Teslim alındı", "cancelled": "İptal"}
 PO_OPEN = ("draft", "sent", "partial")
-WO_STATUS = {"planned": "Planlandı", "in_progress": "Üretimde", "done": "Tamamlandı", "cancelled": "İptal"}
+WO_STATUS = {"planned": "Planlandı", "in_progress": "Üretimde", "done": "Tamamlandı", "closed": "Kısa kapatıldı",
+             "cancelled": "İptal"}
 WO_OPEN = ("planned", "in_progress")
+WO_FINAL = ("done", "closed", "cancelled")
 MOVE_KINDS = {"in": "Giriş", "out": "Çıkış", "count": "Sayım", "receipt": "Satın alma girişi",
               "production": "Üretim girişi", "issue": "Projeye çıkış"}
 ITEM_KINDS = {"part": "Parça", "fastener": "Bağlantı elemanı", "other": "Diğer"}
@@ -67,8 +69,9 @@ def stock_item(db: Session, code: str, name: str = "", kind: str = "part", unit:
 
 
 def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float, *, project_id: int | None = None,
-         ref: str = "", note: str = "", unit_cost: float | None = None) -> StockMove:
-    """Book a stock move. qty is positive; out/issue subtract, count sets the counted quantity."""
+         ref: str = "", note: str = "", unit_cost: float | None = None, reverse: bool = False) -> StockMove:
+    """Book a stock move. qty is positive; out/issue subtract, count sets the counted quantity.
+    reverse books goods coming back from an issue: still kind "issue", so requirements and project_costs net it off."""
     if kind not in MOVE_KINDS:
         raise HTTPException(400, f"Geçersiz hareket türü: {kind}")
     # Take the row lock before reading the balance, so parallel moves queue up instead of losing each other
@@ -82,7 +85,7 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
     else:
         if qty <= 0:
             raise HTTPException(400, "Miktar sıfırdan büyük olmalı")
-        delta = -qty if kind in ("out", "issue") else qty
+        delta = -qty if kind in ("out", "issue") and not reverse else qty
     if item.qty + delta < -EPS:
         raise HTTPException(400, f"{item.code}: stokta yeterli miktar yok (stok {item.qty:g}, istenen {qty:g})")
     if delta > 0 and unit_cost is not None:
@@ -92,7 +95,7 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
     item.qty = _num(item.qty + delta)
     m = StockMove(item_id=item.id, kind=kind, qty=_num(delta), balance=item.qty, project_id=project_id, ref=ref,
                   note=note, username=user.username if user else "",
-                  unit_cost=unit_cost if unit_cost is not None else item.unit_cost)
+                  unit_cost=unit_cost if unit_cost is not None or reverse else item.unit_cost)
     db.add(m)
     return m
 
@@ -102,6 +105,7 @@ def stock_out(i: StockItem) -> dict[str, Any]:
             "unit": i.unit, "qty": i.qty, "min_qty": i.min_qty, "unit_cost": i.unit_cost,
             "value": round(i.qty * i.unit_cost, 2) if i.unit_cost is not None else None,
             "low": i.min_qty > 0 and i.qty < i.min_qty, "location": i.location, "note": i.note,
+            "reorder_qty": i.reorder_qty, "preferred_firm_id": i.preferred_firm_id,
             "updated_at": i.updated_at.isoformat() if i.updated_at else None}
 
 
@@ -285,28 +289,45 @@ def receive(db: Session, user: User, po: PurchaseOrder, items: list[tuple[Purcha
 
 
 # ---------- work orders ----------
-def wo_out(w: WorkOrder, project_name: str | None = None) -> dict[str, Any]:
+def wo_out(w: WorkOrder, project_name: str | None = None, ops: tuple[int, int] = (0, 0)) -> dict[str, Any]:
+    """ops = (steps done, steps in total). A closed order stops at what was made, so nothing remains of it."""
+    qty = w.done_qty if w.status == "closed" else w.qty
     return {"id": w.id, "no": w.no, "project_id": w.project_id, "project_name": project_name, "part_no": w.part_no,
             "description": w.description, "qty": w.qty, "done_qty": w.done_qty,
-            "remaining": max(0.0, _num(w.qty - w.done_qty)), "firm_name": w.firm_name,
+            "remaining": max(0.0, _num(qty - w.done_qty)), "firm_name": w.firm_name,
             "subcontract": bool(w.firm_name), "status": w.status, "status_label": WO_STATUS.get(w.status, w.status),
             "start_date": w.start_date.isoformat() if w.start_date else None,
             "due_date": w.due_date.isoformat() if w.due_date else None,
             "overdue": bool(w.due_date and w.due_date < date.today() and w.status in WO_OPEN),
-            "unit_cost": w.unit_cost, "total_cost": round(w.qty * w.unit_cost, 2) if w.unit_cost is not None else None,
+            "unit_cost": w.unit_cost, "total_cost": round(qty * w.unit_cost, 2) if w.unit_cost is not None else None,
             "note": w.note, "created_at": w.created_at.isoformat() if w.created_at else None,
-            "created_by": w.created_by}
+            "created_by": w.created_by, "ops_done": ops[0], "ops_total": ops[1]}
+
+
+def lock_wo(db: Session, w: WorkOrder) -> None:
+    """Row lock, then a fresh read: parallel work on one order queues up instead of acting on a stale status."""
+    db.flush()
+    db.execute(update(WorkOrder).where(WorkOrder.id == w.id).values(status=WorkOrder.status))
+    db.refresh(w)
 
 
 def set_wo_status(db: Session, user: User, w: WorkOrder, status: str) -> None:
-    if status not in ("planned", "in_progress", "cancelled"):
-        raise HTTPException(400, "Durum planlandı, üretimde veya iptal olabilir; tamamlama üretim girişi ile yapılır")
+    if status not in ("planned", "in_progress", "cancelled", "closed"):
+        raise HTTPException(400, "Durum planlandı, üretimde, iptal veya kısa kapatıldı olabilir; "
+                                 "tamamlama üretim girişi ile yapılır")
+    lock_wo(db, w)
     if w.status == status:
         return
-    if w.status in ("done", "cancelled"):
+    if w.status in WO_FINAL:
         raise HTTPException(400, f"{WO_STATUS[w.status]} durumundaki iş emri değiştirilemez")
     if status == "planned" and w.done_qty > EPS:
         raise HTTPException(400, "Üretim girişi yapılmış iş emri planlandıya döndürülemez")
+    if status == "cancelled":
+        if w.done_qty > EPS:
+            raise HTTPException(400, "Üretim girişi yapılmış iş emri iptal edilemez; kısa kapatın")
+        if db.scalar(select(WorkOrderMaterial.id).where(WorkOrderMaterial.wo_id == w.id,
+                                                        WorkOrderMaterial.issued_qty > EPS).limit(1)):
+            raise HTTPException(400, "Malzeme çıkılmış iş emri iptal edilemez; malzemeyi iade edin veya kısa kapatın")
     if status == "in_progress":
         if w.start_date is None:
             w.start_date = date.today()
@@ -316,8 +337,12 @@ def set_wo_status(db: Session, user: User, w: WorkOrder, status: str) -> None:
     w.status = status
 
 
-def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str = "") -> None:
-    """Üretim girişi: finished parts into stock (and to the project)."""
+def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str = "") -> list[dict[str, Any]]:
+    """Üretim girişi: finished parts into stock (and to the project). Materials go out in proportion to done_qty;
+    returns what could not be issued, which never stops the completion."""
+    from . import womaterials   # needs this module's stock functions
+
+    lock_wo(db, w)
     if w.status not in WO_OPEN:
         raise HTTPException(400, "Yalnızca açık iş emrine üretim girişi yapılır")
     if qty <= 0:
@@ -326,8 +351,10 @@ def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str =
         set_wo_status(db, user, w, "in_progress")
     w.done_qty = _num(w.done_qty + qty)
     audit.record(db, user, "work_order", w.no, "done_qty", None, w.done_qty, w.project_id)
+    warnings, material_value = womaterials.consume(db, user, w)
+    unit_cost = w.unit_cost if material_value <= EPS else (w.unit_cost or 0.0) + material_value / qty
     item = stock_item(db, w.part_no, w.description, "part")
-    move(db, user, item, "production", qty, project_id=w.project_id, ref=w.no, note=note, unit_cost=w.unit_cost)
+    move(db, user, item, "production", qty, project_id=w.project_id, ref=w.no, note=note, unit_cost=unit_cost)
     if w.project_id:
         move(db, user, item, "issue", qty, project_id=w.project_id, ref=w.no, note=note)
     if w.done_qty + EPS >= w.qty:
@@ -337,6 +364,7 @@ def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str =
         project = db.get(Project, w.project_id)
         if project is not None:
             sync_delivery(db, user, project, {w.part_no})
+    return warnings
 
 
 # ---------- requirement planning (MRP) ----------
@@ -443,7 +471,8 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
             missing_price += 1
             continue
         rows.append({"source": "Fason iş emri" if w.firm_name else "İç üretim", "firm": w.firm_name or "(İç üretim)",
-                     "group": groups.get(w.part_no, "(BOM dışı)"), "committed": w.qty * w.unit_cost,
+                     "group": groups.get(w.part_no, "(BOM dışı)"),
+                     "committed": (w.done_qty if w.status == "closed" else w.qty) * w.unit_cost,
                      "actual": min(w.done_qty, w.qty) * w.unit_cost})
     for m, code in db.execute(select(StockMove, StockItem.code).join(StockItem)
                               .where(StockMove.project_id == project.id, StockMove.kind == "issue",

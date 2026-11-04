@@ -8,12 +8,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..models import Project, StockItem, StockMove, User
-from ..services import audit, erp
+from ..models import Firm, Project, StockItem, StockMove, User
+from ..services import audit, erp, reorder
 from ..permissions import require
 from .deps import get_db, project_or_404
 
 stock_view, stock_edit = require("stock", "view"), require("stock", "edit")
+purchasing_view, purchasing_edit = require("purchasing", "view"), require("purchasing", "edit")
 
 router = APIRouter(tags=["stock"])
 
@@ -28,6 +29,8 @@ class ItemIn(BaseModel):
     location: str = Field(default="", max_length=100)
     note: str = ""
     qty: float = Field(default=0, ge=0)       # opening balance
+    reorder_qty: float = Field(default=0, ge=0)
+    preferred_firm_id: int | None = None
 
 
 class ItemUpdate(BaseModel):
@@ -38,6 +41,18 @@ class ItemUpdate(BaseModel):
     unit_cost: float | None = Field(default=None, ge=0)
     location: str | None = Field(default=None, max_length=100)
     note: str | None = None
+    reorder_qty: float | None = Field(default=None, ge=0)
+    preferred_firm_id: int | None = None
+
+
+class ReorderLine(BaseModel):
+    item_id: int
+    qty: float = Field(gt=0)
+    firm_id: int | None = None
+
+
+class ReorderIn(BaseModel):
+    items: list[ReorderLine] = Field(min_length=1)
 
 
 class MoveIn(BaseModel):
@@ -55,6 +70,11 @@ def _item_or_404(db: Session, item_id: int) -> StockItem:
     return i
 
 
+def _check_firm(db: Session, firm_id: int | None) -> None:
+    if firm_id is not None and db.get(Firm, firm_id) is None:
+        raise HTTPException(400, "Firma bulunamadı")
+
+
 @router.get("/stock")
 def list_stock(q: str = "", low: bool = False, _: User = Depends(stock_view),
                db: Session = Depends(get_db)) -> dict[str, Any]:
@@ -69,6 +89,20 @@ def list_stock(q: str = "", low: bool = False, _: User = Depends(stock_view),
             "total_value": round(sum(r["value"] or 0 for r in rows), 2), "low_count": sum(1 for r in rows if r["low"])}
 
 
+@router.get("/stock/reorder")
+def reorder_list(_: User = Depends(stock_view), __: User = Depends(purchasing_view),
+                 db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Cards under their minimum. Both rights: it joins stock levels with supplier prices."""
+    return {"rows": reorder.suggestions(db)}
+
+
+@router.post("/stock/reorder/orders", status_code=201)
+def reorder_orders(body: ReorderIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    orders = reorder.create_orders(db, me, [r.model_dump() for r in body.items])
+    db.commit()
+    return {"orders": [{"id": po.id, "no": po.no, "firm_name": po.firm_name, "line_count": len(po.lines)} for po in orders]}
+
+
 @router.post("/stock", status_code=201)
 def create_item(body: ItemIn, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     code = body.code.strip()
@@ -76,8 +110,10 @@ def create_item(body: ItemIn, me: User = Depends(stock_edit), db: Session = Depe
         raise HTTPException(409, "Bu kodla stok kartı zaten var")
     if body.kind not in erp.ITEM_KINDS:
         raise HTTPException(400, "Geçersiz kalem türü")
+    _check_firm(db, body.preferred_firm_id)
     i = StockItem(code=code, name=body.name.strip(), kind=body.kind, unit=body.unit or "Adet", qty=0.0,
-                  min_qty=body.min_qty, unit_cost=body.unit_cost, location=body.location, note=body.note)
+                  min_qty=body.min_qty, unit_cost=body.unit_cost, location=body.location, note=body.note,
+                  reorder_qty=body.reorder_qty, preferred_firm_id=body.preferred_firm_id)
     db.add(i)
     db.flush()
     audit.record(db, me, "stock", code, "code", None, code, action="create")
@@ -94,9 +130,11 @@ def update_item(item_id: int, body: ItemUpdate, me: User = Depends(stock_edit),
     changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
     if "kind" in changes and changes["kind"] not in erp.ITEM_KINDS:
         raise HTTPException(400, "Geçersiz kalem türü")
-    for k in ("name", "kind", "unit", "min_qty", "location", "note"):
+    for k in ("name", "kind", "unit", "min_qty", "location", "note", "reorder_qty"):
         if k in changes and changes[k] is None:
             del changes[k]
+    if "preferred_firm_id" in changes:
+        _check_firm(db, changes["preferred_firm_id"])
     audit.record_changes(db, me, i, changes, "stock", i.code)
     db.commit()
     return erp.stock_out(i)

@@ -14,7 +14,7 @@ log = logging.getLogger("erp.sync")
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Writes that change nothing other screens show. Chat has its own lighter poll (GET /api/chat/state),
 # so a message does not make every open screen refetch.
-SKIP_PATHS = ("/api/auth/login", "/api/auth/password", "/api/fastener-rules/test", "/api/chat/")
+SKIP_PATHS = ("/api/auth/login", "/api/auth/password", "/api/fastener-rules/test", "/api/chat/", "/api/scan/resolve")
 
 
 def bump(engine: Engine) -> None:
