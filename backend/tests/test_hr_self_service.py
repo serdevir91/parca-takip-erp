@@ -8,7 +8,7 @@ from app.api import attendance as attendance_api
 from app.api import leave as leave_api
 from app.core.attendance import day_balance, working_days
 from app.db import SessionLocal
-from app.models import Attendance, AttendanceRequest, AuditLog, LeaveRequest, TimeEntry
+from app.models import Attendance, AttendanceRequest, AuditLog, LeaveRequest, Project, TimeEntry
 from test_api_commerce import _login, _u
 
 MON = date(2027, 3, 1)       # a Monday in a year of its own, so the balance tests need no clock
@@ -263,7 +263,7 @@ def test_report_marks_leave_and_keeps_expected_hours_honest(client, admin_header
 
     month = mon.strftime("%Y-%m")
     mine = client.get("/api/attendance/me", headers=h, params={"month": month}).json()
-    assert {x["work_date"] for x in mine["leave_days"]} >= {str(mon), str(mon + timedelta(days=1))} or mon.month != fri.month
+    assert str(mon) in {x["work_date"] for x in mine["leave_days"]}
     assert {"expected", "covered", "missing_days", "short", "leave"} <= set(mine["summary"])
 
 
@@ -432,9 +432,7 @@ def test_pick_list_shows_only_what_it_should(client, admin_headers, job):
 def test_archived_project_leaves_the_pick_list(client, admin_headers, job):
     pid, wo = job
     h, _ = _worker(client, admin_headers)
-    client.put(f"/api/projects/{pid}", headers=admin_headers, json={"archived": True})
     with SessionLocal() as db:
-        from app.models import Project
         db.get(Project, pid).archived = True
         db.commit()
     d = client.get("/api/hr/me/time/options", headers=h).json()

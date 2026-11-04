@@ -40,7 +40,7 @@ export type LedgerRow = {
 };
 export type Employee = {
   id: number; name: string; title: string; department: string; phone: string; email: string; hourly_cost: number | null;
-  start_date: string | null; active: boolean; note: string; hours_30d: number; user_id: number | null;
+  start_date: string | null; active: boolean; note: string; hours_30d: number; user_id: number | null; annual_leave_days: number | null;
 };
 export type TimeEntry = {
   id: number; employee_id: number; employee_name: string; work_date: string; hours: number; project_id: number | null;

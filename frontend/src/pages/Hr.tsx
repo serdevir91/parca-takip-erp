@@ -50,6 +50,7 @@ function TimeTab() {
   const [emp, setEmp] = useState<number | "">("");
   const [project, setProject] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  const [fixing, setFixing] = useState<TimeEntry | null>(null);
   const list = useQuery({
     queryKey: ["time-entries", from, to, emp, project],
     queryFn: () => {
@@ -100,7 +101,10 @@ function TimeTab() {
                       <td className="num">{fmtH(t.hours)}</td>
                       <td className="num">{t.cost == null ? <span className="badge warn" title="Personelin saat ücreti girilmemiş">ücret yok</span> : fmtMoney(t.cost)}</td>
                       <td className="muted">{t.note}</td>
-                      <td>{canEdit && <button className="btn small" disabled={del.isPending} onClick={() => confirm("Kayıt silinsin mi?") && del.mutate(t)}>Sil</button>}</td>
+                      <td>{canEdit && <div className="row">
+                        <button className="btn small" onClick={() => setFixing(t)}>Düzelt</button>
+                        <button className="btn small" disabled={del.isPending} onClick={() => confirm("Kayıt silinsin mi?") && del.mutate(t)}>Sil</button>
+                      </div>}</td>
                     </tr>
                   ))}
                   {!d.rows.length && <tr><td colSpan={8} className="muted empty">Bu aralıkta kayıt yok.</td></tr>}
@@ -121,43 +125,53 @@ function TimeTab() {
         )}
       </div>
       {adding && <TimeForm employees={(emps.data ?? []).filter((e) => e.active)} onClose={() => setAdding(false)} />}
+      {fixing && <TimeForm entry={fixing} employees={[]} onClose={() => setFixing(null)} />}
     </>
   );
 }
 
-function TimeForm({ employees, onClose }: { employees: Employee[]; onClose: () => void }) {
+function TimeForm({ employees, entry, onClose }: { employees: Employee[]; entry?: TimeEntry; onClose: () => void }) {
   const toast = useToast();
   const refresh = useRefresh();
-  const [emp, setEmp] = useState<number>(employees[0]?.id ?? 0);
-  const [date, setDate] = useState(today());
-  const [hours, setHours] = useState(String(sys.work_hours));
-  const [project, setProject] = useState<number | null>(null);
-  const [wo, setWo] = useState<number | null>(null);
-  const [note, setNote] = useState("");
+  const [emp, setEmp] = useState<number>(entry?.employee_id ?? employees[0]?.id ?? 0);
+  const [date, setDate] = useState(entry?.work_date ?? today());
+  const [hours, setHours] = useState(String(entry?.hours ?? sys.work_hours));
+  const [project, setProject] = useState<number | null>(entry?.project_id ?? null);
+  const [wo, setWo] = useState<number | null>(entry?.work_order_id ?? null);
+  const [note, setNote] = useState(entry?.note ?? "");
   const wos = useQuery({
     enabled: useAuth().can("workorders"),
     queryKey: ["work-orders", project ?? 0, "open"],
     queryFn: () => api.get<{ rows: WorkOrder[] }>(`/work-orders?status=open${project ? `&project_id=${project}` : ""}`),
   });
   const save = useMutation({
-    mutationFn: () => api.post<TimeEntry>("/time-entries", { employee_id: emp, work_date: date, hours: numOrNull(hours),
-      project_id: project, work_order_id: wo, note }),
-    onSuccess: (t) => { toast(`${t.employee_name}: ${fmtH(t.hours)} kaydedildi`); refresh(); setNote(""); setWo(null); },
+    mutationFn: () => {
+      const body = { work_date: date, hours: numOrNull(hours), project_id: project, work_order_id: wo, note };
+      return entry ? api.put<TimeEntry>(`/time-entries/${entry.id}`, body) : api.post<TimeEntry>("/time-entries", { ...body, employee_id: emp });
+    },
+    onSuccess: (t) => {
+      toast(`${t.employee_name}: ${fmtH(t.hours)} kaydedildi`);
+      refresh();
+      if (entry) onClose();
+      else { setNote(""); setWo(null); }
+    },
     onError: (e) => toast(errText(e), true),
   });
   const h = numOrNull(hours) ?? 0;
   return (
-    <Modal title="Çalışma saati gir" onClose={onClose}
+    <Modal title={entry ? `Düzelt: ${entry.employee_name}` : "Çalışma saati gir"} onClose={onClose}
       footer={<>
         <button className="btn" onClick={onClose}>Kapat</button>
         <button className="btn primary" disabled={!emp || h <= 0 || h > 24 || save.isPending} onClick={() => save.mutate()}>Kaydet</button>
       </>}>
       <div className="adm-form">
-        <Field label="Personel">
-          <select value={emp} onChange={(e) => setEmp(Number(e.target.value))}>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.title ? ` · ${e.title}` : ""}</option>)}
-          </select>
-        </Field>
+        {!entry && (
+          <Field label="Personel">
+            <select value={emp} onChange={(e) => setEmp(Number(e.target.value))}>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.title ? ` · ${e.title}` : ""}</option>)}
+            </select>
+          </Field>
+        )}
         <div className="adm-form two">
           <Field label="Tarih"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <Field label="Saat"><input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} /></Field>
@@ -166,11 +180,12 @@ function TimeForm({ employees, onClose }: { employees: Employee[]; onClose: () =
         <Field label="İş emri (isteğe bağlı)">
           <select value={wo ?? ""} onChange={(e) => setWo(e.target.value ? Number(e.target.value) : null)}>
             <option value="">(Yok)</option>
+            {entry?.work_order_id && !wos.data?.rows.some((w) => w.id === entry.work_order_id) && <option value={entry.work_order_id}>{entry.work_order_no}</option>}
             {(wos.data?.rows ?? []).map((w) => <option key={w.id} value={w.id}>{w.no} · {w.part_no}</option>)}
           </select>
         </Field>
         <Field label="Not"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-        <p className="muted">Kaydettikten sonra pencere açık kalır; aynı gün için başka personel girebilirsiniz.</p>
+        {!entry && <p className="muted">Kaydettikten sonra pencere açık kalır; aynı gün için başka personel girebilirsiniz.</p>}
       </div>
     </Modal>
   );
@@ -230,14 +245,15 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
   const [f, setF] = useState({
     name: emp?.name ?? "", title: emp?.title ?? "", department: emp?.department ?? "", phone: emp?.phone ?? "",
     email: emp?.email ?? "", rate: emp?.hourly_cost == null ? "" : String(emp.hourly_cost), start: emp?.start_date ?? "", note: emp?.note ?? "",
-    user: emp?.user_id == null ? "" : String(emp.user_id),
+    user: emp?.user_id == null ? "" : String(emp.user_id), leave: emp?.annual_leave_days == null ? "" : String(emp.annual_leave_days),
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const users = useQuery({ queryKey: ["hr-users"], queryFn: () => api.get<HrUser[]>("/hr/users") });
   const save = useMutation({
     mutationFn: () => {
       const body = { name: f.name.trim(), title: f.title, department: f.department, phone: f.phone, email: f.email,
-        hourly_cost: numOrNull(f.rate), start_date: f.start || null, note: f.note, user_id: f.user ? Number(f.user) : null };
+        hourly_cost: numOrNull(f.rate), start_date: f.start || null, note: f.note, user_id: f.user ? Number(f.user) : null,
+        annual_leave_days: numOrNull(f.leave) };
       return emp ? api.put<Employee>(`/employees/${emp.id}`, body) : api.post<Employee>("/employees", body);
     },
     onSuccess: () => { toast("Personel kaydedildi"); refresh(); onClose(); },
@@ -258,6 +274,7 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
           <Field label="E-posta"><input type="email" value={f.email} onChange={set("email")} /></Field>
           <Field label={`Saat ücreti (${curSign()}, işveren maliyeti)`}><input inputMode="decimal" value={f.rate} onChange={set("rate")} /></Field>
           <Field label="İşe giriş"><input type="date" value={f.start} onChange={set("start")} /></Field>
+          <Field label="Yıllık izin hakkı (gün)" hint="Boşsa Sistem Ayarları'ndaki değer geçerli"><input inputMode="decimal" value={f.leave} onChange={set("leave")} /></Field>
         </div>
         <Field label="Kullanıcı hesabı (kendi kartını ve saatlerini görür)">
           <select value={f.user} onChange={set("user")}>
