@@ -196,6 +196,8 @@ def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_
             changes[k] = getattr(body, k)
     if "currency" in changes:
         changes["currency"] = fx.clean_currency(changes["currency"])
+        if (inv.sales_order_id or inv.purchase_order_id) and changes["currency"] != fx.norm(inv.currency):
+            raise HTTPException(400, "Siparişten oluşan faturanın para birimi değiştirilemez")
     if "rate" in sent or changes.get("currency", inv.currency) != inv.currency:
         changes["rate"] = body.rate if body.rate is not None else fx.rate_on(
             db, changes.get("currency", inv.currency),

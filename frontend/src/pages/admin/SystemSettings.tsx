@@ -89,7 +89,7 @@ function Forms({ data }: { data: Data }) {
       </Card>
 
       <Card {...card} section="commerce" title="Finans ve belgeler"
-        note="Yeni belgelerin varsayılanları. Mevcut belgeler değişmez; kur çevrimi yapılmaz, toplamlar yalnızca varsayılan para birimindeki kayıtları sayar.">
+        note="Yeni belgelerin varsayılanları. Toplamlar bu para birimine çevrilir: her belge kendi kurunu saklar, kurlar Fatura ve ödeme > Kurlar sekmesindedir. Para birimini değiştirirseniz eski kurlar ve belge kurları eski birime göre kalır.">
         {(f, set) => (
           <>
             <div className="adm-two">
@@ -99,6 +99,9 @@ function Forms({ data }: { data: Data }) {
             <div className="adm-two">
               <Num f={f} set={set} k="payment_days" label="Fatura vadesi (gün)" />
               <Num f={f} set={set} k="quote_days" label="Teklif geçerliliği (gün)" />
+            </div>
+            <div className="adm-two">
+              <Num f={f} set={set} k="over_receipt_pct" label="Fazla teslim payı (%)" hint="Mal kabulde sipariş miktarının en çok bu kadar üstü kabul edilir." />
             </div>
             <Field label="Ödeme yöntemleri">
               <ListEditor value={f.pay_methods as string[]} onChange={(v) => set("pay_methods", v)} placeholder="Ödeme yöntemi" />

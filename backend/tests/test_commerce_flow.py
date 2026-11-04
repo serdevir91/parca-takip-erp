@@ -425,6 +425,7 @@ def test_draft_edit_cannot_pass_the_order(client, h):
     row = {k: inv["lines"][0][k] for k in ("code", "description", "unit", "unit_price", "source_line_id")}
     r = client.put(f"/api/invoices/{inv['id']}", headers=h, json={"lines": [{**row, "qty": 11}]})
     assert r.status_code == 400
+    assert client.put(f"/api/invoices/{inv['id']}", headers=h, json={"currency": "EUR"}).status_code == 400
     ok(client.put(f"/api/invoices/{inv['id']}", headers=h, json={"lines": [{**row, "qty": 10}]}))
     assert ok(client.get(f"/api/sales-orders/{s['id']}", headers=h))["lines"][0]["billable"] == 0
 
