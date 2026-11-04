@@ -1,4 +1,5 @@
 import { mobileApp } from "../api/mobile";
+import { savePref } from "../api/prefs";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type ThemeMode = "light" | "dark" | "amoled";
@@ -29,7 +30,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       /* storage unavailable */
     }
   }, [mode]);
-  return <Ctx.Provider value={{ mode, setMode }}>{children}</Ctx.Provider>;
+  useEffect(() => {
+    const h = () => setMode(initial());
+    window.addEventListener("erp-prefs", h);
+    return () => window.removeEventListener("erp-prefs", h);
+  }, []);
+  const choose = (m: ThemeMode) => {
+    try {
+      localStorage.setItem(KEY, m);
+    } catch {
+      /* storage unavailable */
+    }
+    setMode(m);
+    savePref(KEY);
+  };
+  return <Ctx.Provider value={{ mode, setMode: choose }}>{children}</Ctx.Provider>;
 }
 
 export const useTheme = () => useContext(Ctx);

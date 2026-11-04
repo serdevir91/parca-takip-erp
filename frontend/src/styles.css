@@ -866,3 +866,19 @@ div.chat-pick-row { cursor: default; }
 }
 .scan-act .seg { display: flex; }
 .scan-act .seg button { flex: 1; min-height: 40px; }
+
+/* Bildirim merkezi */
+.icon-btn.bell { position: relative; }
+.bell-count { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
+.notif-back { position: fixed; inset: 0; z-index: 60; }
+.notif-pop { position: fixed; top: 56px; right: 16px; z-index: 61; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px);
+  overflow: auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+.notif-pop ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.notif-pop li { display: flex; align-items: flex-start; gap: 4px; padding: 6px 0; border-top: 1px solid var(--border); }
+.notif-pop li.urgent b { color: var(--danger); }
+.notif-go { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 2px 4px; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.notif-go:hover { background: var(--surface-2); border-radius: 6px; }
+.notif-go .muted { font-size: 11px; }

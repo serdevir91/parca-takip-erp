@@ -7,6 +7,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, download } from "../api/client";
 import { mobileApp } from "../api/mobile";
+import { savePref } from "../api/prefs";
 import { ADV, advFilter, AdvancedFilter, advSummary, cellText, FilterSheet, filterSummary, Icon, multiFilter, norm, type AdvValue, type ColFilter } from "./dgFilter";
 import { Editor, TableView } from "./dgSheet";
 import { colId, drawnColumns, freezeTo, headerText, isEmpty, type GridColumn, type GridProps } from "./dgTypes";
@@ -41,6 +42,7 @@ export function useGridView(): [GridView, (v: GridView) => void] {
   const set = (v: GridView) => {
     try {
       localStorage.setItem(VIEW_KEY, v);
+      savePref(VIEW_KEY);
     } catch {
       /* ignore */
     }
@@ -82,7 +84,7 @@ function loadJson<V>(key: string | null, fallback: V): V {
 }
 function saveJson(key: string | null, v: unknown): void {
   if (!key) return;
-  try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ }
+  try { localStorage.setItem(key, JSON.stringify(v)); savePref(key); } catch { /* storage unavailable */ }
 }
 
 /** Show, hide and reorder columns. Dragging works with a mouse, the arrows work on a phone. */

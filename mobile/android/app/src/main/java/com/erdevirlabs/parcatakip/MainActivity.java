@@ -13,6 +13,7 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
+import android.print.PrintManager;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
@@ -806,6 +807,15 @@ public class MainActivity extends Activity {
         public void openExternal(String url) {
             if (!trusted() || !url.matches("(?i)^https?://.*")) return;
             ui.post(() -> MainActivity.this.openExternal(url));
+        }
+
+        @JavascriptInterface
+        public void print() {
+            if (!trusted()) return;
+            ui.post(() -> {
+                PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
+                pm.print("LAB ERP", web.createPrintDocumentAdapter("LAB ERP"), null);
+            });
         }
 
         @JavascriptInterface

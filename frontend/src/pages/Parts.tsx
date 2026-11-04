@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ApiError, api, download } from "../api/client";
+import { savePref } from "../api/prefs";
 import { useAuth } from "../api/auth";
 import BulkEdit from "../components/BulkEdit";
 import DataGrid, { type CellChange, type GridColumn } from "../components/DataGrid";
@@ -72,7 +73,7 @@ function load<T>(key: string, fallback: T): T {
   }
 }
 function save(key: string, v: unknown): void {
-  try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ }
+  try { localStorage.setItem(key, JSON.stringify(v)); savePref(key); } catch { /* storage unavailable */ }
 }
 
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("tr-TR"));

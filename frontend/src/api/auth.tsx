@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { setSys, type SystemDefaults } from "./system";
 import { api, getToken, setToken, setUnauthorizedHandler } from "./client";
+import { loadPrefs } from "./prefs";
 
 export type Role = "admin" | "designer" | "planner" | "viewer" | string;
 export type Level = "none" | "view" | "edit";
@@ -62,7 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<User>("/auth/me")
-      .then(receive)
+      .then(async (u) => {
+        await loadPrefs();
+        receive(u);
+      })
       .catch(() => setToken(null))
       .finally(() => setReady(true));
   }, [logout, receive]);
@@ -75,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const form = new URLSearchParams({ username, password });
     const r = await api.post<{ access_token: string; user: User }>("/auth/login", form);
     setToken(r.access_token);
+    await loadPrefs();
     receive(r.user);
   }, [receive]);
 
