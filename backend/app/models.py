@@ -342,6 +342,8 @@ class StockItem(Base):
     location: Mapped[str] = mapped_column(String(100), default="")
     note: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    reorder_qty: Mapped[float] = mapped_column(Float, default=0.0)            # 0 = fill up to min_qty
+    preferred_firm_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # no FK: added by ALTER on SQLite
 
 
 class StockMove(Base):
@@ -378,6 +380,7 @@ class PurchaseOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)   # base currency per 1 unit, fixed on the document
     lines: Mapped[list["PurchaseOrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", order_by="PurchaseOrderLine.seq")
 
@@ -395,6 +398,18 @@ class PurchaseOrderLine(Base):
     received_qty: Mapped[float] = mapped_column(Float, default=0.0)
     unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+
+
+class PurchaseReceipt(Base):
+    """One goods receipt or reversal (negative qty) of a purchase order line."""
+    __tablename__ = "purchase_receipts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True)
+    line_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_order_lines.id", ondelete="SET NULL"), nullable=True)
+    qty: Mapped[float] = mapped_column(Float)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    username: Mapped[str] = mapped_column(String(64), default="")
+    note: Mapped[str] = mapped_column(String(300), default="")
 
 
 class WorkOrder(Base):
@@ -418,6 +433,33 @@ class WorkOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class WorkOrderMaterial(Base):
+    """Material a work order needs; issued_qty came out of stock onto the order's project."""
+    __tablename__ = "work_order_materials"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    wo_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    code: Mapped[str] = mapped_column(String(200), default="", index=True)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="Adet")
+    planned_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    issued_qty: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class WorkOrderOp(Base):
+    """One step of a work order's route. status: pending | in_progress | done."""
+    __tablename__ = "work_order_ops"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    wo_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    planned_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    done_by: Mapped[str] = mapped_column(String(64), default="")
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
 
 
 class SyncState(Base):
@@ -449,6 +491,7 @@ class SalesOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     lines: Mapped[list["SalesOrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", order_by="SalesOrderLine.seq")
 
@@ -463,7 +506,20 @@ class SalesOrderLine(Base):
     unit: Mapped[str] = mapped_column(String(20), default="Adet")
     qty: Mapped[float] = mapped_column(Float, default=0.0)
     unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivered_qty: Mapped[float] = mapped_column(Float, default=0.0)
     order: Mapped[SalesOrder] = relationship(back_populates="lines")
+
+
+class SalesDelivery(Base):
+    """One delivery (sevk) or return (negative qty) of a sales order line."""
+    __tablename__ = "sales_deliveries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    so_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id", ondelete="CASCADE"), index=True)
+    line_id: Mapped[int | None] = mapped_column(ForeignKey("sales_order_lines.id", ondelete="SET NULL"), nullable=True)
+    qty: Mapped[float] = mapped_column(Float)
+    delivered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    username: Mapped[str] = mapped_column(String(64), default="")
+    note: Mapped[str] = mapped_column(String(300), default="")
 
 
 class Invoice(Base):
@@ -491,6 +547,7 @@ class Invoice(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     lines: Mapped[list["InvoiceLine"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.seq")
 
@@ -505,6 +562,7 @@ class InvoiceLine(Base):
     unit: Mapped[str] = mapped_column(String(20), default="Adet")
     qty: Mapped[float] = mapped_column(Float, default=0.0)
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    source_line_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # sales or purchase order line
     invoice: Mapped[Invoice] = relationship(back_populates="lines")
 
 
@@ -525,6 +583,18 @@ class Payment(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class ExchangeRate(Base):
+    """Value of one unit of a currency in the base currency on a day. source: tcmb | manual."""
+    __tablename__ = "exchange_rates"
+    __table_args__ = (UniqueConstraint("rate_date", "currency", name="uq_exchange_rate"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rate_date: Mapped[date] = mapped_column(Date, index=True)
+    currency: Mapped[str] = mapped_column(String(8))
+    rate: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(10), default="manual")
 
 
 class Employee(Base):
@@ -540,6 +610,7 @@ class Employee(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[str] = mapped_column(Text, default="")
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    annual_leave_days: Mapped[float | None] = mapped_column(Float, nullable=True)   # None = company default
 
 
 class TimeEntry(Base):
@@ -573,6 +644,72 @@ class Attendance(Base):
     note: Mapped[str] = mapped_column(String(300), default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
     updated_by: Mapped[str] = mapped_column(String(64), default="")   # a manager who corrected the shift
+
+
+class LeaveRequest(Base):
+    """İzin ve rapor. kind: annual | sick | excuse | unpaid. status: pending | approved | rejected | cancelled.
+    days counts working days, fixed when the request is made."""
+    __tablename__ = "leave_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10), default="annual")
+    start_date: Mapped[date] = mapped_column(Date, index=True)
+    end_date: Mapped[date] = mapped_column(Date)
+    days: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_by: Mapped[str] = mapped_column(String(64), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str] = mapped_column(String(300), default="")
+
+
+class AttendanceRequest(Base):
+    """A worker's request to add or correct a shift. Wall-clock times like Attendance.
+    status: pending | approved | rejected | cancelled."""
+    __tablename__ = "attendance_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    attendance_id: Mapped[int | None] = mapped_column(ForeignKey("attendance.id", ondelete="SET NULL"), nullable=True)
+    work_date: Mapped[date] = mapped_column(Date)
+    clock_in: Mapped[datetime] = mapped_column(DateTime)
+    clock_out: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reason: Mapped[str] = mapped_column(String(300), default="")
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_by: Mapped[str] = mapped_column(String(64), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str] = mapped_column(String(300), default="")
+
+
+class UserPref(Base):
+    """Per-user screen settings (saved views, column layouts, theme), so they follow the user between devices."""
+    __tablename__ = "user_prefs"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[object] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class NotificationRead(Base):
+    """A notification the user dismissed. Notifications are worked out on request; only this is stored."""
+    __tablename__ = "notification_reads"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProjectTemplate(Base):
+    """A reusable product tree: payload is the node list a new project starts from."""
+    __tablename__ = "project_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[object] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Photo(Base):

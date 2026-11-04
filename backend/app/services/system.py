@@ -36,8 +36,9 @@ def defaults() -> dict[str, dict[str, Any]]:
                     "web": "", "tax_office": "", "tax_no": ""},
         "commerce": {"currency": "TRY", "vat": 20.0, "payment_days": 30, "quote_days": 15,
                      "pay_methods": ["Havale/EFT", "Nakit", "Kredi kartı", "Çek", "Senet", "Mahsup"],
-                     "no_po": "SA", "no_so": "SS", "no_invoice": "FT", "no_wo": "IE"},
-        "production": {"unit": "Adet", "spare_pct": 10.0, "work_hours": 8.0, "week_hours": 45.0, "break_minutes": 60},
+                     "no_po": "SA", "no_so": "SS", "no_invoice": "FT", "no_wo": "IE", "over_receipt_pct": 0.0},
+        "production": {"unit": "Adet", "spare_pct": 10.0, "work_hours": 8.0, "week_hours": 45.0, "break_minutes": 60,
+                       "annual_leave_days": 14.0},
         "security": {"session_hours": e.jwt_expire_hours, "password_min": e.password_min_length,
                      "login_attempts": e.login_attempts, "lock_minutes": e.login_lock_minutes},
         "files": {"upload_mb": e.max_upload_mb, "keep_days": e.backup_keep_days, "backup_time": e.backup_time},
@@ -148,7 +149,8 @@ def _commerce(v: dict[str, Any]) -> dict[str, Any]:
             "quote_days": _number(v["quote_days"], "Teklif geçerliliği", 0, 365), "pay_methods": methods,
             "no_po": _doc_prefix(v["no_po"], "Satın alma öneki"), "no_so": _doc_prefix(v["no_so"], "Satış öneki"),
             "no_invoice": _doc_prefix(v["no_invoice"], "Fatura öneki"),
-            "no_wo": _doc_prefix(v["no_wo"], "İş emri öneki")}
+            "no_wo": _doc_prefix(v["no_wo"], "İş emri öneki"),
+            "over_receipt_pct": _number(v["over_receipt_pct"], "Fazla teslim payı", 0, 100, whole=False)}
 
 
 def _production(v: dict[str, Any]) -> dict[str, Any]:
@@ -156,7 +158,8 @@ def _production(v: dict[str, Any]) -> dict[str, Any]:
             "spare_pct": _number(v["spare_pct"], "Yedek oranı", 0, 1000, whole=False),
             "work_hours": _number(v["work_hours"], "Günlük çalışma saati", 0.5, 24, whole=False),
             "week_hours": _number(v["week_hours"], "Haftalık çalışma saati", 1, 100, whole=False),
-            "break_minutes": _number(v["break_minutes"], "Mola süresi", 0, 240)}
+            "break_minutes": _number(v["break_minutes"], "Mola süresi", 0, 240),
+            "annual_leave_days": _number(v["annual_leave_days"], "Yıllık izin hakkı", 0, 60, whole=False)}
 
 
 def _security(v: dict[str, Any]) -> dict[str, Any]:

@@ -7,7 +7,7 @@ export type Level = "none" | "view" | "edit";
 /** Permission modules (backend/app/permissions.py MODULES). */
 export type Module =
   | "projects" | "parts" | "fasteners" | "drawings" | "control" | "planning" | "purchasing"
-  | "workorders" | "stock" | "hr" | "attendance" | "contacts" | "sales" | "finance" | "chat" | "admin";
+  | "workorders" | "stock" | "hr" | "attendance" | "contacts" | "sales" | "finance" | "chat" | "mail" | "admin";
 const RANK: Record<Level, number> = { none: 0, view: 1, edit: 2 };
 
 export interface User {
