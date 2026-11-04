@@ -18,8 +18,9 @@ from ..core.fastener import FastenerMatch
 from ..core.normalize import tr_sort_key
 from ..core.status import (COLORS, KIND_HAZIR, KIND_IMALAT, KIND_MONTAJ, PROG_DONE, PROG_WAIT,
                            STATUS_MAP, STATUS_NO_TEMIN, derive_status, effective_procurement, status_kind)
+from .settings import temin_types
 from .system import system
-from ..models import (BomRow, BomVersion, Drawing, FastenerSetting, MissingRow, PartAlias, Project,
+from ..models import (BomRow, BomVersion, Drawing, FastenerSetting, MissingRow, PartAlias, PartName, Project,
                       Tracking)
 
 FASTENER_ORDER_STATUSES = ["Sipariş Verilmedi", "Sipariş Verildi", "Teslim Edildi"]
@@ -55,6 +56,8 @@ class ProjectView:
     missing: list[MissingRow] = field(default_factory=list)
     fastener_settings: dict[str, FastenerSetting] = field(default_factory=dict)
     fastener_defaults: dict[str, Any] = field(default_factory=dict)  # spare_pct and unit for fasteners without a row
+    temin: dict[str, dict[str, Any]] = field(default_factory=dict)   # temin type by name
+    part_names: dict[str, str] = field(default_factory=dict)
 
     # ---------- loading ----------
     @classmethod
@@ -74,7 +77,9 @@ class ProjectView:
         missing = list(db.scalars(select(MissingRow).where(MissingRow.project_id == project.id)
                                   .order_by(MissingRow.id)))
         fs = {f.key: f for f in db.scalars(select(FastenerSetting).where(FastenerSetting.project_id == project.id))}
-        return cls(project, version, rows, tracking, aliases, dict(drawings), missing, fs, system(db)["production"])
+        names = {n.part_no: n.name for n in db.scalars(select(PartName))}
+        return cls(project, version, rows, tracking, aliases, dict(drawings), missing, fs, system(db)["production"],
+                   {t["name"]: t for t in temin_types(db)}, names)
 
     # ---------- conversions ----------
     def to_parsed(self) -> ParsedBom:
@@ -103,6 +108,15 @@ class ProjectView:
         t = self.tracking.get(part_no)
         return effective_procurement(csv_temin, t.procurement_override if t else None, is_assembly)
 
+    def base_kind(self, procurement: str) -> str:
+        """The status set of a temin type. An unknown old name keeps its own text."""
+        t = self.temin.get(procurement)
+        return t["kind"] if t else procurement
+
+    def needs_drawing(self, procurement: str) -> bool:
+        t = self.temin.get(procurement)
+        return bool(t["drawing"]) if t else procurement == TEMIN_IMALAT
+
     def drawing_info(self, part_no: str, rev: str) -> dict[str, Any]:
         ds = self.drawings.get(part_no, [])
         revs = sorted({d.rev for d in ds if d.rev}, key=tr_sort_key)
@@ -126,7 +140,7 @@ class ProjectView:
             status = fs.order_status if fs else FASTENER_ORDER_STATUSES[0]
             color = FASTENER_COLORS.get(status, "")
         else:
-            status = derive_status(progress, proc, is_asm and not r.is_purchased_assembly, r.in_purchased)
+            status = derive_status(progress, self.base_kind(proc), is_asm and not r.is_purchased_assembly, r.in_purchased)
             color = COLORS["in_purchased"] if r.in_purchased else COLORS.get(status, "")
         alias_of = next((a for a, p in self.aliases.items() if p == r.part_no), None)
         v = {
@@ -144,7 +158,9 @@ class ProjectView:
             "fastener": fastener, "fastener_key": r.fastener_key, "fastener_type": r.fastener_type,
             "fastener_desc": r.fastener_desc, "fastener_std": r.fastener_std, "fastener_size": r.fastener_size,
             "progress": progress, "status": status, "status_color": color,
-            "status_kind": status_kind(proc, is_asm and not r.is_purchased_assembly),
+            "status_kind": status_kind(self.base_kind(proc), is_asm and not r.is_purchased_assembly),
+            "needs_drawing": not is_asm and self.needs_drawing(proc),
+            "part_name": self.part_names.get(r.part_no, ""),
             "note": t.note if t else "", "t35_note": t.t35_note if t else "",
             "manufacturer": t.manufacturer if t else "", "material_status": t.material_status if t else "",
             "is_new": bool(t and t.is_new), "hidden": hidden, "updated_at": t.updated_at.isoformat() if t and t.updated_at else None,
@@ -207,7 +223,7 @@ class ProjectView:
             is_asm = bool(r and r.ext == "SLDASM")
             proc = self.procurement_of(m.part_no, r.procurement if r else "", is_asm,
                                        bool(r and r.is_purchased_assembly))
-            status = derive_status(m.progress, proc, is_asm)
+            status = derive_status(m.progress, self.base_kind(proc), is_asm)
             out.append({
                 "id": m.id, "part_no": m.part_no, "qty": m.qty, "reason": m.reason, "progress": m.progress,
                 "note": m.note, "created_by": m.created_by, "created_at": m.created_at.isoformat() if m.created_at else None,
@@ -334,5 +350,3 @@ def row_types() -> list[str]:
     return [ROW_PART, ROW_ASSEMBLY, ROW_FASTENER, ROW_IN_PURCHASED]
 
 
-def temin_choices() -> list[str]:
-    return [TEMIN_IMALAT, TEMIN_HAZIR, TEMIN_NONE]

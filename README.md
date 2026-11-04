@@ -77,7 +77,7 @@ sunucuda ve bilgisayarda yapılacakları adım adım gösterir. **Bağlantıyı 
 
 | Alan | Özellikler |
 |---|---|
-| **Mühendislik** | Proje ve BOM sürümleri, ürün ağacı oluşturma, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
+| **Mühendislik** | Proje ve BOM sürümleri, ürün ağacı oluşturma, Excel gibi tablo, gelişmiş filtre, toplu durum değiştirme, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
 | **Üretim** | İhtiyaç analizi, iş emirleri, stok kartları ve hareketleri, proje maliyeti |
 | **Ticari** | Satın alma, cari kartlar, teklif, satış siparişi, fatura, tahsilat ve ödeme |
 | **Ekip** | Personel kartları, zaman kaydı, sohbet, e-posta ile paylaşım |
@@ -419,6 +419,11 @@ Gerçek kullanımda demo projeleri arşivleyin veya bu komutu çalıştırmayın
 Parça takibinin yanında küçük bir üretim ERP'si bulunur. Akış: BOM yüklenir, ihtiyaç hesaplanır, eksikler
 stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projeye yazılır.
 
+- **Temin şekilleri:** Hazır gelen türler İmalat, Hazır Alım, Fason İmalat, Standart Parça, Stoktan
+  Karşılama, Müşteri Malı ve Belirtilmemiş'tir. Yönetim > Sistem Ayarları'ndan yenisi eklenir. Her tür İmalat ya
+  da Hazır Alım gibi davranır, teknik resim ve sipariş önerisi ayrı açılıp kapanır.
+- **Tablo:** Hücre seçimi, aralık, kopyala ve yapıştır, doldurma tutamağı, geri al, bul ve değiştir, sütun
+  gizleme ve sabitleme, koşullu ve gelişmiş filtre, kayıtlı görünüm, `.xlsx` indirme. Formül, grafik ve pivot yoktur.
 - **Ürün ağacı** (proje menüsü): SolidWorks listesi olmayan ürünler için BOM'u elle kurar. Üst üründen
   başlanır; montajların altına parça ve alt montaj eklenir, her satıra üst montajdaki adet, temin şekli,
   malzeme, ağırlık ve kaplama yazılır. Toplam adet çarpılarak gösterilir. Daha önce kullanılan bir numara

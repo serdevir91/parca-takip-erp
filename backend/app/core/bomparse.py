@@ -183,11 +183,13 @@ def parse_bom(
     purchased_assemblies: Iterable[str] = (),
     matcher: FastenerMatcher | None = None,
     part_no_patterns: Iterable[str] = DEFAULT_PART_NO_PATTERNS,
+    buy_temins: Iterable[str] = (TEMIN_HAZIR,),
 ) -> ParsedBom:
     """Parse a BOM. `purchased_assemblies` are part numbers the user flagged as a single purchased item
     (their effective temin becomes 'Hazır Alım'); their children become 'Satın alınan montajın içi'."""
     text = decode_csv(data) if isinstance(data, bytes) else data
     raw = read_rows(text)
+    bought = set(buy_temins)
     matcher = matcher or FastenerMatcher()
     flagged = set(purchased_assemblies)
     pn_rx = [re.compile(p) for p in part_no_patterns]
@@ -229,7 +231,7 @@ def parse_bom(
         eff_temin = temin
         if ext == "SLDASM" and base in flagged:
             eff_temin = TEMIN_HAZIR
-        is_purch = ext == "SLDASM" and eff_temin == TEMIN_HAZIR and not in_hazir
+        is_purch = ext == "SLDASM" and eff_temin in bought and not in_hazir
         if is_purch:
             hazir_at.append(lvl)
         top = name_at.get(".".join(lvl.split(".")[:2])) if depth >= 1 else base

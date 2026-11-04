@@ -46,7 +46,8 @@ def detect(view: ProjectView) -> list[AutoIssue]:
     parts = view.parts(include_in_purchased=False)
     issues = check_bom(view.to_parsed(), drawing_parts=set(view.drawings),
                        produced_parts={p["part_no"] for p in parts if p["progress"] == PROG_DONE},
-                       procurement_of={p["part_no"]: p["procurement"] for p in parts})
+                       procurement_of={p["part_no"]: p["procurement"] for p in parts},
+                       drawing_temins=[t for t in view.temin if view.needs_drawing(t)])
     for p in parts:
         if p.get("drawing_rev_mismatch"):
             issues.append(AutoIssue(KIND_DRAWING_REV, p["part_no"],

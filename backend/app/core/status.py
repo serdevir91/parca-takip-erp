@@ -34,6 +34,20 @@ COLORS = {
 
 MATERIAL_STATUS_CHOICES = ["Stoktan", "Malzeme söylenecek", "Sipariş verildi", "Tekrar sipariş edildi", "Malzeme geldi"]
 
+# Temin types. `kind` picks the status set, `drawing` asks for a technical drawing,
+# `order` lets the requirement screen suggest a work order or purchase.
+TEMIN_UNSET = "Belirtilmemiş"
+DEFAULT_TEMIN_TYPES: list[dict] = [
+    {"name": KIND_IMALAT, "kind": KIND_IMALAT, "drawing": True, "order": True},
+    {"name": KIND_HAZIR, "kind": KIND_HAZIR, "drawing": False, "order": True},
+    {"name": "Fason İmalat", "kind": KIND_HAZIR, "drawing": True, "order": True},
+    {"name": "Standart Parça", "kind": KIND_HAZIR, "drawing": False, "order": True},
+    {"name": "Stoktan Karşılama", "kind": KIND_HAZIR, "drawing": False, "order": False},
+    {"name": "Müşteri Malı", "kind": KIND_HAZIR, "drawing": False, "order": False},
+    {"name": TEMIN_UNSET, "kind": "", "drawing": False, "order": True},
+]
+FIXED_TEMINS = (KIND_IMALAT, KIND_HAZIR, TEMIN_UNSET)
+
 PRODUCED_STATUSES = {"Üretildi", "Sipariş Teslim Edildi", "Montajlandı"}
 
 

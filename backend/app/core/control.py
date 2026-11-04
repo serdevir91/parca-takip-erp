@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from typing import Iterable
+
 from .bomparse import ParsedBom, TEMIN_IMALAT, TEMIN_NONE
 from .normalize import tr_sort_key
 
@@ -57,7 +59,8 @@ def _confusable(a: str, b: str) -> bool:
 
 def check_bom(bom: ParsedBom, drawing_parts: set[str] | None = None,
               produced_parts: set[str] | None = None,
-              procurement_of: dict[str, str] | None = None) -> list[AutoIssue]:
+              procurement_of: dict[str, str] | None = None,
+              drawing_temins: Iterable[str] = (TEMIN_IMALAT,)) -> list[AutoIssue]:
     """drawing_parts: part numbers that have at least one drawing file (None = skip check).
     produced_parts: parts with progress Tamamlandı (for revision warnings).
     procurement_of: effective procurement per part (overrides CSV)."""
@@ -92,7 +95,7 @@ def check_bom(bom: ParsedBom, drawing_parts: set[str] | None = None,
             issues.append(AutoIssue(KIND_REV, pno,
                                     "Farklı satırlarda farklı revizyon: " + ", ".join(sorted(x or "(boş)" for x in revs)),
                                     levels))
-        if drawing_parts is not None and not is_asm and temin == TEMIN_IMALAT and pno not in drawing_parts:
+        if drawing_parts is not None and not is_asm and temin in drawing_temins and pno not in drawing_parts:
             issues.append(AutoIssue(KIND_NO_DRAWING, pno, "İmalat parçasının teknik resmi yok.", levels))
 
     # Double count: an assembly's child also appears as a direct sibling of that assembly

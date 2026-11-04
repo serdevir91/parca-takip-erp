@@ -757,3 +757,66 @@ div.chat-pick-row { cursor: default; }
 }
 .parts-show { min-width: 280px; gap: 8px; }
 .parts-show .kind-chips { flex-wrap: wrap; }
+
+/* === Spreadsheet table === */
+.dg:focus { outline: none; }
+.dg tbody td { user-select: none; -webkit-user-select: none; }
+.dg td.rng { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 16%, transparent); }
+.dg td.act { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dg td.fl { outline: 1px dashed var(--accent); outline-offset: -1px; }
+.dg td.fh { position: relative; overflow: visible; }
+.dg td.pin { position: sticky; z-index: 1; background: var(--surface); }
+.dg thead th.pin { z-index: 4; }
+.dg thead th.fopen { z-index: 6; }
+.dg-fill { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; background: var(--accent); border: 1px solid var(--surface); cursor: crosshair; z-index: 2; }
+.dg-status { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; min-height: 28px; padding: 3px 12px; border-top: 1px solid var(--border); background: var(--surface-2); font-size: 12px; }
+.dg-addr { white-space: nowrap; }
+.dg-val { max-width: min(380px, 50vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.dg-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 13px; }
+.dg-find input:not([type="checkbox"]) { width: 180px; }
+.dg-find label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.dg-cmenu-back { position: fixed; inset: 0; z-index: 60; }
+.dg-cmenu { position: fixed; z-index: 61; width: 220px; padding: 4px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.dg-cmenu button { display: flex; justify-content: space-between; gap: 12px; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; text-align: left; }
+.dg-cmenu button:hover { background: var(--surface-2); }
+.dg-cmenu kbd { font: inherit; font-size: 11px; color: var(--muted); }
+.dg-cmenu hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.dg-bulk { max-width: 170px; height: 28px; padding: 2px 6px; font-size: 13px; }
+.dg-view-row { display: flex; gap: 4px; align-items: center; }
+.dg-view-row .btn { flex: 1; min-width: 0; }
+.dg-view-row input { flex: 1; min-width: 0; }
+
+/* Column filter conditions */
+.fp-actions { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.fp-cond { display: flex; flex-wrap: wrap; gap: 4px; }
+.fp-cond select { flex: 1 1 130px; min-width: 0; }
+.fp-cond input { flex: 1 1 90px; min-width: 0; }
+.fp-more { align-self: flex-start; padding-left: 0; }
+.fp-sec.fp-conds { flex: none; }
+.fp-sec.fp-values { flex: 1; }
+.fp.pop { max-height: 520px; width: 320px; }
+
+/* Advanced filter and column chooser */
+.adv-body, .cols-list { overflow-y: auto; min-height: 0; flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.adv-body > .dg-link { align-self: flex-start; }
+.adv-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.adv-group > .dg-link { align-self: flex-start; }
+.adv-top { display: flex; align-items: center; gap: 10px; }
+.adv-rule { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 32px; gap: 6px; align-items: start; }
+.adv-rule select { width: 100%; min-width: 0; }
+.adv-foot { padding: 10px 14px; align-items: center; }
+.cols-list { gap: 2px; }
+.cols-row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+.cols-row:hover { background: var(--surface-2); }
+.cols-row.drag { opacity: .5; }
+.cols-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cols-grip { color: var(--muted); cursor: grab; }
+.adm-temin { grid-column: 1 / -1; }
+.adm-temin input:not([type="checkbox"]), .adm-temin select { width: 100%; }
+@media (max-width: 720px) {
+  .adv-rule { grid-template-columns: 1fr 32px; }
+  .adv-rule .fp-cond { grid-column: 1 / -1; grid-row: 2; }
+  .dg-find input:not([type="checkbox"]) { width: 100%; }
+  .cols-row .dg-link { display: none; }
+  .dg-status { font-size: 11px; }
+}

@@ -14,7 +14,7 @@ import { FirmSelect, MakerInput, addDays, fmtMoney, fmtQty, useFirms, type Purch
 
 // ---------- types (backend/app/services/erp.py requirements / project_costs) ----------
 type Need = {
-  code: string; kind: "part" | "fastener"; description: string; unit: string; required: number; procurement: string;
+  code: string; kind: "part" | "fastener"; part_name?: string; description: string; unit: string; required: number; procurement: string;
   status: string; status_color: string; progress: string | null; main_group: string; material: string;
   manufacturer: string; unit_price: number | null; done: boolean; hidden?: boolean; issued: number; on_order: number;
   in_production: number; stock: number; net_need: number; from_stock: number; shortage: number;
@@ -80,6 +80,7 @@ function NeedTab() {
 
   const columns = useMemo<GridColumn<Need>[]>(() => [
     { accessorKey: "code", header: "Kod", size: 190, cellStyle: () => ({ fontFamily: "var(--mono, monospace)" }) },
+    { accessorKey: "part_name", header: "Parça Adı", size: 170 },
     { accessorKey: "description", header: "Açıklama", size: 210 },
     { id: "kind", accessorFn: (r) => (r.kind === "fastener" ? "Bağlantı elemanı" : "Parça"), header: "Tür", size: 120 },
     { accessorKey: "procurement", header: "Temin", size: 95 },

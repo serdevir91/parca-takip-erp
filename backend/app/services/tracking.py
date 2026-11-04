@@ -9,14 +9,14 @@ from typing import Any
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..core.status import MATERIAL_STATUS_CHOICES, PROGRESS_CHOICES
-from ..models import MissingRow, PartAlias, Tracking, User
+from ..models import MissingRow, PartAlias, PartName, Tracking, User
 from . import audit
-from .settings import get_setting, manufacturers
-from .state import temin_choices
+from .settings import get_setting, manufacturers, temin_choices
 
 # Fields a user may change on a tracking row (inline or bulk edit)
 EDITABLE_FIELDS = ("procurement_override", "progress", "note", "t35_note", "manufacturer",
@@ -45,8 +45,9 @@ def clean_changes(db: Session, changes: dict[str, Any]) -> dict[str, Any]:
             out[f] = check_progress(v)
         elif f == "procurement_override":
             v = (v or "").strip() or None
-            if v is not None and v not in temin_choices():
-                raise HTTPException(400, f"Geçersiz temin şekli: {v}. Seçenekler: {', '.join(temin_choices())}")
+            choices = temin_choices(db)
+            if v is not None and v not in choices:
+                raise HTTPException(400, f"Geçersiz temin şekli: {v}. Seçenekler: {', '.join(choices)}")
             out[f] = v
         elif f == "manufacturer":
             v = (v or "").strip()
@@ -75,6 +76,31 @@ def apply_changes(db: Session, user: User, t: Tracking, changes: dict[str, Any])
     if n:
         t.updated_by = user.username
     return n
+
+
+def set_names(db: Session, user: User, names: dict[str, str]) -> int:
+    """Name parts for all projects; an empty name removes it. Returns how many changed."""
+    have = {n.part_no: n for n in db.scalars(select(PartName).where(PartName.part_no.in_(list(names))))}
+    changed = 0
+    for pno, name in names.items():
+        name = name.strip()[:300]
+        cur = have.get(pno)
+        if (cur.name if cur else "") == name:
+            continue
+        if cur is None:
+            try:
+                with db.begin_nested():
+                    db.add(PartName(part_no=pno, name=name, updated_by=user.username))
+            except IntegrityError:  # someone named the same part at the same moment; the later name wins
+                cur = db.scalar(select(PartName).where(PartName.part_no == pno))
+                cur.name, cur.updated_by = name, user.username
+        elif name:
+            cur.name, cur.updated_by = name, user.username
+        else:
+            db.delete(cur)
+        audit.record(db, user, "part_name", pno, "name", cur.name if cur else "", name)
+        changed += 1
+    return changed
 
 
 def resolve_alias(db: Session, part_no: str) -> str:

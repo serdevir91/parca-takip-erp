@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { api, download } from "../api/client";
 import { useAuth } from "../api/auth";
 import BulkEdit from "../components/BulkEdit";
-import DataGrid, { type GridColumn } from "../components/DataGrid";
+import DataGrid, { type CellChange, type GridColumn } from "../components/DataGrid";
 import MailDialog, { type MailFile } from "../components/MailDialog";
 import ExcelImportModal from "../components/ExcelImportModal";
 import { Page, useProject } from "../components/Layout";
 import PartDetail, { type PartChoices, type PartRow } from "../components/PartDetail";
+import PartNamesModal from "../components/PartNamesModal";
 import T35ImportModal from "../components/T35ImportModal";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
@@ -21,6 +22,7 @@ type View = "tree" | "flat";
 type PartsResp = { version_id: number | null; view: string; total: number; count: number; total_qty: number; rows: PartRow[] };
 type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean; _dim?: boolean };
 type EditVars = { partNo: string; changes: Record<string, unknown> };
+type CellsResult = { fields_changed: number; error_count: number; errors: string[]; not_found: string[] };
 
 const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived",
   kinds: "parts.kinds" };
@@ -47,6 +49,17 @@ const STATUS_MAP: Record<string, Record<string, string>> = {
 };
 const SERVER_FIELDS = ["progress", "procurement_override", "note", "t35_note", "manufacturer", "material_status",
   "is_new", "updated_at", "updated_by"] as const;
+const namable = (r: PartRow) => !r.fastener && !r.archived;
+/** What a grid cell means to the server. */
+function cellChange(col: string, v: string): Record<string, unknown> | null {
+  switch (col) {
+    case "procurement": return { procurement_override: v === RESET_PROC ? null : v };
+    case "is_new": return { is_new: v === "Yeni" };
+    case "progress": case "manufacturer": case "material_status": case "note": case "t35_note": case "part_name":
+      return { [col]: v };
+    default: return null;
+  }
+}
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -69,20 +82,22 @@ const tracked = (r: PartRow) => !r.fastener && !r.archived && (r.depth ?? 1) > 0
 function drawingText(r: PartRow): string {
   if (r.archived || r.fastener) return "";
   if (r.has_drawing) return `Var${r.drawing_rev ? ` (Rev ${r.drawing_rev})` : ""}${r.drawing_rev_mismatch ? " · Rev farkı" : ""}`;
-  if (r.procurement === IMALAT && !r.is_assembly && !r.in_purchased) return "Resim yok";
+  if (r.needs_drawing && !r.in_purchased) return "Resim yok";
   return "";
 }
 
 /** Local copy of backend derive_status, used only for the optimistic cell colour until the server answers. */
-function patchRow(r: PartRow, ch: Record<string, unknown>, colors: Record<string, string>): PartRow {
+function patchRow(r: PartRow, ch: Record<string, unknown>, colors: Record<string, string>, choices?: PartChoices): PartRow {
   const n: PartRow = { ...r, ...(ch as Partial<PartRow>) };
   if ("procurement_override" in ch && !r.is_purchased_assembly && !r.archived) {
     const o = ch.procurement_override as string | null;
     n.procurement = o || r.procurement_csv || (r.is_assembly ? "" : NONE);
+    n.needs_drawing = !r.is_assembly && (choices?.temin_drawing ?? [IMALAT]).includes(n.procurement ?? "");
   }
   if (!r.fastener && !r.in_purchased && !r.archived) {
     const proc = n.procurement ?? "";
-    const kind = proc === HAZIR ? HAZIR : r.is_assembly && !r.is_purchased_assembly ? "Montaj" : proc === IMALAT ? IMALAT : null;
+    const base = choices?.temin_kinds[proc] ?? proc;
+    const kind = base === HAZIR ? HAZIR : r.is_assembly && !r.is_purchased_assembly ? "Montaj" : base === IMALAT ? IMALAT : null;
     n.status = kind ? STATUS_MAP[kind][n.progress] ?? STATUS_MAP[kind].Bekliyor : "Temin seçilmedi";
     n.status_color = colors[n.status] ?? r.status_color;
   }
@@ -117,12 +132,13 @@ export default function Parts() {
     if (set.has(k)) set.delete(k); else set.add(k);
     return { ...cur, [view]: KINDS.map((x) => x.key).filter((x) => set.has(x)) };
   });
+  // Widths saved before the grid kept its own layout; still the starting width of each column
   const [widths] = useState<Record<string, number>>(() => load(LS.widths, {}));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [selection, setSelection] = useState<RowSelectionState>({});
   const [detail, setDetail] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [imp, setImp] = useState<"t35" | "excel" | null>(null);
+  const [imp, setImp] = useState<"t35" | "excel" | "names" | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [visibleQty, setVisibleQty] = useState(0);
   const [menu, setMenu] = useState<"show" | "export" | "import" | null>(null);
@@ -238,7 +254,7 @@ export default function Parts() {
     onMutate: async ({ partNo, changes }: EditVars) => {
       await qc.cancelQueries({ queryKey: ["parts", pid] });
       const snap = qc.getQueriesData<unknown>({ queryKey: ["parts", pid] });
-      updateRows(partNo, (r) => patchRow(r, changes, colors));
+      updateRows(partNo, (r) => patchRow(r, changes, colors, choices));
       return { snap };
     },
     onError: (e, _v, ctx) => {
@@ -253,17 +269,53 @@ export default function Parts() {
   });
   const mutate = edit.mutate;
 
+  // Pasted, filled and replaced cells: one request and one optimistic update for all of them
+  const cells = useMutation({
+    mutationFn: (list: EditVars[]) => api.post<CellsResult>(`/projects/${pid}/parts/cells`, {
+      changes: list.flatMap(({ partNo, changes }) => Object.entries(changes).map(([field, value]) => ({ part_no: partNo, field, value }))),
+    }),
+    onMutate: async (list: EditVars[]) => {
+      await qc.cancelQueries({ queryKey: ["parts", pid] });
+      const snap = qc.getQueriesData<unknown>({ queryKey: ["parts", pid] });
+      const byPart = new Map<string, Record<string, unknown>>();
+      for (const { partNo, changes } of list) byPart.set(partNo, { ...byPart.get(partNo), ...changes });
+      qc.setQueriesData<unknown>({ queryKey: ["parts", pid] }, (d: unknown) => {
+        const resp = d as PartsResp | undefined;
+        if (!resp || !Array.isArray(resp.rows)) return d;
+        return { ...resp, rows: resp.rows.map((r) => (byPart.has(r.part_no) ? patchRow(r, byPart.get(r.part_no)!, colors, choices) : r)) };
+      });
+      return { snap };
+    },
+    onError: (e, _v, ctx) => {
+      ctx?.snap.forEach(([k, d]) => qc.setQueryData(k, d));
+      toast(errText(e), true);
+    },
+    onSuccess: (res) => {
+      if (res.error_count) toast(`${res.error_count.toLocaleString("tr-TR")} hücre kaydedilemedi: ${res.errors[0]}`, true);
+      else if (res.not_found.length) toast(`${res.not_found.length.toLocaleString("tr-TR")} parça bulunamadı`, true);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["parts", pid] });
+      qc.invalidateQueries({ queryKey: ["dashboard", pid] });
+    },
+  });
+  const saveCells = cells.mutate;
+
   const onEdit = useCallback((r: GridRow, col: string, v: string) => {
-    let changes: Record<string, unknown>;
-    switch (col) {
-      case "procurement": changes = { procurement_override: v === RESET_PROC ? null : v }; break;
-      case "is_new": changes = { is_new: v === "Yeni" }; break;
-      case "progress": case "manufacturer": case "material_status": case "note": case "t35_note":
-        changes = { [col]: v }; break;
-      default: return;
+    const changes = cellChange(col, v);
+    if (!changes) return;
+    if (col === "part_name") saveCells([{ partNo: r.part_no, changes }]);
+    else mutate({ partNo: r.part_no, changes });
+  }, [mutate, saveCells]);
+
+  const onEditMany = useCallback((list: CellChange<GridRow>[]) => {
+    const out: EditVars[] = [];
+    for (const c of list) {
+      const changes = cellChange(c.columnId, c.value);
+      if (changes) out.push({ partNo: c.row.part_no, changes });
     }
-    mutate({ partNo: r.part_no, changes });
-  }, [mutate]);
+    if (out.length) saveCells(out);
+  }, [saveCells]);
 
   // ---------- columns ----------
   const columns = useMemo<GridColumn<GridRow>[]>(() => {
@@ -292,6 +344,10 @@ export default function Parts() {
         id: "part_no", accessorKey: "part_no", header: "Parça No", size: w("part_no", 200), card: "title",
         cellStyle: (r) => (r.is_new ? statusStyle(colors.new || NEW_COLOR) : undefined),
         cell: ({ row }) => <span style={{ fontWeight: row.original.is_assembly ? 600 : 400 }}>{row.original.part_no}</span>,
+      },
+      {
+        id: "part_name", header: "Parça Adı", size: w("part_name", 190), card: "sub", accessorFn: (r) => r.part_name ?? "",
+        edit: { type: "text", canEdit: namable },
       },
       { id: "row_type", header: "Tip", size: w("row_type", 120), card: "sub", accessorFn: (r) => (r.archived ? "Arşivlenmiş" : r.row_type ?? "") },
       { id: "main_group", accessorKey: "main_group", header: "Ana Grup", size: w("main_group", 150) },
@@ -346,36 +402,7 @@ export default function Parts() {
     ];
   }, [view, choices, colors, widths]);
 
-  // ---------- column width persistence (DataGrid keeps sizing internally, so read it back from the header cells) ----------
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const colIdsRef = useRef<string[]>([]);
-  colIdsRef.current = [...(canEdit ? ["_sel"] : []), ...columns.map((c) => c.id as string)];
-  const saveWidths = useCallback(() => {
-    requestAnimationFrame(() => {
-      const ths = wrapRef.current?.querySelectorAll<HTMLTableCellElement>(".dg thead th");
-      if (!ths) return;
-      const next: Record<string, number> = { ...load<Record<string, number>>(LS.widths, {}) };
-      ths.forEach((th, i) => {
-        const id = colIdsRef.current[i];
-        if (id && id !== "_sel") next[id] = Math.round(th.getBoundingClientRect().width);
-      });
-      save(LS.widths, next);
-    });
-  }, []);
-  const onMouseDownCapture = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).classList?.contains("resizer")) window.addEventListener("mouseup", saveWidths, { once: true });
-  };
-
-  // ---------- row click vs double click (inline edit) ----------
-  const clickTimer = useRef<number | undefined>(undefined);
-  const onRowClick = useCallback((r: GridRow) => {
-    window.clearTimeout(clickTimer.current);
-    clickTimer.current = window.setTimeout(() => setDetail(r.part_no), 230);
-  }, []);
-  const onDoubleClickCapture = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("td.editable")) window.clearTimeout(clickTimer.current);
-  };
-  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
+  const onRowClick = useCallback((r: GridRow) => setDetail(r.part_no), []);
   const closeDetail = useCallback(() => setDetail(null), []);
 
   // ---------- visible totals ----------
@@ -401,6 +428,15 @@ export default function Parts() {
   }, [selection, data]);
   const selectedCount = selectedPartNos.length + selectedFasteners.length;
   const allHidden = selectedCount > 0 && data.every((r) => !selection[r._key] || r.hidden || (!r.fastener && (r.depth ?? 1) === 0));
+  const bulk = useMutation({
+    mutationFn: (changes: Record<string, unknown>) => api.post<{ updated: number }>(`/projects/${pid}/parts/bulk`, { part_nos: selectedPartNos, changes }),
+    onSuccess: (r) => {
+      toast(`${r.updated.toLocaleString("tr-TR")} parça güncellendi`);
+      qc.invalidateQueries({ queryKey: ["parts", pid] });
+      qc.invalidateQueries({ queryKey: ["dashboard", pid] });
+    },
+    onError: (e) => toast(errText(e), true),
+  });
   const hide = useMutation({
     mutationFn: async (hidden: boolean) => {
       if (selectedPartNos.length) {
@@ -502,6 +538,7 @@ export default function Parts() {
               <div className="dg-menu card" role="menu">
                 <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>Excel'den içe aktar</button>
                 <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>Durum listesi içe aktar</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("names"); }}>Parça adlarını yapıştır</button>
               </div>
             )}
           </div>
@@ -513,12 +550,13 @@ export default function Parts() {
       ) : loading ? (
         <div className="muted" style={{ padding: 16 }}>Yükleniyor…</div>
       ) : (
-        <div className="parts-wrap" ref={wrapRef} onMouseDownCapture={onMouseDownCapture} onDoubleClickCapture={onDoubleClickCapture}>
+        <div className="parts-wrap">
           <DataGrid<GridRow>
             data={data}
             columns={columns}
             getRowId={getRowId}
             onEdit={canEdit ? onEdit : undefined}
+            onEditMany={canEdit ? onEditMany : undefined}
             onRowClick={onRowClick}
             rowStyle={rowStyle}
             selectable={canEdit}
@@ -526,6 +564,27 @@ export default function Parts() {
             onSelectionChange={setSelection}
             onVisibleRowsChange={onVisibleRowsChange}
             exportName={`${base}_parca_listesi`}
+            stateKey="parts"
+            selectionActions={canEdit ? (
+              <>
+                <select className="dg-bulk" aria-label="Seçilenlere ilerleme ata" value="" disabled={!selectedPartNos.length || bulk.isPending}
+                  onChange={(e) => e.target.value && bulk.mutate({ progress: e.target.value })}>
+                  <option value="">İlerleme ata…</option>
+                  {choices?.progress_choices.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select className="dg-bulk" aria-label="Seçilenlere temin şekli ata" value="" disabled={!selectedPartNos.length || bulk.isPending}
+                  onChange={(e) => e.target.value && bulk.mutate({ procurement_override: e.target.value })}>
+                  <option value="">Temin ata…</option>
+                  {choices?.temin_choices.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <button className="btn small" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>Diğer alanlar</button>
+                <button className="btn small" disabled={!selectedCount || hide.isPending} onClick={() => hide.mutate(!allHidden)}
+                  title="Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez.">
+                  {allHidden ? "Gizlemeyi kaldır" : "Gizle"}
+                </button>
+                {selectedFasteners.length > 0 && <span className="muted">Bağlantı elemanları yalnızca gizlenebilir; durumları Bağlantı Elemanları sayfasından değişir.</span>}
+              </>
+            ) : undefined}
             cardLead={cardLead}
             cardColor={cardColor}
             emptyText={project && !project.current_version_id ? "Bu projede onaylı BOM sürümü yok." : "Kayıt yok."}
@@ -535,17 +594,6 @@ export default function Parts() {
                   <>
                     <button className="btn small" onClick={() => setCollapsed(new Set())}>Tümünü aç</button>
                     <button className="btn small" onClick={collapseAll}>Tümünü kapat</button>
-                  </>
-                )}
-                {canEdit && (
-                  <>
-                    <button className="btn small primary" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>
-                      Toplu düzenle{selectedPartNos.length ? ` (${selectedPartNos.length.toLocaleString("tr-TR")})` : ""}
-                    </button>
-                    <button className="btn small" disabled={!selectedCount || hide.isPending} onClick={() => hide.mutate(!allHidden)}
-                      title="Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez.">
-                      {allHidden ? "Gizlemeyi kaldır" : "Gizle"}
-                    </button>
                   </>
                 )}
                 <span className="muted">Toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>
@@ -564,6 +612,7 @@ export default function Parts() {
       )}
       {imp === "t35" && <T35ImportModal pid={pid} open onClose={() => setImp(null)} />}
       {imp === "excel" && <ExcelImportModal pid={pid} open onClose={() => setImp(null)} />}
+      {imp === "names" && <PartNamesModal pid={pid} onClose={() => setImp(null)} />}
       {mail && <MailDialog files={[mail]} subject={`${project?.name ?? base}: ${mail.name.replace(/\.xlsx$/, "").replace(/_/g, " ")}`}
         body="Güncel liste ektedir." onClose={() => setMail(null)} />}
     </Page>

@@ -24,7 +24,7 @@ from ..core.normalize import safe_filename
 from ..core.status import PROG_DONE, PROG_WAIT
 from ..models import BomRow, BomVersion, MissingRow, Part, PartAlias, Project, Tracking, User, utcnow
 from . import audit
-from .settings import big_drop_ratio, fastener_matcher, part_no_patterns, purchased_assemblies
+from .settings import big_drop_ratio, buy_temins, fastener_matcher, part_no_patterns, purchased_assemblies
 from .state import ProjectView
 
 TRACKING_FIELDS = ("part_no", "procurement_override", "progress", "note", "t35_note", "manufacturer",
@@ -157,7 +157,7 @@ def upload_bom(db: Session, project: Project, filename: str, data: bytes, user: 
                note: str = "") -> BomVersion:
     try:
         parsed = parse_bom(data, purchased_assemblies=purchased_assemblies(db), matcher=fastener_matcher(db),
-                           part_no_patterns=part_no_patterns(db))
+                           part_no_patterns=part_no_patterns(db), buy_temins=buy_temins(db))
     except Exception as e:  # noqa: BLE001 - any parse failure is a bad file for the user
         raise BomImportError(f"BOM dosyası okunamadı: {e}") from e
     if not parsed.rows:

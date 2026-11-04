@@ -869,6 +869,7 @@ export default function Drawings() {
           onSelectionChange={setSelection}
           onVisibleRowsChange={onVisible}
           onRowClick={(r) => { if (r.d) setSelected(r.d); }}
+          openOnClick
           rowStyle={(r) => (r.kind === "unmatched" || r.kind === "no_drawing" ? { background: "color-mix(in srgb, var(--warn) 10%, var(--surface))" } : undefined)}
           emptyText={filter === "no_drawing" ? "Resmi olmayan imalat parçası yok." : "Resim yok."}
           toolbar={

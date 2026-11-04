@@ -11,7 +11,7 @@ import { PageHeader, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 
 type Item = {
-  part_no: string; assembly: boolean; qty: number; material: string; weight: number | null; rev: string;
+  part_no: string; name?: string; assembly: boolean; qty: number; material: string; weight: number | null; rev: string;
   procurement: string; coating: string; children: Item[];
 };
 type TreeNode = Omit<Item, "children"> & { key: string; children: TreeNode[] };
@@ -26,7 +26,7 @@ let lastKey = 0;
 const newKey = () => `n${++lastKey}`;
 const withKeys = (i: Item): TreeNode => ({ ...i, key: newKey(), children: (i.children ?? []).map(withKeys) });
 const blank = (assembly: boolean, procurement: string): TreeNode => ({
-  key: newKey(), part_no: "", assembly, qty: 1, material: "", weight: null, rev: "", procurement, coating: "", children: [],
+  key: newKey(), part_no: "", name: "", assembly, qty: 1, material: "", weight: null, rev: "", procurement, coating: "", children: [],
 });
 
 function locate(n: TreeNode, key: string, parent: TreeNode | null = null): { node: TreeNode; parent: TreeNode | null } | null {
@@ -435,6 +435,7 @@ export default function BomTree() {
               {n.assembly ? <Boxes size={15} className="tree-asm" /> : <Box size={15} className="muted" />}
               <span className="muted tree-lvl">{level}</span>
               <span className={`tree-no${n.part_no ? "" : " error"}`}>{n.part_no || "Numara yok"}</span>
+              {n.name && <span className="muted">{n.name}</span>}
               {depth > 0 && <span className="muted tree-qty">{n.qty} adet{sum !== n.qty ? ` · toplam ${sum.toLocaleString("tr-TR")}` : ""}</span>}
             </div>
           ))}
@@ -464,11 +465,14 @@ export default function BomTree() {
                     <button key={i.part_no} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void pick(i)}>
                       {i.assembly ? <Boxes size={14} /> : <Box size={14} />}
                       <span>{i.part_no}</span>
-                      <span className="muted">{i.material}</span>
+                      <span className="muted">{i.name || i.material}</span>
                     </button>
                   ))}
                 </div>
               )}
+            </label>
+            <label>Parça adı
+              <input value={node.name ?? ""} maxLength={300} onChange={(e) => set("name", e.target.value)} />
             </label>
             <div className="adm-two">
               <label>Tür

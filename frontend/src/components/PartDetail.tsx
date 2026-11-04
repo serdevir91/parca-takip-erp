@@ -12,6 +12,8 @@ import Viewer, { type ViewItem } from "./viewer/Viewer";
 export type PartRow = {
   id: number | null;
   part_no: string;
+  part_name?: string;
+  needs_drawing?: boolean;
   seq?: number; level?: string; depth?: number; parent_level?: string | null;
   file_name?: string; ext?: string; is_assembly?: boolean;
   qty?: number; multiplier?: number; total_qty?: number;
@@ -33,13 +35,14 @@ export type PartChoices = {
   row_types: string[]; temin_choices: string[]; progress_choices: string[]; manufacturers: string[]; suppliers: string[];
   material_status_choices: string[]; statuses: { status: string; color: string }[];
   colors: Record<string, string>;
+  temin_kinds: Record<string, string>; temin_drawing: string[];
 };
 
 /** Editable tracking fields (backend TrackingPatch) with Turkish labels. */
 export const FIELD_LABELS: Record<string, string> = {
   procurement_override: "Temin Şekli", progress: "İlerleme", note: "Not", t35_note: "Durum Notu",
   manufacturer: "Üretici", material_status: "Malzeme Durumu", is_new: "Yeni etiketi",
-  qty: "Adet", reason: "Neden", part_no: "Parça No",
+  qty: "Adet", reason: "Neden", part_no: "Parça No", name: "Parça adı",
 };
 
 type Drawing = { id: number; filename: string; ext: string; rev: string | null; match_via: string | null; current_version: number; updated_at: string | null };
@@ -100,7 +103,7 @@ export default function PartDetail({ pid, partNo, onClose }: { pid: number; part
             <table className="simple">
               <tbody>
                 {([
-                  ["Dosya adı", p.file_name], ["Tip", p.row_type], ["Seviye", p.levels?.join(", ") || p.level],
+                  ["Parça adı", p.part_name], ["Dosya adı", p.file_name], ["Tip", p.row_type], ["Seviye", p.levels?.join(", ") || p.level],
                   ["Ana grup", p.main_groups?.join(", ") || p.main_group], ["Üst montaj", p.parent_part_no],
                   ["Adet", fmtNum(p.qty)], ["Toplam adet", fmtNum(p.total_qty)], ["Malzeme", p.material],
                   ["Ağırlık", fmtNum(p.weight)], ["Kaplama", p.coating], ["Rev", p.rev],

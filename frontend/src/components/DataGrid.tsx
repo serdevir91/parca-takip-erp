@@ -1,63 +1,20 @@
 import {
   flexRender, getCoreRowModel, getFilteredRowModel, getSortedRowModel, useReactTable,
-  type ColumnDef, type FilterFn, type Row, type RowSelectionState, type SortingState, type ColumnFiltersState,
+  type ColumnFiltersState, type ColumnOrderState, type ColumnPinningState, type ColumnSizingState, type Row, type RowSelectionState,
+  type SortingState, type Table, type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { api, download } from "../api/client";
 import { mobileApp } from "../api/mobile";
+import { ADV, advFilter, AdvancedFilter, advSummary, cellText, FilterSheet, filterSummary, Icon, multiFilter, norm, type AdvValue, type ColFilter } from "./dgFilter";
+import { Editor, TableView } from "./dgSheet";
+import { colId, drawnColumns, freezeTo, headerText, isEmpty, type GridColumn, type GridProps } from "./dgTypes";
 import MailDialog, { shareFiles, type MailFile } from "./MailDialog";
 import { errText, useToast } from "./Toast";
 
-/** Column filter value: optional set of allowed display values plus a free-text "contains" filter. */
-export type ColFilter = { values?: string[]; text?: string };
-
-const norm = (s: string) => s.toLocaleLowerCase("tr-TR");
-export const cellText = (v: unknown): string => (v === null || v === undefined || v === "" ? "(Boş)" : String(v));
-
-export const multiFilter: FilterFn<any> = (row, colId, f: ColFilter) => {
-  const t = cellText(row.getValue(colId));
-  if (f.values && !f.values.includes(t)) return false;
-  if (f.text && !norm(t).includes(norm(f.text))) return false;
-  return true;
-};
-multiFilter.autoRemove = (f?: ColFilter) => !f || (!f.values && !f.text);
-
-export type GridColumn<T> = ColumnDef<T, any> & {
-  /** Inline editor. Return undefined for read-only rows. */
-  edit?: { type: "text" | "number" | "select"; options?: string[] | ((row: T) => string[]); canEdit?: (row: T) => boolean };
-  cellStyle?: (row: T) => CSSProperties | undefined;
-  noFilter?: boolean;
-  /** Place in the card (list) view. Default: first column = title, second = sub, "actions" column = buttons,
-   *  the rest are label/value fields (empty values skipped). */
-  card?: "title" | "sub" | "badge" | "field" | "actions" | "hide";
-  /** Leave out of the CSV export (action buttons, icons). */
-  noExport?: boolean;
-};
-
-type Props<T> = {
-  data: T[];
-  columns: GridColumn<T>[];
-  getRowId: (r: T) => string;
-  onEdit?: (row: T, columnId: string, value: string) => void;
-  onRowClick?: (row: T) => void;
-  rowStyle?: (row: T) => CSSProperties | undefined;
-  selectable?: boolean;
-  selection?: RowSelectionState;
-  onSelectionChange?: (s: RowSelectionState) => void;
-  filters?: ColumnFiltersState;
-  onFiltersChange?: (f: ColumnFiltersState) => void;
-  onVisibleRowsChange?: (rows: T[]) => void;
-  /** Extra text rendered before the count (e.g. tree toggle). */
-  toolbar?: ReactNode;
-  rowHeight?: number;
-  emptyText?: string;
-  /** File name (without extension) for "Dışa aktar" (CSV) and "E-posta ile gönder"; false hides both. */
-  exportName?: string | false;
-  /** Left edge of a card (tree indent, status colour strip). */
-  cardLead?: (row: T) => ReactNode;
-  /** Card accent colour (left border), e.g. the status colour. */
-  cardColor?: (row: T) => string | undefined;
-};
+export { cellText, Icon, multiFilter, type ColFilter };
+export type { CellChange, GridColumn } from "./dgTypes";
 
 export type GridView = "cards" | "table";
 const VIEW_KEY = "dg.view";
@@ -91,32 +48,6 @@ export function useGridView(): [GridView, (v: GridView) => void] {
   return [view, set];
 }
 
-const headerText = <T,>(c: GridColumn<T>): string => (typeof c.header === "string" ? c.header : "");
-const colId = <T,>(c: GridColumn<T>): string => c.id ?? ((c as { accessorKey?: string }).accessorKey ?? "");
-const isEmpty = (v: unknown) => v === null || v === undefined || v === "";
-
-const ICONS = {
-  search: "M10.5 4a6.5 6.5 0 1 0 4.03 11.6l4.43 4.43 1.06-1.06-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 1.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z",
-  filter: "M3 5h18l-7 8.2V19l-4 2v-7.8L3 5Zm3.3 1.5 5.2 6.1v5.9l1-.5v-5.4l5.2-6.1H6.3Z",
-  x: "m6.4 5.3 5.6 5.6 5.6-5.6 1.1 1.1-5.6 5.6 5.6 5.6-1.1 1.1-5.6-5.6-5.6 5.6-1.1-1.1 5.6-5.6-5.6-5.6 1.1-1.1Z",
-  sort: "M7 4 3 8.5h3V20h2V8.5h3L7 4Zm10 16 4-4.5h-3V4h-2v11.5h-3l4 4.5Z",
-} as const;
-export function Icon({ name, size = 16 }: { name: keyof typeof ICONS; size?: number }) {
-  return (
-    <svg className="dg-icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-      <path d={ICONS[name]} />
-    </svg>
-  );
-}
-
-/** Short text for an active column filter chip: «Durum: Tamamlandı», «Malzeme: 3 değer», «Not: "abc"» */
-function filterSummary(f: ColFilter): string {
-  const parts: string[] = [];
-  if (f.text) parts.push(`"${f.text}"`);
-  if (f.values) parts.push(f.values.length === 1 ? f.values[0] || "(boş)" : `${f.values.length.toLocaleString("tr-TR")} değer`);
-  return parts.join(" + ");
-}
-
 function globalMatch(row: Row<any>, id: string, value: string): boolean {
   const v = row.getValue(id);
   return !isEmpty(v) && norm(String(v)).includes(norm(value));
@@ -133,7 +64,68 @@ export function toCsv<R>(rows: R[], cols: GridColumn<any>[], get: (r: R, id: str
     ...rows.map((r) => use.map((c) => esc(get(r, colId(c)))).join(";"))].join("\r\n");
 }
 
-export default function DataGrid<T>(p: Props<T>) {
+/** What a saved view remembers; the layout part also survives on its own between visits. */
+type Layout = { visibility: VisibilityState; order: ColumnOrderState; pinning: ColumnPinningState; sizing: ColumnSizingState };
+type SavedView = Omit<Layout, "sizing"> & { name: string; filters: ColumnFiltersState; sorting: SortingState };
+
+function loadJson<V>(key: string | null, fallback: V): V {
+  if (!key) return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : { ...fallback, ...JSON.parse(v) };
+  } catch {
+    return fallback;
+  }
+}
+function saveJson(key: string | null, v: unknown): void {
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ }
+}
+
+/** Show, hide and reorder columns. Dragging works with a mouse, the arrows work on a phone. */
+function ColumnsPanel<T>({ table, onReset, onClose }: { table: Table<T>; onReset: () => void; onClose: () => void }) {
+  const all = table.getAllLeafColumns().filter((c) => c.id !== "_sel" && c.id !== ADV);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const frozen = table.getState().columnPinning.left ?? [];
+  const label = (id: string) => headerText(table.getColumn(id)!.columnDef as GridColumn<T>) || "İşlemler";
+  const move = (id: string, to: number) => {
+    const ids = all.map((c) => c.id);
+    ids.splice(ids.indexOf(id), 1);
+    ids.splice(Math.max(0, Math.min(to, ids.length)), 0, id);
+    table.setColumnOrder(ids);
+  };
+  return (
+    <>
+      <div className="fs-backdrop" onClick={onClose} />
+      <div className="fs cols card" role="dialog" aria-label="Sütunlar">
+        <div className="fs-head">
+          <b>Sütunlar</b>
+          <span className="dg-spacer" />
+          <button className="dg-link" onClick={() => table.toggleAllColumnsVisible(true)}>Tümünü göster</button>
+          <button className="dg-link" onClick={onReset}>Varsayılana dön</button>
+          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
+        </div>
+        <div className="cols-list">
+          {all.map((c, i) => (
+            <div key={c.id} className={`cols-row${dragged === c.id ? " drag" : ""}`} draggable
+              onDragStart={() => setDragged(c.id)} onDragEnd={() => setDragged(null)}
+              onDragOver={(e) => { e.preventDefault(); if (dragged && dragged !== c.id) move(dragged, i); }}>
+              <span className="cols-grip" aria-hidden="true">⠿</span>
+              <label><input type="checkbox" checked={c.getIsVisible()} onChange={c.getToggleVisibilityHandler()} /> {label(c.id)}</label>
+              {frozen.includes(c.id) && <span className="badge">Sabit</span>}
+              <span className="dg-spacer" />
+              {c.getIsVisible() && <button className="dg-link" onClick={() => freezeTo(table, c.id)}>{frozen[frozen.length - 1] === c.id ? "Sabitlemeyi kaldır" : "Buraya kadar sabitle"}</button>}
+              <button className="fs-close" disabled={i === 0} onClick={() => move(c.id, i - 1)} aria-label={`${label(c.id)} yukarı`}>↑</button>
+              <button className="fs-close" disabled={i === all.length - 1} onClick={() => move(c.id, i + 1)} aria-label={`${label(c.id)} aşağı`}>↓</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function DataGrid<T>(p: GridProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [localFilters, setLocalFilters] = useState<ColumnFiltersState>([]);
   const [localSel, setLocalSel] = useState<RowSelectionState>({});
@@ -141,16 +133,29 @@ export default function DataGrid<T>(p: Props<T>) {
   const filters = p.filters ?? localFilters;
   const selection = p.selection ?? localSel;
   const [view, setView] = useGridView();
-  const [sheet, setSheet] = useState<"filter" | "export" | null>(null);
+  const [sheet, setSheet] = useState<"filter" | "advanced" | "export" | "columns" | "views" | null>(null);
   const [sheetCol, setSheetCol] = useState<string | null>(null);
   const [mail, setMail] = useState<MailFile | null>(null);
   const toast = useToast();
+  const stateKey = p.stateKey ?? (p.exportName || null);
+  const layoutKey = stateKey ? `dg.layout.${stateKey}` : null;
+  const viewsKey = stateKey ? `dg.views.${stateKey}` : null;
+  const [layout, setLayout] = useState<Layout>(() => loadJson(layoutKey, { visibility: {}, order: [], pinning: { left: [] }, sizing: {} }));
+  const [views, setViews] = useState<SavedView[]>(() => loadJson(viewsKey, { list: [] as SavedView[] }).list);
+  const [viewName, setViewName] = useState("");
+  useEffect(() => saveJson(layoutKey, layout), [layoutKey, layout]);
+  useEffect(() => saveJson(viewsKey, { list: views }), [viewsKey, views]);
+  const patchLayout = <K extends keyof Layout>(k: K, u: Layout[K] | ((old: Layout[K]) => Layout[K])) =>
+    setLayout((s) => ({ ...s, [k]: typeof u === "function" ? (u as (old: Layout[K]) => Layout[K])(s[k]) : u }));
   // Checkbox click: plain toggles one row, Shift also sets every row back to the last clicked one
   const lastChecked = useRef<string | null>(null);
   const checkRow = useRef<(row: Row<T>, shift: boolean) => void>(() => {});
 
   const columns = useMemo<GridColumn<T>[]>(() => {
-    const cols = p.columns.map((c) => ({ filterFn: multiFilter, ...c }));
+    const cols: GridColumn<T>[] = [...p.columns.map((c) => ({ filterFn: multiFilter, ...c })), {
+      id: ADV, accessorFn: (r: T) => r, filterFn: advFilter, enableSorting: false, enableHiding: false,
+      noFilter: true, noExport: true, card: "hide", header: "",
+    }];
     if (!p.selectable) return cols;
     return [{
       id: "_sel", size: 32, enableSorting: false, noFilter: true, noExport: true, card: "hide",
@@ -168,11 +173,21 @@ export default function DataGrid<T>(p: Props<T>) {
 
   const table = useReactTable({
     data: p.data, columns, getRowId: p.getRowId,
-    state: { sorting, columnFilters: filters, rowSelection: selection, globalFilter: search },
+    state: {
+      sorting, columnFilters: filters, rowSelection: selection, globalFilter: search,
+      columnVisibility: { ...layout.visibility, [ADV]: false },
+      columnOrder: layout.order.length ? ["_sel", ...layout.order] : [],
+      columnPinning: { left: layout.pinning.left?.length ? ["_sel", ...layout.pinning.left.filter((x) => x !== "_sel")] : [] },
+      columnSizing: layout.sizing,
+    },
     onSortingChange: setSorting,
+    onColumnVisibilityChange: (u) => patchLayout("visibility", u),
+    onColumnOrderChange: (u) => patchLayout("order", u),
+    onColumnPinningChange: (u) => patchLayout("pinning", u),
+    onColumnSizingChange: (u) => patchLayout("sizing", u),
     onGlobalFilterChange: setSearch,
     globalFilterFn: globalMatch,
-    getColumnCanGlobalFilter: (c) => c.id !== "_sel" && c.id !== "actions",
+    getColumnCanGlobalFilter: (c) => c.id !== "_sel" && c.id !== "actions" && c.id !== ADV,
     onColumnFiltersChange: (u) => {
       const next = typeof u === "function" ? u(filters) : u;
       (p.onFiltersChange ?? setLocalFilters)(next);
@@ -190,6 +205,15 @@ export default function DataGrid<T>(p: Props<T>) {
 
   const rows = table.getRowModel().rows;
   const { onVisibleRowsChange } = p;
+  // A row the filter hides must not stay selected, or a bulk change would reach rows nobody sees
+  useEffect(() => {
+    const on = Object.keys(selection).filter((k) => selection[k]);
+    if (!on.length) return;
+    const seen = new Set(table.getFilteredRowModel().rows.map((r) => r.id));
+    const keep = on.filter((k) => seen.has(k));
+    if (keep.length !== on.length) table.setRowSelection(Object.fromEntries(keep.map((k) => [k, true])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, search]);
   useEffect(() => { onVisibleRowsChange?.(rows.map((r) => r.original)); }, [rows, onVisibleRowsChange]);
   checkRow.current = (row, shift) => {
     const on = !row.getIsSelected();
@@ -216,8 +240,12 @@ export default function DataGrid<T>(p: Props<T>) {
   const sortVal = sorting[0] ? `${sorting[0].id}:${sorting[0].desc ? "desc" : "asc"}` : "";
   const exportName = p.exportName === false ? null : p.exportName || "liste";
 
+  const exportCols = () => drawnColumns(table).filter((c) => {
+    const d = c.columnDef as GridColumn<T>;
+    return !d.noExport && headerText(d) && c.id !== "actions";
+  });
   const csvFile = (): MailFile => {
-    const csv = toCsv(rows, p.columns, (r, id) => r.getValue(id));
+    const csv = toCsv(rows, exportCols().map((c) => c.columnDef as GridColumn<T>), (r, id) => r.getValue(id));
     return { name: `${exportName}.csv`, blob: new Blob([csv], { type: "text/csv;charset=utf-8" }) };
   };
   const downloadCsv = async () => {
@@ -239,6 +267,39 @@ export default function DataGrid<T>(p: Props<T>) {
     }
   };
 
+  const downloadXlsx = async () => {
+    setSheet(null);
+    const use = exportCols();
+    try {
+      const { id } = await api.post<{ id: string }>("/export/grid", {
+        columns: use.map((c) => headerText(c.columnDef as GridColumn<T>)),
+        widths: use.map((c) => c.getSize()),
+        rows: rows.map((r) => use.map((c) => {
+          const v = r.getValue(c.id);
+          return isEmpty(v) ? null : typeof v === "number" ? v : String(v);
+        })),
+      });
+      await download(`/export/grid/${id}?name=${encodeURIComponent(exportName ?? "liste")}`, `${exportName}.xlsx`);
+    } catch (e) {
+      toast(errText(e), true);
+    }
+  };
+  const saveView = () => {
+    const name = viewName.trim();
+    if (!name) return;
+    const v: SavedView = { name, filters, sorting, visibility: layout.visibility, order: layout.order, pinning: layout.pinning };
+    setViews((s) => [...s.filter((x) => x.name !== name), v]);
+    setViewName("");
+  };
+  const openView = (v: SavedView) => {
+    (p.onFiltersChange ?? setLocalFilters)(v.filters);
+    setSorting(v.sorting);
+    setLayout((s) => ({ ...s, visibility: v.visibility, order: v.order, pinning: v.pinning }));
+    setSheet(null);
+  };
+  const resetLayout = () => setLayout((s) => ({ ...s, visibility: {}, order: [], pinning: { left: [] } }));
+  const advanced = filters.find((f) => f.id === ADV);
+
   return (
     <>
       {p.toolbar && <div className="toolbar dg-extra">{p.toolbar}</div>}
@@ -252,6 +313,28 @@ export default function DataGrid<T>(p: Props<T>) {
           onClick={() => { setSheetCol(null); setSheet(sheet === "filter" ? null : "filter"); }}>
           <Icon name="filter" /> Filtre{activeFilters > 0 && <span className="dg-count-badge">{activeFilters}</span>}
         </button>
+        <button className={`dg-tool${advanced ? " active" : ""}`} onClick={() => setSheet("advanced")}>Gelişmiş</button>
+        <button className="dg-tool" onClick={() => setSheet("columns")}>Sütunlar</button>
+        {stateKey && (
+          <div className="dg-menu-wrap">
+            <button className="dg-tool" onClick={() => setSheet(sheet === "views" ? null : "views")} aria-haspopup="menu">Görünümler ▾</button>
+            {sheet === "views" && (
+              <div className="dg-menu card" role="menu">
+                {views.map((v) => (
+                  <div key={v.name} className="dg-view-row">
+                    <button className="btn small" onClick={() => openView(v)}>{v.name}</button>
+                    <button className="fs-close" aria-label={`${v.name} görünümünü sil`} onClick={() => setViews((s) => s.filter((x) => x !== v))}><Icon name="x" size={14} /></button>
+                  </div>
+                ))}
+                {views.length === 0 && <span className="muted">Kayıtlı görünüm yok. Filtre, sıralama ve sütunlar birlikte kaydedilir.</span>}
+                <div className="dg-view-row">
+                  <input placeholder="Görünüm adı" aria-label="Görünüm adı" value={viewName} onChange={(e) => setViewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveView()} />
+                  <button className="btn small primary" disabled={!viewName.trim()} onClick={saveView}>Kaydet</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {view === "cards" && sortable.length > 0 && (
           <label className={`dg-tool dg-sort${sortVal ? " active" : ""}`}>
             <Icon name="sort" />
@@ -275,7 +358,8 @@ export default function DataGrid<T>(p: Props<T>) {
             <button className="dg-tool" onClick={() => setSheet(sheet === "export" ? null : "export")} aria-haspopup="menu">Paylaş ▾</button>
             {sheet === "export" && (
               <div className="dg-menu card" role="menu">
-                <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>Listeyi indir (CSV, Excel'de açılır)</button>
+                <button role="menuitem" className="btn small" onClick={() => void downloadXlsx()}>Excel dosyası indir (.xlsx)</button>
+                <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>CSV indir</button>
                 <button role="menuitem" className="btn small" onClick={() => { setSheet(null); setMail(csvFile()); }}>E-posta ile gönder</button>
               </div>
             )}
@@ -295,6 +379,17 @@ export default function DataGrid<T>(p: Props<T>) {
           {filters.map((f) => {
             const c = table.getColumn(f.id);
             if (!c) return null;
+            if (f.id === ADV) {
+              return (
+                <span key={f.id} className="dg-fchip">
+                  <button className="dg-fchip-main" title="Filtreyi düzenle" onClick={() => setSheet("advanced")}>
+                    <span className="dg-fchip-k">Gelişmiş filtre</span>
+                    <span className="dg-fchip-v">{advSummary(f.value as AdvValue)}</span>
+                  </button>
+                  <button className="dg-fchip-x" aria-label="Filtreyi kaldır" onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
+                </span>
+              );
+            }
             return (
               <span key={f.id} className="dg-fchip">
                 <button className="dg-fchip-main" title="Filtreyi düzenle" onClick={() => { setSheetCol(f.id); setSheet("filter"); }}>
@@ -321,102 +416,22 @@ export default function DataGrid<T>(p: Props<T>) {
               <b>{selectedCount.toLocaleString("tr-TR")} seçili</b>
               <button className="dg-link" onClick={invertSelection}>Tersine çevir</button>
               <button className="dg-link" onClick={() => table.setRowSelection({})}>Seçimi temizle</button>
+              {p.selectionActions}
             </>
           )}
         </div>
       )}
-      {sheet === "filter" && <FilterSheet key={sheetCol ?? ""} table={table} initialCol={sheetCol} onClose={() => setSheet(null)} />}
-      {view === "cards" ? <CardView p={p} table={table} rows={rows} onCheck={(r, shift) => checkRow.current(r, shift)} /> : <TableView p={p} table={table} rows={rows} columns={columns} />}
+      {sheet === "filter" && <FilterSheet key={sheetCol ?? ""} table={table} initialCol={sheetCol} onClose={() => setSheet(null)} onAdvanced={() => setSheet("advanced")} />}
+      {sheet === "advanced" && <AdvancedFilter table={table} onClose={() => setSheet(null)} />}
+      {sheet === "columns" && <ColumnsPanel table={table} onReset={resetLayout} onClose={() => setSheet(null)} />}
+      {view === "cards" ? <CardView p={p} table={table} rows={rows} onCheck={(r, shift) => checkRow.current(r, shift)} /> : <TableView p={p} table={table} rows={rows} />}
       {mail && <MailDialog files={[mail]} subject={exportName ?? "Liste"} body={`${exportName} listesi ektedir (${rows.length} satır).`} onClose={() => setMail(null)} />}
     </>
   );
 }
 
-type ViewProps<T> = { p: Props<T>; table: ReturnType<typeof useReactTable<T>>; rows: Row<T>[] };
-
-function TableView<T>({ p, table, rows, columns }: ViewProps<T> & { columns: GridColumn<T>[] }) {
-  const [editing, setEditing] = useState<{ row: string; col: string } | null>(null);
-  const [openFilter, setOpenFilter] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const rh = p.rowHeight ?? 28;
-  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => rh, overscan: 20 });
-  const items = virt.getVirtualItems();
-  const padTop = items.length ? items[0].start : 0;
-  const padBottom = items.length ? virt.getTotalSize() - items[items.length - 1].end : 0;
-  const totalWidth = table.getTotalSize();
-
-  return (
-      <div className="dg" ref={scrollRef} onClick={() => setOpenFilter(null)}>
-        <table style={{ width: totalWidth }}>
-          <thead>
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((h) => {
-                  const col = h.column.columnDef as GridColumn<T>;
-                  const f = h.column.getFilterValue() as ColFilter | undefined;
-                  const sorted = h.column.getIsSorted();
-                  return (
-                    <th key={h.id} className={openFilter === h.id ? "fopen" : undefined} style={{ width: h.getSize(), position: "sticky" }}>
-                      <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                        <span style={{ cursor: h.column.getCanSort() ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
-                          onClick={h.column.getToggleSortingHandler()}>
-                          {flexRender(h.column.columnDef.header, h.getContext())}
-                          {sorted === "asc" ? " ▲" : sorted === "desc" ? " ▼" : ""}
-                        </span>
-                        {!col.noFilter && h.column.id !== "_sel" && (
-                          <button className={"btn small" + (f ? " primary" : "")} style={{ padding: "0 5px", marginLeft: "auto" }}
-                            title="Filtre" onClick={(e) => { e.stopPropagation(); setOpenFilter(openFilter === h.id ? null : h.id); }}>▾</button>
-                        )}
-                      </div>
-                      {openFilter === h.id && (
-                        <FilterPopup table={table} colId={h.column.id} onClose={() => setOpenFilter(null)} />
-                      )}
-                      {h.column.getCanResize() && (
-                        <div className="resizer" onMouseDown={h.getResizeHandler()} onTouchStart={h.getResizeHandler()} onClick={(e) => e.stopPropagation()} />
-                      )}
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {padTop > 0 && <tr style={{ height: padTop }}><td colSpan={columns.length} style={{ border: 0, padding: 0 }} /></tr>}
-            {items.map((vi) => {
-              const row = rows[vi.index];
-              return (
-                <tr key={row.id} className={row.getIsSelected() ? "selected" : ""} style={{ height: rh, ...p.rowStyle?.(row.original) }}
-                  onClick={() => p.onRowClick?.(row.original)}>
-                  {row.getVisibleCells().map((cell) => {
-                    const col = cell.column.columnDef as GridColumn<T>;
-                    const canEdit = !!(col.edit && p.onEdit && (col.edit.canEdit?.(row.original) ?? true));
-                    const isEditing = editing?.row === row.id && editing.col === cell.column.id;
-                    return (
-                      <td key={cell.id} className={canEdit ? "editable" : ""} style={{ width: cell.column.getSize(), ...col.cellStyle?.(row.original) }}
-                        title={typeof cell.getValue() === "string" ? (cell.getValue() as string) : undefined}
-                        onDoubleClick={(e) => { if (canEdit) { e.stopPropagation(); setEditing({ row: row.id, col: cell.column.id }); } }}>
-                        {isEditing ? (
-                          <Editor row={row} col={col} colId={cell.column.id}
-                            onDone={(v) => { setEditing(null); if (v !== undefined && v !== String(cell.getValue() ?? "")) p.onEdit!(row.original, cell.column.id, v); }} />
-                        ) : (
-                          flexRender(cell.column.columnDef.cell, cell.getContext())
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-            {padBottom > 0 && <tr style={{ height: padBottom }}><td colSpan={columns.length} style={{ border: 0, padding: 0 }} /></tr>}
-          </tbody>
-        </table>
-        {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>{p.emptyText ?? "Kayıt yok."}</div>}
-      </div>
-  );
-}
-
 /** Modern list: one card per row, fields flow and wrap, so nothing needs horizontal scrolling. */
-function CardView<T>({ p, table, rows, onCheck }: ViewProps<T> & { onCheck: (row: Row<T>, shift: boolean) => void }) {
+function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Table<T>; rows: Row<T>[]; onCheck: (row: Row<T>, shift: boolean) => void }) {
   const [editing, setEditing] = useState<{ row: string; col: string } | null>(null);
   // Cards whose empty editable fields are shown (the ✎ button); others show only filled fields
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -519,158 +534,3 @@ function CardView<T>({ p, table, rows, onCheck }: ViewProps<T> & { onCheck: (row
   );
 }
 
-/** Filter panel for both views: columns on the left (on phones: first step), the chosen column's values on the right. */
-function FilterSheet<T>({ table, initialCol, onClose }: { table: ReturnType<typeof useReactTable<T>>; initialCol: string | null; onClose: () => void }) {
-  const cols = table.getAllLeafColumns().filter((c) => {
-    const d = c.columnDef as GridColumn<T>;
-    return !d.noFilter && c.id !== "_sel" && c.id !== "actions" && headerText(d);
-  });
-  const [col, setCol] = useState<string | null>(initialCol);
-  const [q, setQ] = useState("");
-  const shownCols = cols.filter((c) => !q || norm(headerText(c.columnDef as GridColumn<T>)).includes(norm(q)));
-  const active = table.getState().columnFilters.length;
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [onClose]);
-  return (
-    <>
-      <div className="fs-backdrop" onClick={onClose} />
-      <div className={`fs card${col ? " has-col" : ""}`} role="dialog" aria-label="Filtreler">
-        <div className="fs-head">
-          {col && <button className="fs-back" onClick={() => setCol(null)} aria-label="Sütunlara dön">‹</button>}
-          <b>{col ? headerText(table.getColumn(col)!.columnDef as GridColumn<T>) : "Filtreler"}</b>
-          {active > 0 && <span className="dg-count-badge">{active}</span>}
-          <span className="dg-spacer" />
-          {active > 0 && <button className="dg-link" onClick={() => table.resetColumnFilters()}>Tümünü temizle</button>}
-          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
-        </div>
-        <div className="fs-body">
-          <div className="fs-cols">
-            {cols.length > 8 && (
-              <label className="dg-search fs-colsearch">
-                <Icon name="search" size={14} />
-                <input type="search" placeholder="Sütun ara…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Sütun ara" />
-              </label>
-            )}
-            {shownCols.map((c) => {
-              const f = c.getFilterValue() as ColFilter | undefined;
-              return (
-                <button key={c.id} className={`fs-col${col === c.id ? " on" : ""}${f ? " active" : ""}`} onClick={() => setCol(c.id)}>
-                  <span className="fs-col-name">{headerText(c.columnDef as GridColumn<T>)}</span>
-                  {f ? <span className="fs-col-val">{filterSummary(f)}</span> : <span className="fs-col-chev">›</span>}
-                </button>
-              );
-            })}
-          </div>
-          <div className="fs-vals">
-            {col ? (
-              <FilterPopup key={col} table={table} colId={col} inline onClose={() => setCol(null)} />
-            ) : (
-              <div className="fs-hint muted">Filtrelemek için soldan bir sütun seçin.</div>
-            )}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function Editor<T>({ row, col, colId, onDone }: { row: Row<T>; col: GridColumn<T>; colId: string; onDone: (v?: string) => void }) {
-  const initial = String(row.getValue(colId) ?? "");
-  const [v, setV] = useState(initial);
-  const e = col.edit!;
-  const opts = typeof e.options === "function" ? e.options(row.original) : e.options;
-  const key = (ev: React.KeyboardEvent) => {
-    if (ev.key === "Enter") onDone(v);
-    if (ev.key === "Escape") onDone(undefined);
-  };
-  if (e.type === "select") {
-    return (
-      <select autoFocus value={v} onChange={(ev) => onDone(ev.target.value)} onBlur={() => onDone(undefined)} onKeyDown={key} onClick={(ev) => ev.stopPropagation()}>
-        {!opts?.includes(v) && <option value={v}>{v || "—"}</option>}
-        {opts?.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
-      </select>
-    );
-  }
-  return (
-    <input autoFocus type={e.type === "number" ? "number" : "text"} value={v} onChange={(ev) => setV(ev.target.value)}
-      onBlur={() => onDone(v)} onKeyDown={key} onClick={(ev) => ev.stopPropagation()} />
-  );
-}
-
-/** Excel-like filter: text contains + checkbox list of distinct values (computed on rows that pass the OTHER filters). */
-function FilterPopup<T>({ table, colId, onClose, inline }: { table: ReturnType<typeof useReactTable<T>>; colId: string; onClose: () => void; inline?: boolean }) {
-  const column = table.getColumn(colId)!;
-  const cur = (column.getFilterValue() as ColFilter | undefined) ?? {};
-  const [text, setText] = useState(cur.text ?? "");
-  const [search, setSearch] = useState("");
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    const others = table.getState().columnFilters.filter((f) => f.id !== colId);
-    for (const r of table.getCoreRowModel().rows) {
-      if (!others.every((f) => multiFilter(r as Row<any>, f.id, f.value as ColFilter, () => {}))) continue;
-      const t = cellText(r.getValue(colId));
-      m.set(t, (m.get(t) ?? 0) + 1);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "tr-TR", { numeric: true }));
-  }, [table, colId]);
-  const [sel, setSel] = useState<Set<string>>(new Set(cur.values ?? counts.map((c) => c[0])));
-  const shown = counts.filter(([k]) => !search || norm(k).includes(norm(search)));
-
-  const apply = () => {
-    const all = sel.size === counts.length || counts.every(([k]) => sel.has(k));
-    const next: ColFilter = {};
-    if (!all) next.values = [...sel];
-    if (text.trim()) next.text = text.trim();
-    column.setFilterValue(next.values || next.text ? next : undefined);
-    onClose();
-  };
-
-  const allOn = shown.length > 0 && shown.every(([k]) => sel.has(k));
-  const toggle = (k: string, on: boolean) => { const n = new Set(sel); if (on) n.add(k); else n.delete(k); setSel(n); };
-  const max = Math.max(1, ...counts.map((c) => c[1]));
-
-  return (
-    <div className={`fp${inline ? " inline" : " pop card"}`} onClick={(e) => e.stopPropagation()}>
-      <div className="fp-sec">
-        <span className="fp-label">Metin içerir</span>
-        <label className="dg-search">
-          <Icon name="filter" size={14} />
-          <input placeholder="örnek: 1250 veya kaynak" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && apply()} autoFocus={!inline || matchMedia("(pointer: fine)").matches} />
-        </label>
-      </div>
-      <div className="fp-sec">
-        <div className="fp-row">
-          <span className="fp-label">Değerler <span className="muted">({sel.size.toLocaleString("tr-TR")} / {counts.length.toLocaleString("tr-TR")} seçili)</span></span>
-          <button className="dg-link" onClick={() => {
-            const n = new Set(sel);
-            shown.forEach(([k]) => (allOn ? n.delete(k) : n.add(k)));
-            setSel(n);
-          }}>{allOn ? "Hiçbirini seçme" : "Tümünü seç"}</button>
-        </div>
-        {counts.length > 6 && (
-          <label className="dg-search">
-            <Icon name="search" size={14} />
-            <input type="search" placeholder="Değer ara…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </label>
-        )}
-        <div className="fp-list">
-          {shown.map(([k, n]) => (
-            <label key={k} className={`fp-opt${sel.has(k) ? " on" : ""}`}>
-              <input type="checkbox" checked={sel.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
-              <span className="fp-opt-k" title={k}>{k}</span>
-              <span className="fp-opt-n" style={{ "--w": `${Math.round((n / max) * 100)}%` } as CSSProperties}>{n.toLocaleString("tr-TR")}</span>
-            </label>
-          ))}
-          {shown.length === 0 && <div className="muted fp-empty">Eşleşen değer yok</div>}
-        </div>
-      </div>
-      <div className="fp-foot">
-        <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>Temizle</button>
-        <button className="btn primary" onClick={apply}>Uygula</button>
-      </div>
-    </div>
-  );
-}

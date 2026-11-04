@@ -159,3 +159,113 @@ def test_viewer_read_only(client, admin_headers, viewer_headers, data_file):
         client.post(f"/api/projects/{pid}/aliases", json={"alias": "A", "part_no": "B"}, headers=v),
     ]
     assert [r.status_code for r in denied] == [403] * len(denied)
+
+
+# ---------- temin types, part names, table cells ----------
+
+def _leaf(client, h, pid) -> dict:
+    return next(r for r in _parts(client, h, pid) if not r["is_assembly"] and not r["fastener"])
+
+
+@pytest.fixture
+def temins(client, admin_headers):
+    """Restores the default temin list after a test changes it."""
+    from app.core.status import DEFAULT_TEMIN_TYPES
+    yield
+    client.put("/api/admin/settings/temin_types", json={"value": DEFAULT_TEMIN_TYPES}, headers=admin_headers)
+
+
+def test_default_temin_types_are_offered(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "TeminA")
+    c = client.get(f"/api/projects/{pid}/parts/choices", headers=admin_headers).json()
+    assert {"İmalat", "Hazır Alım", "Fason İmalat", "Stoktan Karşılama", "Müşteri Malı"} <= set(c["temin_choices"])
+    assert c["temin_kinds"]["Fason İmalat"] == "Hazır Alım" and c["temin_kinds"]["İmalat"] == "İmalat"
+
+
+def test_a_temin_type_decides_status_drawing_and_planning(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "TeminB")
+    pno = _leaf(client, admin_headers, pid)["part_no"]
+
+    def row(temin: str) -> dict:
+        r = client.patch(f"/api/projects/{pid}/parts/{pno}", json={"procurement_override": temin}, headers=admin_headers)
+        assert r.status_code == 200, r.text
+        return next(x for x in _parts(client, admin_headers, pid) if x["part_no"] == pno)
+
+    fason = row("Fason İmalat")
+    assert fason["status_kind"] == "Hazır Alım" and fason["needs_drawing"]
+    assert not row("Standart Parça")["needs_drawing"]
+    row("Stoktan Karşılama")
+    need = {r["code"]: r for r in client.get(f"/api/projects/{pid}/requirements", headers=admin_headers).json()["rows"]}
+    assert need[pno]["action"] == ""
+
+
+def test_a_new_temin_type_is_accepted_and_the_fixed_ones_stay(client, admin_headers, data_file, temins):
+    url = "/api/admin/settings/temin_types"
+    types = client.get("/api/admin/settings", headers=admin_headers).json()["temin_types"]
+    extra = {"name": "Lazer Kesim", "kind": "Hazır Alım", "drawing": True, "order": True}
+    assert client.put(url, json={"value": [*types, extra]}, headers=admin_headers).status_code == 200
+    pid = _project_with_bom(client, admin_headers, data_file, "TeminC")
+    pno = _leaf(client, admin_headers, pid)["part_no"]
+    assert client.patch(f"/api/projects/{pid}/parts/{pno}", json={"procurement_override": "Lazer Kesim"},
+                        headers=admin_headers).status_code == 200
+    assert client.put(url, json={"value": [t for t in types if t["name"] != "İmalat"]},
+                      headers=admin_headers).status_code == 400
+    assert client.put(url, json={"value": [*types, types[0]]}, headers=admin_headers).status_code == 400
+    assert client.put(url, json={"value": [*types, {**extra, "kind": "Başka"}]}, headers=admin_headers).status_code == 400
+    moved = [{**t, "kind": "Hazır Alım"} if t["name"] == "İmalat" else t for t in types]
+    assert client.put(url, json={"value": moved}, headers=admin_headers).status_code == 200
+    kinds = {t["name"]: t["kind"] for t in client.get("/api/admin/settings", headers=admin_headers).json()["temin_types"]}
+    assert kinds["İmalat"] == "İmalat"
+
+
+def test_table_cells_save_and_report_the_bad_ones(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "Cells")
+    a, b = [r["part_no"] for r in _parts(client, admin_headers, pid) if not r["is_assembly"]][:2]
+    r = client.post(f"/api/projects/{pid}/parts/cells", headers=admin_headers, json={"changes": [
+        {"part_no": a, "field": "progress", "value": PROG_RUN},
+        {"part_no": b, "field": "progress", "value": PROG_DONE},
+        {"part_no": a, "field": "part_name", "value": "Sol kapak"},
+        {"part_no": b, "field": "procurement_override", "value": "Yok böyle"},
+        {"part_no": "OLMAYAN-123", "field": "progress", "value": PROG_RUN},
+    ]}).json()
+    assert r["fields_changed"] == 3 and r["error_count"] == 1 and r["not_found"] == ["OLMAYAN-123"]
+    rows = {x["part_no"]: x for x in _parts(client, admin_headers, pid)}
+    assert rows[a]["progress"] == PROG_RUN and rows[b]["progress"] == PROG_DONE and rows[a]["part_name"] == "Sol kapak"
+
+
+def test_cells_need_the_edit_permission(client, viewer_headers, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "CellsV")
+    body = {"changes": [{"part_no": "X", "field": "progress", "value": PROG_RUN}]}
+    assert client.post(f"/api/projects/{pid}/parts/cells", json=body, headers=viewer_headers).status_code == 403
+    body = {"items": [{"part_no": "X", "name": "Y"}]}
+    assert client.post(f"/api/projects/{pid}/parts/names", json=body, headers=viewer_headers).status_code == 403
+
+
+def test_a_part_name_is_shared_searchable_and_removable(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "NameA")
+    other = _project_with_bom(client, admin_headers, data_file, "NameB")
+    pno = _leaf(client, admin_headers, pid)["part_no"]
+    tag = f"ad{uuid.uuid4().hex[:8]}"
+    r = client.post(f"/api/projects/{pid}/parts/names", headers=admin_headers,
+                    json={"items": [{"part_no": pno, "name": tag}, {"part_no": "OLMAYAN-9", "name": "x"}]}).json()
+    assert r == {"updated": 1, "matched": 1, "not_found": ["OLMAYAN-9"]}
+    assert [x["part_no"] for x in _parts(client, admin_headers, other, q=tag)] == [pno]
+    client.post(f"/api/projects/{pid}/parts/names", headers=admin_headers, json={"items": [{"part_no": pno, "name": ""}]})
+    assert _parts(client, admin_headers, other, q=tag) == []
+
+
+def test_grid_export_gives_an_excel_file(client, admin_headers):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+    fid = client.post("/api/export/grid", headers=admin_headers, json={
+        "columns": ["No", "Adet"], "widths": [140, 70],
+        "rows": [["A-1", 2], ['=HYPERLINK("http://x","y")', 3]]}).json()["id"]
+    r = client.get(f"/api/export/grid/{fid}", params={"name": "Parçalar"}, headers=admin_headers)
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    assert client.get("/api/export/grid/" + "0" * 32, headers=admin_headers).status_code == 404
+    assert client.get("/api/export/grid/..%2F..%2Fsecret", headers=admin_headers).status_code == 404
+    ws = load_workbook(BytesIO(r.content)).active
+    assert [c.value for c in ws[1]] == ["No", "Adet"] and ws["B2"].value == 2
+    assert ws.freeze_panes == "A2" and ws.auto_filter.ref == "A1:B3"
+    assert ws["A3"].data_type == "s"

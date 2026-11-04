@@ -1,6 +1,16 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.7 yenilikleri
+
+- **Temin şekilleri:** Fason İmalat, Standart Parça, Stoktan Karşılama ve Müşteri Malı eklendi. Sistem Ayarları'ndan yenisini ekleyin; davranışını, teknik resim ve sipariş önerisini seçin.
+- **Excel gibi tablo:** Hücre ve aralık seçimi, kopyala, kes, yapıştır, doldurma tutamağı, geri al, bul ve değiştir, sağ tık menüsü ve seçim toplamı geldi.
+- **Sütunlar:** Gizleyin, sıralayın, sabitleyin. Düzen hatırlanır.
+- **Gelişmiş filtre:** Sütunda koşullu filtre, VE ve VEYA gruplu kurallar, adla kayıtlı görünümler.
+- **Toplu değiştirme:** Liste ya da tablo modunda filtreleyip seçin, ilerleme ve temin şeklini hepsine birden atayın.
+- **Parça adı:** Yeni sütun. Tablodan yazın ya da parça no ve ad listesini Excel'den yapıştırın. Ürün ağacında da girilir.
+- **Excel dosyası:** Ekrandaki satır ve sütunlar `.xlsx` olarak iner.
+
 ## 1.5.6 yenilikleri
 
 - **Ürün ağacı:** Proje menüsünde yeni ekran. CAD listesi olmadan ürünü montaj montaj kurun: alt montaj ve parça ekleyin, üst montajdaki adeti, temin şeklini, malzemeyi ve ağırlığı yazın, toplam adet kendiliğinden çarpılır.

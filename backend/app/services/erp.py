@@ -347,7 +347,9 @@ def _bom_items(pv: ProjectView) -> dict[str, dict[str, Any]]:
             "status_color": p["status_color"], "progress": p["progress"],
             "main_group": (p["main_groups"] or [""])[0], "material": p["material"],
             "manufacturer": p["manufacturer"], "unit_price": None,
-            "done": p["progress"] == PROG_DONE, "hidden": p["hidden"],
+            "done": p["progress"] == PROG_DONE, "hidden": p["hidden"], "part_name": p["part_name"],
+            "make": p["status_kind"] == KIND_IMALAT,
+            "plan": bool((pv.temin.get(p["procurement"]) or {"order": True})["order"]),
         }
     for f in pv.fasteners():
         desc = " ".join(x for x in (f["type"], f["std"], f["size"]) if x)
@@ -356,7 +358,8 @@ def _bom_items(pv: ProjectView) -> dict[str, dict[str, Any]]:
             "required": float(f["order_qty"]), "procurement": "Hazır Alım", "status": f["order_status"],
             "status_color": f["status_color"], "progress": None, "main_group": (f["groups"] or [""])[0],
             "material": "", "manufacturer": f["supplier"], "unit_price": f["unit_price"],
-            "done": f["order_status"] == FASTENER_ORDER_STATUSES[2], "hidden": f["hidden"],
+            "done": f["order_status"] == FASTENER_ORDER_STATUSES[2], "hidden": f["hidden"], "part_name": "",
+            "make": False, "plan": True,
         }
     return items
 
@@ -399,7 +402,9 @@ def requirements(db: Session, project: Project, raw: bool = False) -> list[dict[
             action = ""
         elif from_stock > EPS:
             action = "stock"
-        elif it["kind"] == "part" and it["procurement"] == KIND_IMALAT:
+        elif not it["plan"]:
+            action = ""
+        elif it["make"]:
             action = "work_order"
         else:
             action = "purchase"

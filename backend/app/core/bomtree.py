@@ -1,6 +1,6 @@
 """Product tree builder: a nested item tree to and from the BOM CSV that the import pipeline reads.
 
-A node is a dict: part_no, assembly, qty, material, weight, rev, procurement, coating, children.
+A node is a dict: part_no, name, assembly, qty, material, weight, rev, procurement, coating, children.
 Generated CSVs go through the same upload, compare and approve steps as a SolidWorks export.
 """
 from __future__ import annotations
@@ -81,6 +81,19 @@ def to_csv(root: dict[str, Any]) -> bytes:
 
     walk(root, "1")
     return buf.getvalue().encode("utf-8-sig")
+
+
+def names_of(root: dict[str, Any]) -> dict[str, str]:
+    """Part names typed in the tree. The BOM file has no such column, so they are stored apart."""
+    out: dict[str, str] = {}
+
+    def walk(n: dict[str, Any]) -> None:
+        if (n.get("name") or "").strip():
+            out[part_no_of(n)] = n["name"].strip()
+        for c in n.get("children") or []:
+            walk(c)
+    walk(root)
+    return out
 
 
 def node_of(r: Any) -> dict[str, Any]:

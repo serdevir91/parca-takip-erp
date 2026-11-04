@@ -14,10 +14,12 @@ from ..core.status import (COLORS, PROG_WAIT, PROGRESS_CHOICES, STATUS_IN_PURCHA
 from ..models import AuditLog, BomVersion, MissingRow, PartAlias, Tracking, User
 from ..services import audit
 from ..services.settings import manufacturers, suppliers
-from ..services.state import FASTENER_COLORS, ProjectView, row_types, temin_choices
+from ..services.settings import temin_choices, temin_types
+from ..services.state import FASTENER_COLORS, ProjectView, row_types
 from ..services.state import FASTENER_ORDER_STATUSES
 from ..services.tracking import (apply_changes, check_progress, clean_changes, material_status_choices,
-                                 resolve_alias, resolve_aliases, tracking_map, tracking_of, tracking_view)
+                                 resolve_alias, resolve_aliases, set_names, tracking_map, tracking_of,
+                                 tracking_view)
 from ..permissions import require
 from .deps import get_db, project_or_404
 
@@ -25,7 +27,7 @@ parts_view, parts_edit = require("parts", "view"), require("parts", "edit")
 
 router = APIRouter(prefix="/projects", tags=["parts"])
 
-SEARCH_FIELDS = ("part_no", "file_name", "material", "note", "t35_note", "manufacturer", "main_group",
+SEARCH_FIELDS = ("part_no", "part_name", "file_name", "material", "note", "t35_note", "manufacturer", "main_group",
                  "parent_part_no", "level", "coating", "fastener_desc")
 
 
@@ -43,6 +45,25 @@ class TrackingPatch(BaseModel):
 class BulkIn(BaseModel):
     part_nos: list[str] = Field(min_length=1, max_length=20000)
     changes: TrackingPatch
+
+
+class CellIn(BaseModel):
+    part_no: str = Field(min_length=1, max_length=200)
+    field: str = Field(min_length=1, max_length=40)
+    value: Any = None
+
+
+class CellsIn(BaseModel):
+    changes: list[CellIn] = Field(min_length=1, max_length=100000)
+
+
+class NameIn(BaseModel):
+    part_no: str = Field(min_length=1, max_length=200)
+    name: str = Field(default="", max_length=300)
+
+
+class NamesIn(BaseModel):
+    items: list[NameIn] = Field(min_length=1, max_length=50000)
 
 
 class MissingIn(BaseModel):
@@ -160,7 +181,9 @@ def choices(pid: int, db: Session = Depends(get_db), _: User = Depends(parts_vie
     project_or_404(db, pid)
     statuses = list(dict.fromkeys([*(s for m in STATUS_MAP.values() for s in m.values()), STATUS_NO_TEMIN,
                                    STATUS_IN_PURCHASED]))
-    return {"row_types": row_types(), "temin_choices": temin_choices(), "progress_choices": PROGRESS_CHOICES,
+    return {"row_types": row_types(), "temin_choices": temin_choices(db),
+            "temin_kinds": {t["name"]: t["kind"] for t in temin_types(db)},
+            "temin_drawing": [t["name"] for t in temin_types(db) if t["drawing"]], "progress_choices": PROGRESS_CHOICES,
             "manufacturers": manufacturers(db), "suppliers": suppliers(db),
             "material_status_choices": material_status_choices(db),
             "statuses": [{"status": s, "color": COLORS.get(s, COLORS["in_purchased"]
@@ -191,6 +214,51 @@ def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User 
     db.commit()
     return {"matched": len(tmap), "updated": updated, "fields_changed": fields,
             "not_found": [p for p in wanted if p not in tmap]}
+
+
+@router.post("/{pid}/parts/cells")
+def edit_cells(pid: int, body: CellsIn, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
+    """Pasted and filled table cells: a different value per cell. A bad cell is reported, the rest are saved."""
+    project = project_or_404(db, pid)
+    wanted = resolve_aliases(db, list(dict.fromkeys(c.part_no.strip() for c in body.changes)))
+    canon = {c.part_no: resolve_alias(db, c.part_no.strip()) for c in body.changes}
+    tmap = tracking_map(db, project.id, wanted)
+    names: dict[str, str] = {}
+    fields, errors, not_found = 0, [], set()
+    for c in body.changes:
+        pno = canon[c.part_no]
+        if c.field == "part_name":
+            names[pno] = str(c.value or "")
+            continue
+        t = tmap.get(pno)
+        if t is None:
+            not_found.add(c.part_no)
+            continue
+        try:
+            fields += apply_changes(db, user, t, clean_changes(db, {c.field: c.value}))
+        except HTTPException as e:
+            errors.append(f"{c.part_no}: {e.detail}")
+    fields += set_names(db, user, names)
+    db.commit()
+    return {"fields_changed": fields, "errors": errors[:20], "error_count": len(errors), "not_found": sorted(not_found)}
+
+
+@router.post("/{pid}/parts/names")
+def edit_names(pid: int, body: NamesIn, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
+    """A pasted list of part numbers and names. Numbers that are not in this project are reported."""
+    project = project_or_404(db, pid)
+    known = {p["part_no"] for p in ProjectView.load(db, project).parts(include_in_purchased=True)}
+    names: dict[str, str] = {}
+    not_found: list[str] = []
+    for i in body.items:
+        pno = resolve_alias(db, i.part_no.strip())
+        if pno in known:
+            names[pno] = i.name
+        else:
+            not_found.append(i.part_no.strip())
+    updated = set_names(db, user, names)
+    db.commit()
+    return {"updated": updated, "matched": len(names), "not_found": not_found}
 
 
 @router.patch("/{pid}/parts/{part_no:path}")

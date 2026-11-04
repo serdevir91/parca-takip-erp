@@ -157,6 +157,15 @@ class Tracking(Base):
     __table_args__ = (UniqueConstraint("project_id", "part_no", name="uq_tracking_project_part"),)
 
 
+class PartName(Base):
+    """Human name of a part. Shared by all projects, so a number is named once."""
+    __tablename__ = "part_names"
+    part_no: Mapped[str] = mapped_column(String(200), primary_key=True)
+    name: Mapped[str] = mapped_column(String(300), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_by: Mapped[str] = mapped_column(String(64), default="")
+
+
 class MissingRow(Base):
     """Eksik / fazla adet satırı: extra quantity to produce, with its own progress."""
     __tablename__ = "missing_rows"

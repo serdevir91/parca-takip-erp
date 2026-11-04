@@ -4,7 +4,7 @@ import uuid
 
 from app.core import bomtree
 from app.core.bomparse import parse_bom
-from app.services.state import temin_choices
+from app.core.status import DEFAULT_TEMIN_TYPES
 
 
 def _node(part_no: str, qty: int = 1, assembly: bool = False, *children: dict, **extra) -> dict:
@@ -49,7 +49,7 @@ def test_tree_survives_the_round_trip():
 
 def test_validate_finds_what_makes_a_wrong_bom():
     def errors(root: dict) -> str:
-        return "\n".join(bomtree.validate(root, temin_choices()))
+        return "\n".join(bomtree.validate(root, [t["name"] for t in DEFAULT_TEMIN_TYPES]))
 
     assert errors(_tree()) == ""
     assert "boş" in errors(_node("R", 1, True, _node("")))
@@ -143,3 +143,16 @@ def test_hidden_only_dims(client, admin_headers):
 
     client.post(f"{url}/bulk", json={"part_nos": [f"{tag}_PLATE"], "changes": {"hidden": False}}, headers=admin_headers)
     assert not any(p["hidden"] for p in client.get(url, headers=admin_headers).json()["rows"])
+
+
+def test_tree_names_are_saved_and_come_back(client, admin_headers):
+    pid = _project(client, admin_headers)
+    tag = f"AD{uuid.uuid4().hex[:6]}"
+    plate = {**_node(f"{tag}_P"), "name": "Yan sac"}
+    r = client.post(f"/api/projects/{pid}/bom/tree/submit", json={"tree": _node(f"{tag}_R", 1, True, plate)},
+                    headers=admin_headers)
+    assert r.status_code == 201, r.text
+    tree = client.get(f"/api/projects/{pid}/bom/versions/{r.json()['id']}/tree", headers=admin_headers).json()["tree"]
+    assert tree["children"][0]["name"] == "Yan sac"
+    found = client.get(f"/api/projects/{pid}/bom/items", params={"q": "yan sac"}, headers=admin_headers).json()
+    assert f"{tag}_P" in [i["part_no"] for i in found]

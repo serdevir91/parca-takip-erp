@@ -28,7 +28,7 @@ from ..core.status import (COLORS, PROG_WAIT, PROGRESS_CHOICES, STATUS_MAP,
                            STATUS_NO_TEMIN, KIND_HAZIR, KIND_IMALAT, KIND_MONTAJ)
 from ..models import Project
 from . import xlsafe
-from .settings import manufacturers
+from .settings import manufacturers, temin_choices, temin_types
 from .tracking import material_status_choices
 from .state import FASTENER_COLORS, FASTENER_ORDER_STATUSES, FASTENER_TYPE_ORDER, ProjectView
 
@@ -139,7 +139,11 @@ def _sheet_ref(name: str) -> str:
 
 
 # ---------- formulas ----------
-def status_formula(r: int) -> str:
+def _is_any(cell: str, names: Iterable[str]) -> str:
+    return "OR(" + ",".join(f"{cell}={_xl_str(n)}" for n in names) + ")"
+
+
+def status_formula(r: int, make: Iterable[str] = (TEMIN_IMALAT,), buy: Iterable[str] = (TEMIN_HAZIR,)) -> str:
     """Durum from İlerleme + Temin Şekli + Tip, the table of SPEC §5 (core/status.STATUS_MAP)."""
     m, j, c = f"{PL_[H_PROG]}{r}", f"{PL_[H_TEMIN]}{r}", f"{PL_[H_TYPE]}{r}"
     done, run = _xl_str(PROGRESS_CHOICES[2]), _xl_str(PROGRESS_CHOICES[1])
@@ -148,16 +152,17 @@ def status_formula(r: int) -> str:
         s = STATUS_MAP[kind]
         return (f"IF({m}={done},{_xl_str(s[PROGRESS_CHOICES[2]])},IF({m}={run},"
                 f"{_xl_str(s[PROGRESS_CHOICES[1]])},{_xl_str(s[PROGRESS_CHOICES[0]])}))")
-    return (f'=IF({m}="","",IF({j}={_xl_str(TEMIN_HAZIR)},{pick(KIND_HAZIR)},'
+    return (f'=IF({m}="","",IF({_is_any(j, buy)},{pick(KIND_HAZIR)},'
             f'IF(OR({c}={_xl_str(TYPE_ASM)},{c}={_xl_str(TYPE_PURCH_ASM)}),{pick(KIND_MONTAJ)},'
-            f'IF({j}={_xl_str(TEMIN_IMALAT)},{pick(KIND_IMALAT)},{_xl_str(STATUS_NO_TEMIN)}))))')
+            f'IF({_is_any(j, make)},{pick(KIND_IMALAT)},{_xl_str(STATUS_NO_TEMIN)}))))')
 
 
 # ---------- lists sheet (dropdown sources) ----------
 class _Lists:
     """Hidden sheet holding dropdown values; avoids the 255 character limit of inline lists."""
 
-    def __init__(self, wb: Workbook, lists: dict[str, list[str]]):
+    def __init__(self, wb: Workbook, lists: dict[str, list[str]], make: list[str], buy: list[str]):
+        self.make, self.buy = make, buy
         ws = wb.create_sheet(SHEET_LISTS)
         ws.sheet_state = "hidden"
         self.ref: dict[str, str] = {}
@@ -180,7 +185,7 @@ class _Lists:
 
 
 def _lists(db: Session) -> dict[str, list[str]]:
-    return {"progress": list(PROGRESS_CHOICES), "temin": [TEMIN_IMALAT, TEMIN_HAZIR, TEMIN_NONE],
+    return {"progress": list(PROGRESS_CHOICES), "temin": temin_choices(db),
             "manufacturer": manufacturers(db), "material_status": material_status_choices(db),
             "fastener_status": list(FASTENER_ORDER_STATUSES)}
 
@@ -242,11 +247,16 @@ def takip_lines(view: ProjectView) -> list[dict[str, Any]]:
     return _with_missing(lines, view)
 
 
+def _temin_groups(db: Session) -> tuple[list[str], list[str]]:
+    types = temin_types(db)
+    return [t["name"] for t in types if t["kind"] == KIND_IMALAT], [t["name"] for t in types if t["kind"] == KIND_HAZIR]
+
+
 def parca_lines(view: ProjectView, only: set[str] | None = None) -> list[dict[str, Any]]:
     """Parts only: one line per part, assemblies dropped except purchased (Hazır Alım) ones."""
     lines = []
     for v in view.parts(include_in_purchased=False):
-        if v["is_assembly"] and v["procurement"] != TEMIN_HAZIR:
+        if v["is_assembly"] and v["status_kind"] != KIND_HAZIR:
             continue
         if only is not None and v["part_no"] not in only:
             continue
@@ -279,7 +289,7 @@ def _write_parts(ws: Worksheet, lines: list[dict[str, Any]], lists: _Lists, titl
             H_LEVEL: x["level"], H_PNO: indent + x["pno"], H_TYPE: x["typ"], H_GROUP: x["group"],
             H_PARENT: x["parent"], H_QTY: x["qty"], H_TOTAL: x["total"], H_MAT: x["mat"] or None,
             H_WEIGHT: x["weight"], H_TEMIN: x["temin"] or None, H_COAT: x["coat"] or None, H_REV: x["rev"],
-            H_PROG: x["progress"], H_STATUS: status_formula(r) if x["editable"] else None,
+            H_PROG: x["progress"], H_STATUS: status_formula(r, lists.make, lists.buy) if x["editable"] else None,
             H_MANUF: x["manuf"] or None, H_MATST: x["matst"] or None, H_T35: x["t35"] or None,
             H_NOTE: x["note"] or None, H_KEY: x["key"] or None,
         }
@@ -318,7 +328,7 @@ def _write_parts(ws: Worksheet, lines: list[dict[str, Any]], lists: _Lists, titl
             for dv, h in pairs:
                 if dv is not None:
                     dv.add(ws.cell(r, PC[h]).coordinate)
-            if dv_temin is not None and x["temin_editable"] and (not x["is_asm"] or x["temin"] == TEMIN_HAZIR):
+            if dv_temin is not None and x["temin_editable"] and (not x["is_asm"] or x["temin"] in lists.buy):
                 dv_temin.add(ws.cell(r, PC[H_TEMIN]).coordinate)
         r += 1
     last = max(r - 1, HR + 1)
@@ -477,7 +487,7 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
 
     def rng(h: str) -> str:
         return f"{P}!${PL_[h]}${lo}:${PL_[h]}${hi}"
-    dur, tem, qty, grp, tip = rng(H_STATUS), rng(H_TEMIN), rng(H_TOTAL), rng(H_GROUP), rng(H_TYPE)
+    dur, qty, grp, tip = rng(H_STATUS), rng(H_TOTAL), rng(H_GROUP), rng(H_TYPE)
 
     def sec(row: int, t: str, h2: str = "Satır", h3: str = "Adet") -> None:
         for k, v in enumerate([t, h2, h3]):
@@ -500,9 +510,9 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
         if bg:
             o.cell(row, 1).fill = _fill(bg)
 
-    def cnt(status: str, temin: str | None) -> tuple[str, str]:
-        t = f",{tem},{_xl_str(temin)}" if temin else ""
-        return (f"=COUNTIFS({dur},{_xl_str(status)}{t})", f"=SUMIFS({qty},{dur},{_xl_str(status)}{t})")
+    def cnt(status: str) -> tuple[str, str]:
+        # Every status belongs to one kind, so the temin column adds nothing here
+        return (f"=COUNTIFS({dur},{_xl_str(status)})", f"=SUMIFS({qty},{dur},{_xl_str(status)})")
 
     imalat = list(dict.fromkeys(STATUS_MAP[KIND_IMALAT].values()))[::-1]      # Üretildi, Üretilmedi
     hazir = list(dict.fromkeys(STATUS_MAP[KIND_HAZIR].values()))
@@ -511,14 +521,14 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
     R0 = 9
     sec(R0, "İmalat Parçaları")
     for i, s in enumerate(imalat):
-        line(R0 + 1 + i, s, *cnt(s, TEMIN_IMALAT), key=s)
+        line(R0 + 1 + i, s, *cnt(s), key=s)
     line(R0 + 3, "Toplam", f"=B{R0 + 1}+B{R0 + 2}", f"=C{R0 + 1}+C{R0 + 2}", bold=True)
     line(R0 + 4, "İlerleme", f"=IFERROR(B{R0 + 1}/B{R0 + 3},0)", f"=IFERROR(C{R0 + 1}/C{R0 + 3},0)", bold=True,
          pct=True)
     R1 = R0 + 6
     sec(R1, "Hazır Alım (parça + montaj)")
     for i, s in enumerate(hazir):
-        line(R1 + 1 + i, s, *cnt(s, TEMIN_HAZIR), key=s)
+        line(R1 + 1 + i, s, *cnt(s), key=s)
     line(R1 + 4, "Toplam", f"=SUM(B{R1 + 1}:B{R1 + 3})", f"=SUM(C{R1 + 1}:C{R1 + 3})", bold=True)
     line(R1 + 5, "Teslim oranı", f"=IFERROR(B{R1 + 3}/B{R1 + 4},0)", f"=IFERROR(C{R1 + 3}/C{R1 + 4},0)",
          bold=True, pct=True)
@@ -528,7 +538,7 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
         RM = nxt
         sec(RM, "Montajlar")
         for i, s in enumerate(montaj):
-            line(RM + 1 + i, s, *cnt(s, None), key=s)
+            line(RM + 1 + i, s, *cnt(s), key=s)
         line(RM + 3, "Toplam", f"=B{RM + 1}+B{RM + 2}", f"=C{RM + 1}+C{RM + 2}", bold=True)
         nxt = RM + 5
     R2 = RT = R3 = None
@@ -640,11 +650,11 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
     r = G0 + 1
     for g in groups:
         vals = [g, f"=C{r}+D{r}",
-                sp(r, f'{dur}="Üretildi"', f"{tem}={_xl_str(TEMIN_IMALAT)}"),
-                sp(r, f'{dur}="Üretilmedi"', f"{tem}={_xl_str(TEMIN_IMALAT)}"),
+                sp(r, f'{dur}="Üretildi"'),
+                sp(r, f'{dur}="Üretilmedi"'),
                 f'=IF(B{r}=0,"-",C{r}/B{r})',
-                sp(r, f"{tem}={_xl_str(TEMIN_HAZIR)}", f"{dur}<>\"\""),
-                sp(r, f'{dur}="Sipariş Teslim Edildi"', f"{tem}={_xl_str(TEMIN_HAZIR)}")]
+                sp(r, "+".join(f"({dur}={_xl_str(s)})" for s in dict.fromkeys(STATUS_MAP[KIND_HAZIR].values()))),
+                sp(r, f'{dur}="Sipariş Teslim Edildi"')]
         for i, v in enumerate(vals, 1):
             c = o.cell(r, i, v)
             c.font, c.border = _f(), BORDER
@@ -700,7 +710,7 @@ def build_takip_listesi(db: Session, view: ProjectView) -> Workbook:
     wb = Workbook()
     ws = wb.active
     ws.title = SHEET_PARTS
-    lists = _Lists(wb, _lists(db))
+    lists = _Lists(wb, _lists(db), *_temin_groups(db))
     name = _name(view.project)
     pl = _write_parts(ws, takip_lines(view), lists, f"{name} – Parça Listesi", parts_only=False)
     fl = _write_fastener_detail(wb.create_sheet(SHEET_FX, 1), view)
@@ -719,7 +729,7 @@ def build_parca_takip(db: Session, view: ProjectView, only: set[str] | None = No
     wb = Workbook()
     ws = wb.active
     ws.title = SHEET_PARTS
-    lists = _Lists(wb, _lists(db))
+    lists = _Lists(wb, _lists(db), *_temin_groups(db))
     name = _name(view.project)
     pl = _write_parts(ws, parca_lines(view, only), lists, f"{name} – Parça Listesi", parts_only=True)
     o = wb.create_sheet(SHEET_SUMMARY, 0)
@@ -732,7 +742,7 @@ def build_fastener_order(db: Session, view: ProjectView) -> Workbook:
     wb = Workbook()
     ws = wb.active
     ws.title = SHEET_ORDER
-    lists = _Lists(wb, _lists(db))
+    lists = _Lists(wb, _lists(db), *_temin_groups(db))
     last = _write_fastener_summary(
         ws, view, lists, None, f"{_name(view.project)} – Bağlantı Elemanı Sipariş Formu",
         "Sipariş Miktarı = İhtiyaç + yedek (yukarı yuvarlanır); Tutar = Sipariş Miktarı × Birim Fiyat. "

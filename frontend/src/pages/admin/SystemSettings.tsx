@@ -11,7 +11,8 @@ type Values = Record<string, string | number | string[]>;
 type Sections = "company" | "commerce" | "production" | "security" | "files" | "modules";
 type System = Record<Sections, Values>;
 type Module = { key: string; label: string; locked: boolean };
-type Data = { system: System; modules: Module[] };
+type TeminType = { name: string; kind: string; drawing: boolean; order: boolean };
+type Data = { system: System; modules: Module[]; temin_types: TeminType[] };
 
 const QK = ["admin", "settings"];
 const LOGO_SIZE = 128;
@@ -167,7 +168,64 @@ function Forms({ data }: { data: Data }) {
           );
         }}
       </Card>
+      <TeminCard types={data.temin_types} />
     </div>
+  );
+}
+
+const FIXED_TEMINS = ["İmalat", "Hazır Alım", "Belirtilmemiş"];
+
+/** Temin types: the name people pick, which status set it follows, and what it asks for. */
+function TeminCard({ types }: { types: TeminType[] }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [list, setList] = useState(types);
+  const set = (i: number, ch: Partial<TeminType>) => setList((s) => s.map((t, j) => (j === i ? { ...t, ...ch } : t)));
+  const save = useMutation({
+    mutationFn: () => api.put<Data>("/admin/settings/temin_types", { value: list }),
+    onSuccess: (d) => {
+      qc.setQueryData(QK, d);
+      setList(d.temin_types);
+      void qc.invalidateQueries({ queryKey: ["partChoices"] });
+      void qc.invalidateQueries({ queryKey: ["parts"] });
+      toast("Temin şekilleri kaydedildi");
+    },
+    onError: (e) => toast(errText(e), true),
+  });
+  return (
+    <section className="card adm-temin">
+      <h3>Temin şekilleri</h3>
+      <p className="muted">Davranış, parçanın hangi durumlardan geçeceğini belirler. Teknik resim işaretliyse resmi olmayan parça uyarı verir.
+        Sipariş önerisi kapalıysa ihtiyaç listesi bu parça için iş emri ya da satın alma önermez.</p>
+      <table className="simple">
+        <thead><tr><th>Ad</th><th>Davranış</th><th>Teknik resim</th><th>Sipariş önerisi</th><th /></tr></thead>
+        <tbody>
+          {list.map((t, i) => {
+            const fixed = FIXED_TEMINS.includes(t.name);
+            return (
+              <tr key={i}>
+                <td><input value={t.name} disabled={fixed} maxLength={64} aria-label="Temin şekli adı" onChange={(e) => set(i, { name: e.target.value })} /></td>
+                <td>
+                  <select value={t.kind} disabled={fixed} aria-label="Davranış" onChange={(e) => set(i, { kind: e.target.value })}>
+                    {t.kind === "" && <option value="">Yok</option>}
+                    <option value="İmalat">İmalat: Üretilmedi, Üretildi</option>
+                    <option value="Hazır Alım">Hazır Alım: Sipariş Verilmedi, Verildi, Teslim Edildi</option>
+                  </select>
+                </td>
+                <td><input type="checkbox" checked={t.drawing} aria-label="Teknik resim gerekir" onChange={(e) => set(i, { drawing: e.target.checked })} /></td>
+                <td><input type="checkbox" checked={t.order} aria-label="Sipariş önerisi" onChange={(e) => set(i, { order: e.target.checked })} /></td>
+                <td>{!fixed && <button className="btn small" onClick={() => setList((s) => s.filter((_, j) => j !== i))}>Sil</button>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn small" onClick={() => setList((s) => [...s, { name: "", kind: "Hazır Alım", drawing: false, order: true }])}>+ Temin şekli ekle</button>
+        <button className="btn small primary" disabled={save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+      </div>
+      <p className="muted">Silinen bir türü kullanan parçalar eski adını korur, durumu "Temin seçilmedi" olur.</p>
+    </section>
   );
 }
 

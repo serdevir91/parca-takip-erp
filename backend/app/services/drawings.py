@@ -20,7 +20,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..core.bomparse import TEMIN_IMALAT
 from ..core.drawmatch import DRAWING_EXTS, DrawingMatcher, rev_mismatch, split_ext
 from ..core.normalize import fuzzy_suggest, safe_filename, tr_casefold, tr_sort_key
 from ..models import BomRow, Drawing, DrawingVersion, Part, PartAlias, User
@@ -276,7 +275,7 @@ def project_listing(db: Session, view: ProjectView) -> dict[str, Any]:
         o["suggestions"] = [{"part_no": p, "score": s} for p, s in fuzzy_suggest(d.base_name, candidates)]
         unmatched.append(o)
     no_drawing = [p["part_no"] for p in view.parts(include_in_purchased=False)
-                  if p["procurement"] == TEMIN_IMALAT and not p["is_assembly"] and not p["has_drawing"]]
+                  if p["needs_drawing"] and not p["has_drawing"]]
     return {
         "items": items, "parts": list(by_part.values()), "unmatched": unmatched, "no_drawing": no_drawing,
         "counts": {"matched": len(items), "parts_with_drawing": len(by_part), "unmatched": len(unmatched),

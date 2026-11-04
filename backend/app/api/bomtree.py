@@ -9,9 +9,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core import bomtree
-from ..models import BomRow, BomVersion, User, utcnow
+from ..models import BomRow, BomVersion, PartName, User, utcnow
 from ..services import bomimport
-from ..services.state import temin_choices
+from ..services.settings import temin_choices
+from ..services.tracking import set_names
 from .bom import projects_edit, projects_view, version_out
 from .deps import get_db, project_or_404
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/projects", tags=["bomtree"])
 
 class TreeNode(BaseModel):
     part_no: str = Field(default="", max_length=200)
+    name: str = Field(default="", max_length=300)
     assembly: bool = False
     qty: int = Field(default=1, ge=0, le=1_000_000)
     material: str = Field(default="", max_length=200)
@@ -49,7 +51,7 @@ def _editable(db: Session, pid: int):
 
 @router.get("/{pid}/bom/draft")
 def get_draft(pid: int, db: Session = Depends(get_db), _: User = Depends(projects_view)) -> dict[str, Any]:
-    return {"draft": project_or_404(db, pid).bom_draft, "temin": temin_choices()}
+    return {"draft": project_or_404(db, pid).bom_draft, "temin": temin_choices(db)}
 
 
 @router.put("/{pid}/bom/draft")
@@ -78,7 +80,7 @@ def submit(pid: int, body: SubmitIn, db: Session = Depends(get_db), user: User =
     project = _editable(db, pid)
     root = body.tree.model_dump()
     root["assembly"], root["qty"] = True, 1
-    errors = bomtree.validate(root, temin_choices())
+    errors = bomtree.validate(root, temin_choices(db))
     if errors:
         more = len(errors) - bomtree.MAX_ERRORS
         raise HTTPException(400, "\n".join(errors[:bomtree.MAX_ERRORS] + ([f"ve {more} hata daha"] if more > 0 else [])))
@@ -89,8 +91,25 @@ def submit(pid: int, body: SubmitIn, db: Session = Depends(get_db), user: User =
         db.rollback()
         raise HTTPException(400, str(e)) from e
     project.bom_draft = None
+    set_names(db, user, bomtree.names_of(root))
     db.commit()
     return version_out(project, v, detail=True)
+
+
+def _names(db: Session) -> dict[str, str]:
+    return {n.part_no: n.name for n in db.scalars(select(PartName))}
+
+
+def _named(db: Session, tree: dict[str, Any] | None) -> dict[str, Any] | None:
+    names = _names(db)
+
+    def walk(n: dict[str, Any]) -> None:
+        n["name"] = names.get(n["part_no"], "")
+        for c in n["children"]:
+            walk(c)
+    if tree:
+        walk(tree)
+    return tree
 
 
 @router.get("/{pid}/bom/versions/{vid}/tree")
@@ -99,7 +118,7 @@ def version_tree(pid: int, vid: int, db: Session = Depends(get_db), _: User = De
     v = db.get(BomVersion, vid)
     if v is None or v.project_id != pid:
         raise HTTPException(404, "BOM sürümü bulunamadı")
-    return {"tree": bomtree.from_rows(v.rows)}
+    return {"tree": _named(db, bomtree.from_rows(v.rows))}
 
 
 @router.get("/{pid}/bom/items")
@@ -110,11 +129,14 @@ def items(pid: int, q: str = Query("", max_length=100), db: Session = Depends(ge
     q = q.strip()
     if len(q) < 2:
         return []
+    named = db.scalars(select(PartName.part_no).where(PartName.name.icontains(q, autoescape=True)).limit(200)).all()
     ids = db.scalars(select(func.max(BomRow.id)).where(or_(BomRow.part_no.icontains(q, autoescape=True),
-                                                           BomRow.file_name.icontains(q, autoescape=True)))
+                                                           BomRow.file_name.icontains(q, autoescape=True),
+                                                           BomRow.part_no.in_(named)))
                      .group_by(BomRow.part_no).order_by(BomRow.part_no).limit(20)).all()
     rows = db.scalars(select(BomRow).where(BomRow.id.in_(ids)).order_by(BomRow.part_no)) if ids else []
-    return [bomtree.node_of(r) for r in rows]
+    names = _names(db)
+    return [{**bomtree.node_of(r), "name": names.get(r.part_no, "")} for r in rows]
 
 
 @router.get("/{pid}/bom/items/tree")
@@ -128,4 +150,4 @@ def item_tree(pid: int, part_no: str = Query(min_length=1, max_length=200), db: 
         raise HTTPException(404, "Montaj bulunamadı")
     rows = db.scalars(select(BomRow).where(BomRow.version_id == r.version_id, or_(
         BomRow.level == r.level, BomRow.level.startswith(r.level + ".", autoescape=True))).order_by(BomRow.seq))
-    return {"tree": bomtree.from_rows(rows)}
+    return {"tree": _named(db, bomtree.from_rows(rows))}

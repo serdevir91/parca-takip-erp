@@ -7,6 +7,7 @@ Keys:
   status_rules       -> {big_drop_ratio}
   signup             -> {enabled}            (login screen offers "Hesap oluştur")
   smtp               -> see services/mailer.py
+  temin_types        -> [{name, kind, drawing, order}, ...]   (core/status.DEFAULT_TEMIN_TYPES)
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from ..core import t35 as t35core
 from ..core.bomparse import DEFAULT_PART_NO_PATTERNS
 from ..core.fastener import DEFAULT_RULES as FASTENER_DEFAULTS, FastenerMatcher
+from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR
 from ..models import FastenerRule, Firm, Part, Setting
 
 DEFAULTS: dict[str, Any] = {
@@ -42,6 +44,21 @@ def set_setting(db: Session, key: str, value: Any) -> None:
         db.add(Setting(key=key, value=value))
     else:
         s.value = value
+
+
+def temin_types(db: Session) -> list[dict[str, Any]]:
+    """Saved types plus the fixed ones, which the rest of the system relies on."""
+    saved = get_setting(db, "temin_types", DEFAULT_TEMIN_TYPES)
+    names = {t["name"] for t in saved}
+    return [*saved, *(t for t in DEFAULT_TEMIN_TYPES if t["name"] in FIXED_TEMINS and t["name"] not in names)]
+
+
+def temin_choices(db: Session) -> list[str]:
+    return [t["name"] for t in temin_types(db)]
+
+
+def buy_temins(db: Session) -> list[str]:
+    return [t["name"] for t in temin_types(db) if t["kind"] == KIND_HAZIR]
 
 
 def manufacturers(db: Session) -> list[str]:

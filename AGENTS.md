@@ -80,6 +80,13 @@ Read this file first. Do not re-scan the whole project.
   - `User.email` (migration 0006). `services/mailer.py`: SMTP settings key `smtp` (password never returned),
     `send()` raises `RuntimeError` with Turkish text. `api/mail.py`: `/mail/status`, `/mail/recipients`,
     `/mail/send` (multipart, 20 recipients, 20 MB, 60/hour/user, Reply-To = sender), admin `/mail/settings` + `/mail/test`.
+- Temin types (v1.5.7): setting `temin_types`, a list of `{name, kind, drawing, order}`; defaults in
+  `core/status.py`. Rows keep the type's name in `procurement`; status logic goes through `state.base_kind` and
+  `needs_drawing`, never a comparison with a literal name. `FIXED_TEMINS` cannot be removed.
+- Part names (v1.5.7): global `part_names` table (migration 0008), row field `part_name`, `tracking.set_names`.
+  `POST /projects/{id}/parts/cells` saves many cells at once and reports bad ones per cell; `/parts/names` takes a
+  pasted list. `POST /export/grid` writes the visible rows to `data_dir/exports`, the GET by id downloads it, because
+  the desktop and mobile shells save only from a GET.
 - System settings (v1.5.5): `services/system.py`, setting key `system`, stored as differences from defaults only
   (`clean`). `apply_runtime(db)` copies session, upload, backup, password, login and module values onto `get_settings()`
   on every authenticated request, so code without a DB session and several workers stay in step. `for_user`/`for_login`
@@ -102,7 +109,13 @@ Read this file first. Do not re-scan the whole project.
   - The auth hook `useAuth`, which gives `can(module, level = "view")`, `isAdmin` and `reloadUser()`.
     Pages gate edit buttons with `useAuth().can("<module>", "edit")`; `App.tsx` wraps routes in `RequireAuth({module})`.
 - `src/components/`:
-  - `DataGrid`: virtualized, with Excel-like column filters, inline edit and selection.
+  - `DataGrid`: virtualized, with Excel-like column filters, inline edit and selection. Split into `dgTypes.ts`
+    (`GridColumn`, `GridProps`), `dgFilter.tsx` (column filter with `conds`, `AdvancedFilter`, `ADV` hidden column)
+    and `dgSheet.tsx` (`TableView`: range selection, clipboard, fill, undo, find, context menu). `onEditMany` takes
+    multi-cell writes in one call, `selectionActions` fills the selection bar, `stateKey` names the saved
+    `dg.layout.<key>` and `dg.views.<key>` entries. `openOnClick` keeps single-click open in table mode; otherwise a
+    click selects the cell and a double click on a read-only cell calls `onRowClick`.
+    The clipboard uses DOM copy/cut/paste events because `navigator.clipboard` does not exist on plain http.
   - `Layout`: `Page`, `useProject`.
   - `Toast`, `PdfViewer`, the import modals and `UpdateCheck`.
   - `viewer/`: `Viewer` (gallery of `ViewItem`s, picks `PdfViewer` or `ImageLightbox`, thumbnail strip, ← →),

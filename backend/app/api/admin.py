@@ -16,8 +16,9 @@ from ..auth import hash_password
 from ..permissions import MODULES, catalog, clean_overrides, effective, require
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
 from ..services import audit, backup as backup_svc, system
+from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR, KIND_IMALAT
 from ..services.tracking import material_status_choices
-from ..services.settings import (get_setting, part_no_patterns, purchased_assemblies, set_setting,
+from ..services.settings import (get_setting, part_no_patterns, purchased_assemblies, set_setting, temin_types,
                                  signup_enabled)
 from .auth import check_email, check_password_rules
 from .deps import admin, get_db
@@ -30,7 +31,7 @@ FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
 FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
                     "customer": "Müşteri"}
 SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules", "signup", "material_status_choices",
-                "system")
+                "temin_types", "system")
 
 
 
@@ -336,6 +337,7 @@ def _settings_out(db: Session) -> dict[str, Any]:
             "status_rules": get_setting(db, "status_rules") or {"big_drop_ratio": 0.10},
             "signup": {"enabled": signup_enabled(db)},
             "material_status_choices": material_status_choices(db),
+            "temin_types": temin_types(db),
             "system": system.system(db),
             "modules": [{"key": k, "label": label, "locked": k in system.ALWAYS_ON} for k, label, _ in MODULES]}
 
@@ -354,7 +356,31 @@ def _clean_str_list(v: Any, what: str) -> list[str]:
     return out
 
 
+def _clean_temin_types(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise HTTPException(400, "Temin şekilleri bir liste olmalı")
+    fixed = {t["name"]: t for t in DEFAULT_TEMIN_TYPES if t["name"] in FIXED_TEMINS}
+    out: dict[str, dict[str, Any]] = {}
+    for t in value:
+        name = str((t or {}).get("name") or "").strip() if isinstance(t, dict) else ""
+        if not name or len(name) > 64:
+            raise HTTPException(400, "Temin şekli adı boş olamaz ve 64 karakteri geçemez")
+        if name in out:
+            raise HTTPException(400, f"Aynı temin şekli iki kez yazılmış: {name}")
+        if t.get("kind") not in (KIND_IMALAT, KIND_HAZIR) and name not in fixed:
+            raise HTTPException(400, f"{name}: davranış İmalat veya Hazır Alım olmalı")
+        # The fixed types keep their meaning; only their settings for drawing and planning change
+        out[name] = {"name": name, "kind": fixed[name]["kind"] if name in fixed else t["kind"],
+                     "drawing": bool(t.get("drawing")), "order": bool(t.get("order"))}
+    missing = [n for n in fixed if n not in out]
+    if missing:
+        raise HTTPException(400, f"Bu temin şekilleri silinemez: {', '.join(missing)}")
+    return list(out.values())
+
+
 def _validate_setting(key: str, value: Any) -> Any:
+    if key == "temin_types":
+        return _clean_temin_types(value)
     if key == "part_no_patterns":
         pats = _clean_str_list(value, "Parça numarası desenleri")
         if not pats:

@@ -142,7 +142,14 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 
 - Listeler varsayılan olarak **kart** görünümündedir: telefonda ve dar ekranda yana kaydırmak gerekmez.
 - Sağ üstteki **Liste / Tablo** düğmesi Excel benzeri tabloya geçer. Seçim cihazda hatırlanır.
-- **Ara** kutusu tüm sütunlarda arar. **Filtre** düğmesi sütun filtrelerini açar.
+- **Ara** kutusu tüm sütunlarda arar. **Filtre** düğmesi sütun filtrelerini açar. Sütun başlığındaki ok, değer listesinin yanında koşul da sunar: içerir, eşittir, büyüktür, arasında, boş ve benzerleri.
+- **Gelişmiş** düğmesi kural grupları kurar. Grubun içi VE ya da VEYA olur; gruplar birlikte uygulanır. Filtre, sıralama ve sütun düzeni **Görünümler** menüsünden adla kaydedilir. Kayıtlı görünümler o cihazda tutulur.
+- Tablo modunda hücreye tıklayıp ok tuşlarıyla gezin, yazmaya başlayıp düzenleyin. Fareyle ya da Shift ile aralık seçin. Ctrl+C, Ctrl+X, Ctrl+V Excel ile karşılıklı çalışır. Köşedeki tutamağı sürükleyerek doldurun: 1, 2 ya da A1, A2 seri olarak devam eder. Ctrl+Z geri alır, Ctrl+F bulur, Ctrl+H değiştirir. Sağ tık menüsü aynı işleri sunar. Durum çubuğu seçimin toplamını ve ortalamasını gösterir.
+- **Sütunlar** düğmesi sütun gizler, sıralar ve sabitler. Paylaş menüsü ekranda görünen satır ve sütunları `.xlsx` olarak indirir.
+- Formül, grafik, pivot, makro ve birbirinden ayrı aralık seçimi yoktur. Bunlar için listeyi `.xlsx` olarak indirip Excel'de açın.
+- Parça listesinde filtreleyip satırları seçin, üstteki çubuktan **İlerleme ata** ya da **Temin ata** ile hepsini birden değiştirin. Bu iki modda da çalışır.
+- **Parça adı** tablodan yazılır ya da yapıştırılır. Çok sayıda ad için **İçe aktar > Parça adlarını yapıştır**: Excel'den parça no ve ad sütunlarını kopyalayın. Ad, aynı parça numarasının geçtiği tüm projelerde görünür.
+- Temin şekilleri **Yönetim > Sistem Ayarları** altından eklenir. Her türün davranışı, teknik resim isteyip istemediği ve sipariş önerisi ayrı seçilir.
 - Kartta düzenlenebilir alanların altı kesik çizgilidir; dokunup değiştirin. ✎ düğmesi boş alanları da gösterir.
 - Parça listesi ve Bağlantı elemanları ekranında satırları seçip **Gizle** deyin: satır listede kalır, yalnızca soluk görünür. Hesaplar değişmez.
 
