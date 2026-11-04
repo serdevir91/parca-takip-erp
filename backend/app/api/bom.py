@@ -152,6 +152,20 @@ def reject(pid: int, vid: int, db: Session = Depends(get_db), user: User = Depen
     return version_out(project, v)
 
 
+@router.delete("/{pid}/bom/versions/{vid}")
+def delete_version(pid: int, vid: int, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
+    project = project_or_404(db, pid)
+    v = _version_or_404(db, project, vid)
+    try:
+        path = bomimport.delete_version(db, v, user)
+    except bomimport.BomImportError as e:
+        db.rollback()
+        raise _bad(e) from e
+    db.commit()
+    bomimport.remove_stored_file(path)
+    return {"ok": True}
+
+
 @router.post("/{pid}/bom/undo")
 def undo(pid: int, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     """Undo the last approved upload. Tracking edits made after that approval are lost."""

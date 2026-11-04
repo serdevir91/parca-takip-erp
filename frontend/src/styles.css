@@ -214,6 +214,10 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .dw-queue { max-height: 180px; overflow: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; }
 .dw-qrow { display: flex; align-items: center; gap: 10px; padding: 3px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .dw-qrow:last-child { border-bottom: 0; }
+label.dw-qrow { cursor: pointer; }
+.dw-qrow input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.dw-pick-all { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.dw-pick-all input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .dw-qname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-qrow .badge.err { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-results { max-height: 260px; overflow: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; }
@@ -404,6 +408,7 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .dw-card-img { position: relative; height: 150px; background: #fff; border-bottom: 1px solid var(--border); cursor: zoom-in; }
 .dw-card-img:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
 .dw-card-badge { position: absolute; top: 6px; left: 6px; }
+.dw-card-check { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .dw-card-body { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; cursor: pointer; min-width: 0; }
 .dw-card-body > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-card-body .muted { font-size: 12px; }
@@ -589,6 +594,9 @@ div.chat-pick-row { cursor: default; }
 .dg-fchip-v { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .dg-fchip-x { display: flex; align-items: center; padding: 0 9px 0 5px; color: var(--muted) !important; }
 .dg-fchip-x:hover { color: var(--danger) !important; }
+.dg-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+.dg-selbar label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.dg-selbar input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .dg-menu-wrap { position: relative; }
 .dg-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 240px; }
 .dg-menu .btn { text-align: left; justify-content: flex-start; }
@@ -675,6 +683,7 @@ div.chat-pick-row { cursor: default; }
   .dg-search { height: 38px; }
   .dg-tool { height: 34px; padding: 0 10px; }
   .dg-active { padding: 6px 8px 8px; }
+  .dg-selbar { padding: 6px 8px; }
   .dg-cards { padding: 8px; }
   .dgc { padding: 10px; gap: 8px; }
   /* Head as a grid: part no gets the full width, badges move next to the sub line */

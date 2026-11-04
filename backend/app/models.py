@@ -73,7 +73,7 @@ class Part(Base):
 
 
 class BomVersion(Base):
-    """An uploaded BOM CSV. Never deleted. status: pending | approved | undone | rejected."""
+    """An uploaded BOM CSV. Only rejected and undone versions can be deleted. status: pending | approved | undone | rejected."""
     __tablename__ = "bom_versions"
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)

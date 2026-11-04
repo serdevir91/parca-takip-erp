@@ -36,6 +36,10 @@ class AssignIn(BaseModel):
     part_no: str | None = Field(None, description="Boş bırakılırsa eşleşme kaldırılır")
 
 
+class DeleteIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=20000)
+
+
 class ZipIn(BaseModel):
     part_nos: list[str] | None = None
     main_group: str | None = None
@@ -210,6 +214,16 @@ def delete_version(vid: int, db: Session = Depends(get_db), user: User = Depends
         return {"deleted": True, "drawing": None}
     db.refresh(d)
     return {"deleted": True, "drawing": svc.drawing_out(d, versions=True)}
+
+
+@router.post("/drawings/delete")
+def delete_many(body: DeleteIn, db: Session = Depends(get_db), user: User = Depends(drawings_edit)) -> dict[str, Any]:
+    """Delete several drawings at once. Drawings are shared by part number, so this reaches every project."""
+    found = db.scalars(select(Drawing).where(Drawing.id.in_(body.ids))).all()
+    for d in found:
+        svc.delete_drawing(db, d, user)
+    db.commit()
+    return {"deleted": len(found)}
 
 
 @router.delete("/drawings/{did}")

@@ -167,6 +167,7 @@ function Thumb({ d, cache, onOpen }: { d: DrawingOut; cache: ThumbCache; onOpen:
 type QItem = { id: number; file: File; pct: number; state: "waiting" | "uploading" | "done" | "error"; error?: string; results?: UploadResult[] };
 let qSeq = 0;
 
+const fileKey = (f: File) => `${f.webkitRelativePath || f.name}|${f.size}|${f.lastModified}`;
 const isJunk = (name: string) => name.startsWith(".") || /^(thumbs\.db|desktop\.ini)$/i.test(name);
 
 /** Collect files from a drop, recursing into dropped folders when the browser supports it. */
@@ -194,8 +195,11 @@ async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
 function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void }) {
   const toast = useToast();
   const [queue, setQueue] = useState<QItem[]>([]);
+  const [staged, setStaged] = useState<File[]>([]);
+  const [skipped, setSkipped] = useState<Set<File>>(new Set());
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
+  const lastStaged = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dirRef = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
@@ -210,8 +214,30 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
     if (mounted.current) setQueue((q) => q.map((x) => (x.id === id ? { ...x, ...p } : x)));
   };
 
-  const start = useCallback(async (files: File[]) => {
+  const stage = (files: File[]) => {
     const list = files.filter((f) => !isJunk(f.name));
+    if (!list.length) return;
+    setQueue([]);
+    setStaged((cur) => {
+      const seen = new Set(cur.map(fileKey));
+      return [...cur, ...list.filter((f) => !seen.has(fileKey(f)))];
+    });
+  };
+  const toggleStaged = (i: number, shift: boolean) => {
+    const on = skipped.has(staged[i]);
+    const from = shift && lastStaged.current !== null ? Math.min(lastStaged.current, i) : i;
+    const to = shift && lastStaged.current !== null ? Math.max(lastStaged.current, i) : i;
+    lastStaged.current = i;
+    const next = new Set(skipped);
+    for (const f of staged.slice(from, to + 1)) {
+      if (on) next.delete(f); else next.add(f);
+    }
+    setSkipped(next);
+  };
+  const clearStaged = () => { setStaged([]); setSkipped(new Set()); lastStaged.current = null; };
+  const pickedCount = staged.length - skipped.size;
+
+  const start = useCallback(async (list: File[]) => {
     if (!list.length) return;
     const items: QItem[] = list.map((file) => ({ id: ++qSeq, file, pct: 0, state: "waiting" }));
     setQueue(items);
@@ -267,7 +293,7 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
           e.preventDefault();
           setDrag(false);
           if (busy) return;
-          void filesFromDrop(e.dataTransfer).then(start).catch((er) => toast(errText(er), true));
+          void filesFromDrop(e.dataTransfer).then(stage).catch((er) => toast(errText(er), true));
         }}
       >
         <div><b>Teknik resimleri buraya sürükleyip bırakın</b></div>
@@ -278,10 +304,39 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
         </div>
         <input ref={fileRef} type="file" multiple hidden
           accept=".pdf,.dwg,.dxf,.slddrw,.sldprt,.sldasm,.step,.stp,.png,.jpg,.jpeg,.zip"
-          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void start(f); }} />
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; stage(f); }} />
         <input ref={dirRef} type="file" multiple hidden
-          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void start(f); }} />
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; stage(f); }} />
       </div>
+
+      {staged.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div className="row">
+            <label className="dw-pick-all">
+              <input type="checkbox" checked={pickedCount === staged.length}
+                ref={(el) => { if (el) el.indeterminate = pickedCount > 0 && pickedCount < staged.length; }}
+                onChange={() => setSkipped(pickedCount === staged.length ? new Set(staged) : new Set())} />
+              Tümünü seç <span className="muted">({staged.length.toLocaleString("tr-TR")})</span>
+            </label>
+            <span className="spacer" style={{ flex: 1 }} />
+            <button className="btn small" onClick={clearStaged}>Vazgeç</button>
+            <button className="btn small primary" disabled={!pickedCount}
+              onClick={() => { const list = staged.filter((f) => !skipped.has(f)); clearStaged(); void start(list); }}>
+              Seçilenleri yükle ({pickedCount.toLocaleString("tr-TR")})
+            </button>
+          </div>
+          <div className="dw-queue">
+            {staged.map((f, i) => (
+              <label key={fileKey(f)} className="dw-qrow">
+                <input type="checkbox" checked={!skipped.has(f)} onChange={() => {}}
+                  onClick={(e) => toggleStaged(i, e.shiftKey)} />
+                <span className="dw-qname" title={f.name}>{f.name}</span>
+                <span className="muted">{fmtSize(f.size)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {queue.length > 0 && (
         <div style={{ marginTop: 12 }}>
@@ -506,6 +561,7 @@ export default function Drawings() {
   const [visible, setVisible] = useState<Row[]>([]);
   const [zipMode, setZipMode] = useState("pdf");
   const [zipBusy, setZipBusy] = useState(false);
+  const [askDelete, setAskDelete] = useState(false);
 
   const cacheRef = useRef<ThumbCache | null>(null);
   if (!cacheRef.current) cacheRef.current = new ThumbCache();
@@ -678,6 +734,17 @@ export default function Drawings() {
     return [...new Set(src.filter((r) => r.kind === "matched" && r.part_no).map((r) => r.part_no))];
   }, [selection, allRows, visible]);
   const selCount = Object.values(selection).filter(Boolean).length;
+  const selIds = useMemo(() => allRows.filter((r) => selection[r.key] && r.d).map((r) => r.d!.id), [selection, allRows]);
+  const pickable = useMemo(() => rows.filter((r) => r.d), [rows]);
+  const allPicked = pickable.length > 0 && pickable.every((r) => selection[r.key]);
+  const delMany = useMutation({
+    mutationFn: () => api.post<{ deleted: number }>("/drawings/delete", { ids: selIds }),
+    onSuccess: (r) => {
+      toast(`${r.deleted.toLocaleString("tr-TR")} resim silindi`);
+      setSelection({}); setAskDelete(false); refresh();
+    },
+    onError: (e) => toast(errText(e), true),
+  });
 
   const downloadZip = async () => {
     if (!zipParts.length) { toast("İndirilecek eşleşmiş resim yok", true); return; }
@@ -692,6 +759,24 @@ export default function Drawings() {
   };
 
   const onVisible = useCallback((r: Row[]) => setVisible(r), []);
+  const bulkActions = filter !== "no_drawing" && (
+    <>
+      {filter !== "unmatched" && (
+        <>
+          <select value={zipMode} onChange={(e) => setZipMode(e.target.value)} aria-label="ZIP içeriği">
+            {ZIP_MODES.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
+          </select>
+          <button className="btn small" disabled={zipBusy || !zipParts.length} onClick={() => void downloadZip()}
+            title={selCount ? "Seçili parçaların resimleri" : "Filtrelenen parçaların resimleri"}>
+            {zipBusy ? "Hazırlanıyor…" : `ZIP indir (${selCount ? "seçili" : "filtrelenen"} ${zipParts.length.toLocaleString("tr-TR")} parça)`}
+          </button>
+        </>
+      )}
+      {canDesign && selIds.length > 0 && (
+        <button className="btn small danger" onClick={() => setAskDelete(true)}>Seçilenleri sil ({selIds.length.toLocaleString("tr-TR")})</button>
+      )}
+    </>
+  );
 
   return (
     <Page full>
@@ -717,7 +802,7 @@ export default function Drawings() {
         {canDesign && showUpload && <UploadPanel pid={pid} onFinished={refresh} />}
         <div className="tabs" style={{ marginBottom: 0, marginTop: 8 }}>
           {TABS.map((t) => (
-            <button key={t.k} className={filter === t.k ? "active" : ""} onClick={() => setFilter(t.k)}>
+            <button key={t.k} className={filter === t.k ? "active" : ""} onClick={() => { setFilter(t.k); setSelection({}); }}>
               {t.l} <span className={"badge" + (t.k === "rev" && counts.rev ? " warn" : t.k === "unmatched" && counts.unmatched ? " warn" : "")}>{counts[t.k].toLocaleString("tr-TR")}</span>
             </button>
           ))}
@@ -734,7 +819,16 @@ export default function Drawings() {
         <div className="dw-gallery-wrap">
           <div className="row" style={{ marginBottom: 8 }}>
             <input type="search" placeholder="Parça no veya dosya adı ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
+            {filter !== "no_drawing" && pickable.length > 0 && (
+              <label className="dw-pick-all">
+                <input type="checkbox" checked={allPicked}
+                  ref={(el) => { if (el) el.indeterminate = selCount > 0 && !allPicked; }}
+                  onChange={() => setSelection(allPicked ? {} : Object.fromEntries(pickable.map((r) => [r.key, true])))} />
+                Tümünü seç <span className="muted">({pickable.length.toLocaleString("tr-TR")})</span>
+              </label>
+            )}
             <span className="muted">{rows.length.toLocaleString("tr-TR")} kayıt · küçük resme tıklayınca büyür</span>
+            {bulkActions}
           </div>
           {!rows.length && <div className="empty">{filter === "no_drawing" ? "Resmi olmayan imalat parçası yok." : "Resim yok."}</div>}
           <div className="dw-gallery">
@@ -745,6 +839,14 @@ export default function Drawings() {
                   {r.d ? <PreviewThumb path={r.d.has_thumb ? `/drawings/${r.d.id}/thumb` : null} label={r.d.filename} />
                     : <span className="thumb-ph">Resim yok</span>}
                   {r.d?.rev_mismatch && <span className="badge warn dw-card-badge">Rev farkı</span>}
+                  {r.d && filter !== "no_drawing" && (
+                    <input type="checkbox" className="dw-card-check" aria-label="Seç" checked={!!selection[r.key]}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setSelection((cur) => { const n = { ...cur }; if (on) n[r.key] = true; else delete n[r.key]; return n; });
+                      }} />
+                  )}
                 </div>
                 <div className="dw-card-body" onClick={() => r.d && setSelected(r.d)}>
                   <b className="mono">{r.part_no || "Eşleşmedi"}</b>
@@ -762,7 +864,7 @@ export default function Drawings() {
           columns={columns}
           getRowId={(r) => r.key}
           rowHeight={ROW_H}
-          selectable={filter !== "no_drawing" && filter !== "unmatched"}
+          selectable={filter !== "no_drawing"}
           selection={selection}
           onSelectionChange={setSelection}
           onVisibleRowsChange={onVisible}
@@ -772,17 +874,7 @@ export default function Drawings() {
           toolbar={
             <>
               <input type="search" placeholder="Parça no veya dosya adı ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
-              {filter !== "no_drawing" && filter !== "unmatched" && (
-                <>
-                  <select value={zipMode} onChange={(e) => setZipMode(e.target.value)} aria-label="ZIP içeriği">
-                    {ZIP_MODES.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
-                  </select>
-                  <button className="btn small" disabled={zipBusy || !zipParts.length} onClick={() => void downloadZip()}
-                    title={selCount ? "Seçili parçaların resimleri" : "Filtrelenen parçaların resimleri"}>
-                    {zipBusy ? "Hazırlanıyor…" : `ZIP indir (${selCount ? "seçili" : "filtrelenen"} ${zipParts.length.toLocaleString("tr-TR")} parça)`}
-                  </button>
-                </>
-              )}
+              {bulkActions}
             </>
           }
         />
@@ -797,6 +889,20 @@ export default function Drawings() {
           onClose={() => setSelected(null)} onOpen={openFile} onChanged={refresh} />
       )}
       {viewer && <Viewer items={viewer.items} start={viewer.start} onClose={() => setViewer(null)} />}
+      {askDelete && (
+        <div className="modal-back" onClick={() => setAskDelete(false)}>
+          <div className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>{selIds.length.toLocaleString("tr-TR")} resim silinsin mi?</h3>
+            <p>Dosyalar tüm sürümleriyle <b>kalıcı olarak</b> silinir. Resimler parça numarasına bağlıdır; aynı parçayı kullanan diğer projelerden de kalkar.</p>
+            <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="btn" onClick={() => setAskDelete(false)} disabled={delMany.isPending}>Vazgeç</button>
+              <button className="btn danger" onClick={() => delMany.mutate()} disabled={delMany.isPending}>
+                {delMany.isPending ? "Siliniyor…" : "Kalıcı olarak sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Page>
   );
 }

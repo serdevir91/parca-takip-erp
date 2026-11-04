@@ -511,7 +511,6 @@ export default function Parts() {
                     <button className="btn small primary" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>
                       Toplu düzenle{selectedPartNos.length ? ` (${selectedPartNos.length.toLocaleString("tr-TR")})` : ""}
                     </button>
-                    {selectedPartNos.length > 0 && <button className="btn small" onClick={() => setSelection({})}>Seçimi temizle</button>}
                   </>
                 )}
                 <span className="muted">Toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>

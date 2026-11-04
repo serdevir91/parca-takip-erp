@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
@@ -296,6 +297,27 @@ def reject(db: Session, version: BomVersion, user: User | None) -> BomVersion:
     audit.record(db, user, "bom_version", version.id, "status", "pending", "rejected", version.project_id)
     db.flush()
     return version
+
+
+def delete_version(db: Session, version: BomVersion, user: User | None) -> str:
+    """Remove a rejected or undone version with its rows. Returns the stored file to delete after the commit."""
+    if version.status not in ("rejected", "undone"):
+        raise BomImportError("Sadece reddedilen veya geri alınan BOM sürümü silinebilir.")
+    audit.record(db, user, "bom_version", version.id, "deleted", f"#{version.seq} {version.filename}", None,
+                 version.project_id, action="delete")
+    path = version.file_path
+    db.delete(version)
+    db.flush()
+    return path
+
+
+def remove_stored_file(path: str) -> None:
+    """Delete an uploaded BOM file; paths outside the BOM folder are left alone."""
+    if not path:
+        return
+    f = Path(path).resolve()
+    if f.is_relative_to(get_settings().bom_dir.resolve()):
+        f.unlink(missing_ok=True)
 
 
 # ---------- undo ----------

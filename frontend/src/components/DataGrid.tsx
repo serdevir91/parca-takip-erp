@@ -145,6 +145,9 @@ export default function DataGrid<T>(p: Props<T>) {
   const [sheetCol, setSheetCol] = useState<string | null>(null);
   const [mail, setMail] = useState<MailFile | null>(null);
   const toast = useToast();
+  // Checkbox click: plain toggles one row, Shift also sets every row back to the last clicked one
+  const lastChecked = useRef<string | null>(null);
+  const checkRow = useRef<(row: Row<T>, shift: boolean) => void>(() => {});
 
   const columns = useMemo<GridColumn<T>[]>(() => {
     const cols = p.columns.map((c) => ({ filterFn: multiFilter, ...c }));
@@ -157,7 +160,8 @@ export default function DataGrid<T>(p: Props<T>) {
           onChange={table.getToggleAllRowsSelectedHandler()} />
       ),
       cell: ({ row }) => (
-        <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onClick={(e) => e.stopPropagation()} onChange={row.getToggleSelectedHandler()} />
+        <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onChange={() => {}}
+          onClick={(e) => { e.stopPropagation(); checkRow.current(row, e.shiftKey); }} />
       ),
     } as GridColumn<T>, ...cols];
   }, [p.columns, p.selectable]);
@@ -187,6 +191,26 @@ export default function DataGrid<T>(p: Props<T>) {
   const rows = table.getRowModel().rows;
   const { onVisibleRowsChange } = p;
   useEffect(() => { onVisibleRowsChange?.(rows.map((r) => r.original)); }, [rows, onVisibleRowsChange]);
+  checkRow.current = (row, shift) => {
+    const on = !row.getIsSelected();
+    const from = rows.findIndex((r) => r.id === lastChecked.current);
+    const to = rows.findIndex((r) => r.id === row.id);
+    lastChecked.current = row.id;
+    if (!shift || from < 0 || to < 0) { row.toggleSelected(on); return; }
+    const next = { ...selection };
+    for (const r of rows.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+      if (on) next[r.id] = true; else delete next[r.id];
+    }
+    table.setRowSelection(next);
+  };
+  const selectedCount = Object.values(selection).filter(Boolean).length;
+  const invertSelection = () => {
+    const next = { ...selection };
+    for (const r of rows) {
+      if (next[r.id]) delete next[r.id]; else next[r.id] = true;
+    }
+    table.setRowSelection(next);
+  };
   const activeFilters = filters.length;
   const sortable = table.getAllLeafColumns().filter((c) => c.getCanSort() && headerText(c.columnDef as GridColumn<T>));
   const sortVal = sorting[0] ? `${sorting[0].id}:${sorting[0].desc ? "desc" : "asc"}` : "";
@@ -284,8 +308,25 @@ export default function DataGrid<T>(p: Props<T>) {
           <button className="dg-link" onClick={() => { table.resetColumnFilters(); setSearch(""); }}>Tümünü temizle</button>
         </div>
       )}
+      {p.selectable && rows.length > 0 && (view === "cards" || selectedCount > 0) && (
+        <div className="dg-selbar">
+          <label>
+            <input type="checkbox" checked={table.getIsAllRowsSelected()}
+              ref={(el) => { if (el) el.indeterminate = table.getIsSomeRowsSelected(); }}
+              onChange={table.getToggleAllRowsSelectedHandler()} />
+            Tümünü seç <span className="muted">({rows.length.toLocaleString("tr-TR")})</span>
+          </label>
+          {selectedCount > 0 && (
+            <>
+              <b>{selectedCount.toLocaleString("tr-TR")} seçili</b>
+              <button className="dg-link" onClick={invertSelection}>Tersine çevir</button>
+              <button className="dg-link" onClick={() => table.setRowSelection({})}>Seçimi temizle</button>
+            </>
+          )}
+        </div>
+      )}
       {sheet === "filter" && <FilterSheet key={sheetCol ?? ""} table={table} initialCol={sheetCol} onClose={() => setSheet(null)} />}
-      {view === "cards" ? <CardView p={p} table={table} rows={rows} /> : <TableView p={p} table={table} rows={rows} columns={columns} />}
+      {view === "cards" ? <CardView p={p} table={table} rows={rows} onCheck={(r, shift) => checkRow.current(r, shift)} /> : <TableView p={p} table={table} rows={rows} columns={columns} />}
       {mail && <MailDialog files={[mail]} subject={exportName ?? "Liste"} body={`${exportName} listesi ektedir (${rows.length} satır).`} onClose={() => setMail(null)} />}
     </>
   );
@@ -375,7 +416,7 @@ function TableView<T>({ p, table, rows, columns }: ViewProps<T> & { columns: Gri
 }
 
 /** Modern list: one card per row, fields flow and wrap, so nothing needs horizontal scrolling. */
-function CardView<T>({ p, table, rows }: ViewProps<T>) {
+function CardView<T>({ p, table, rows, onCheck }: ViewProps<T> & { onCheck: (row: Row<T>, shift: boolean) => void }) {
   const [editing, setEditing] = useState<{ row: string; col: string } | null>(null);
   // Cards whose empty editable fields are shown (the ✎ button); others show only filled fields
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -439,7 +480,8 @@ function CardView<T>({ p, table, rows }: ViewProps<T>) {
               <div className="dgc-body">
                 <div className="dgc-head">
                   {p.selectable && (
-                    <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onClick={(e) => e.stopPropagation()} onChange={row.getToggleSelectedHandler()} />
+                    <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onChange={() => {}}
+                      onClick={(e) => { e.stopPropagation(); onCheck(row, e.shiftKey); }} />
                   )}
                   <div className="dgc-titles">
                     {roles.filter((r) => r.role === "title").map(({ c }) => <b key={c.id} className="dgc-title">{value(c.id)}</b>)}

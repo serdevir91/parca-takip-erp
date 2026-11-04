@@ -1,6 +1,14 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.3 yenilikleri
+
+- **Proje silme:** Yönetici, Projeler sayfasındaki "Sil" düğmesiyle projeyi kalıcı olarak silebilir. Pencere neyin silineceğini ve neyin kalacağını sayılarıyla gösterir, proje adının yazılmasını ister ve silmeden önce otomatik yedek alır. "Arşivle" aynen duruyor.
+- **BOM sürümü silme:** Reddedilen veya geri alınan BOM sürümleri "Sürümü sil" ile kaldırılır. Onaylı sürümler silinmez.
+- **Tümünü seç:** Seçim yapılan listelerde "Tümünü seç", "Tersine çevir" ve "Seçimi temizle" var. Shift ile tıklayınca aradaki satırların hepsi seçilir.
+- **Teknik resim yükleme:** Dosyalar artık önce listelenir; istenmeyenlerin işareti kaldırılır, sonra "Seçilenleri yükle" ile gönderilir.
+- **Toplu resim silme:** Teknik Resimler'de liste ve galeri görünümünde çoklu seçim, eşleşmeyen resimlerde de seçim ve "Seçilenleri sil" var.
+
 ## 1.5.2 yenilikleri
 
 - **Düzeltme:** Excel'de açılıp kaydedilen BOM dosyası artık "geçersiz seviye '1.Oca'" hatası vermiyor. Excel'in tarihe çevirdiği seviye ve ağırlıklar otomatik geri düzeltilir, BOM sürümünde uyarı olarak gösterilir.

@@ -1,6 +1,7 @@
-"""Projects: list, create, update, archive (spec 3, screen 8.2)."""
+"""Projects: list, create, update, archive, delete (spec 3, screen 8.2)."""
 from __future__ import annotations
 
+import shutil
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,8 +9,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import BomVersion, Project, Tracking, User
+from ..config import get_settings
+from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, PurchaseOrder, SalesOrder, StockMove,
+                      TimeEntry, Tracking, User, WorkOrder)
 from ..services import audit
+from ..services import backup as backup_svc
 from ..permissions import require
 from .deps import admin, any_user, get_db, project_or_404
 
@@ -49,6 +53,10 @@ class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     root_part_no: str = ""
     description: str = ""
+
+
+class ProjectPurge(BaseModel):
+    name: str
 
 
 class ProjectPatch(BaseModel):
@@ -106,7 +114,7 @@ def update_project(pid: int, body: ProjectPatch, db: Session = Depends(get_db),
 
 @router.delete("/{pid}")
 def archive_project(pid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
-    """Projects are archived, never hard-deleted (BOM versions and history stay)."""
+    """Archive only: BOM versions and history stay. POST /{pid}/purge deletes for good."""
     p = project_or_404(db, pid)
     audit.record_changes(db, user, p, {"archived": True}, "project", p.id, p.id)
     db.commit()
@@ -119,3 +127,41 @@ def restore_project(pid: int, db: Session = Depends(get_db), user: User = Depend
     audit.record_changes(db, user, p, {"archived": False}, "project", p.id, p.id)
     db.commit()
     return project_out(db, p)
+
+
+def _count(db: Session, model: Any, pid: int) -> int:
+    return db.scalar(select(func.count()).select_from(model).where(model.project_id == pid)) or 0
+
+
+@router.get("/{pid}/delete-impact")
+def delete_impact(pid: int, db: Session = Depends(get_db), _: User = Depends(admin)) -> dict:
+    """What a purge removes with the project, and the records that stay without a project link."""
+    p = project_or_404(db, pid)
+    return {"deleted": {"bom_versions": _count(db, BomVersion, p.id), "tracked_parts": _count(db, Tracking, p.id),
+                        "work_orders": _count(db, WorkOrder, p.id), "control_issues": _count(db, ControlIssue, p.id)},
+            "unlinked": {"purchase_orders": _count(db, PurchaseOrder, p.id), "sales_orders": _count(db, SalesOrder, p.id),
+                         "invoices": _count(db, Invoice, p.id), "stock_moves": _count(db, StockMove, p.id),
+                         "time_entries": _count(db, TimeEntry, p.id), "drawings": _count(db, Drawing, p.id)}}
+
+
+@router.post("/{pid}/purge")
+def purge_project(pid: int, body: ProjectPurge, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
+    """Delete a project for good. The caller repeats the project name; a backup is taken first, so the
+    data can still be restored from it."""
+    p = project_or_404(db, pid)
+    if body.name.strip() != p.name:
+        raise HTTPException(400, "Proje adı eşleşmiyor")
+    backup_name = ""
+    try:
+        backup_name = backup_svc.create_backup().name
+    except backup_svc.BackupBusy:
+        pass  # a backup is running or was just taken
+    except backup_svc.BackupError as e:
+        raise HTTPException(500, f"Yedek alınamadı, proje silinmedi: {e}") from e
+    audit.record(db, user, "project", p.id, "deleted", p.name, None, action="delete")
+    p.current_version_id = None
+    db.flush()
+    db.delete(p)
+    db.commit()
+    shutil.rmtree(get_settings().bom_dir / str(pid), ignore_errors=True)
+    return {"ok": True, "backup": backup_name}

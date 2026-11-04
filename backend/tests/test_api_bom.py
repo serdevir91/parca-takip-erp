@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.status import PROG_RUN
 from app.models import Part
@@ -169,3 +170,60 @@ def test_version_scoping(client, admin_headers, data_file):
     assert client.delete(f"/api/projects/{p1}", headers=h).status_code == 200
     assert client.post(f"/api/projects/{p1}/bom/versions/{v['id']}/approve", headers=h).status_code == 400
     assert _upload(client, h, p1, data_file("BOM_T01_0004_0000_v2.csv")).status_code == 400
+
+
+def test_delete_rejected_version(client, admin_headers, data_file):
+    h = admin_headers
+    pid = _project(client, h, "BOM sil")
+    v1 = _upload(client, h, pid, data_file("BOM_T01_0004_0000_v1.csv")).json()
+    url = f"/api/projects/{pid}/bom/versions/{v1['id']}"
+    assert client.delete(url, headers=h).status_code == 400  # pending
+    client.post(f"{url}/approve", headers=h)
+    assert client.delete(url, headers=h).status_code == 400  # approved, current
+
+    v2 = _upload(client, h, pid, data_file("BOM_T01_0004_0000_v2.csv")).json()
+    url2 = f"/api/projects/{pid}/bom/versions/{v2['id']}"
+    client.post(f"{url2}/reject", headers=h)
+    from app.db import SessionLocal
+    from app.models import BomRow, BomVersion
+    with SessionLocal() as db:
+        stored = Path(db.get(BomVersion, v2["id"]).file_path)
+    assert stored.is_file()
+    assert client.delete(url2, headers=h).status_code == 200
+    assert client.get(url2, headers=h).status_code == 404
+    assert not stored.exists()
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(BomRow).where(BomRow.version_id == v2["id"])) == 0
+    assert client.get(url, headers=h).json()["is_current"] is True
+
+
+def test_purge_project(client, admin_headers, data_file):
+    h = admin_headers
+    pid = _project(client, h, "Silinecek")
+    name = client.get(f"/api/projects/{pid}", headers=h).json()["name"]
+    v = _upload(client, h, pid, data_file("BOM_T01_0004_0000_v1.csv")).json()
+    client.post(f"/api/projects/{pid}/bom/versions/{v['id']}/approve", headers=h)
+    from app.config import get_settings
+    from app.db import SessionLocal
+    from app.models import BomVersion, PurchaseOrder, Tracking, WorkOrder
+    with SessionLocal() as db:
+        db.add(WorkOrder(no=f"WO-{pid}", project_id=pid, part_no="X"))
+        db.add(PurchaseOrder(no=f"PO-{pid}", project_id=pid))
+        db.commit()
+
+    imp = client.get(f"/api/projects/{pid}/delete-impact", headers=h).json()
+    assert imp["deleted"]["bom_versions"] == 1 and imp["deleted"]["work_orders"] == 1
+    assert imp["deleted"]["tracked_parts"] > 0 and imp["unlinked"]["purchase_orders"] == 1
+
+    assert client.post(f"/api/projects/{pid}/purge", headers=h, json={"name": "yanlış"}).status_code == 400
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200
+    r = client.post(f"/api/projects/{pid}/purge", headers=h, json={"name": name})
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 404
+    assert not (get_settings().bom_dir / str(pid)).exists()
+    with SessionLocal() as db:
+        for model in (BomVersion, Tracking, WorkOrder):
+            assert db.scalar(select(func.count()).select_from(model).where(model.project_id == pid)) == 0
+        po = db.scalar(select(PurchaseOrder).where(PurchaseOrder.no == f"PO-{pid}"))
+        assert po is not None and po.project_id is None
+

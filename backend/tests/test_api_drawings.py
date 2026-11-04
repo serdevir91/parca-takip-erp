@@ -135,3 +135,17 @@ def test_drawing_upload_bad_zip_and_unknown_type(client, admin_headers, data_fil
     assert by["bozuk.zip"]["status"] == "rejected" and "okunamadı" in by["bozuk.zip"]["error"]
     assert by["not.txt"]["status"] == "rejected"
     assert res["counts"]["rejected"] == 2 and res["counts"]["stored"] == 0
+
+
+def test_drawing_delete_many(client, admin_headers, data_file):
+    h = admin_headers
+    pid = _project_1102(data_file, "BE resim toplu silme")
+    names = [f"ZZ_{uuid.uuid4().hex[:8]}.pdf" for _ in range(3)]
+    res = _upload(client, h, pid, [(n, _pdf(600 + i)) for i, n in enumerate(names)])
+    ids = [r["drawing_id"] for r in res["results"]]
+
+    r = client.post("/api/drawings/delete", json={"ids": ids[:2] + [999999]}, headers=h)
+    assert r.status_code == 200 and r.json()["deleted"] == 2
+    assert client.get(f"/api/drawings/{ids[0]}", headers=h).status_code == 404
+    assert client.get(f"/api/drawings/{ids[2]}", headers=h).status_code == 200
+    assert client.post("/api/drawings/delete", json={"ids": []}, headers=h).status_code == 422

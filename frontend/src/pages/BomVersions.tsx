@@ -108,10 +108,10 @@ export default function BomVersions() {
   // Default selection: first pending, else current, else newest
   useEffect(() => {
     const list = versions.data;
-    if (!list?.length) return;
+    if (!list) return;
     if (selected !== null && list.some((v) => v.id === selected)) return;
     const pick = list.find((v) => v.status === "pending") ?? list.find((v) => v.is_current) ?? list[0];
-    setSelected(pick.id);
+    setSelected(pick?.id ?? null);
   }, [versions.data, selected]);
 
   // Approval / undo change tracking, parts, dashboard etc.: refresh everything
@@ -177,7 +177,10 @@ export default function BomVersions() {
       </div>
 
       {selected !== null && <VersionDetail pid={pid} vid={selected} canDesign={canDesign} refreshAll={refreshAll}
-        onUndone={(cur) => setSelected(cur)} toast={toast} />}
+        onUndone={(cur) => setSelected(cur)} onDeleted={(id) => {
+          qc.setQueryData<BomVersion[]>(["bom-versions", pid], (l) => l?.filter((x) => x.id !== id));
+          setSelected(null);
+        }} toast={toast} />}
 
       <AliasCard pid={pid} canDesign={canDesign} />
     </Page>
@@ -237,13 +240,13 @@ function UploadCard({ pid, onDone }: { pid: number; onDone: (v: BomVersion) => v
 // ---------- version detail ----------
 type DetailProps = {
   pid: number; vid: number; canDesign: boolean; refreshAll: () => Promise<unknown>;
-  onUndone: (currentId: number) => void; toast: (t: string, err?: boolean) => void;
+  onUndone: (currentId: number) => void; onDeleted: (id: number) => void; toast: (t: string, err?: boolean) => void;
 };
 
-function VersionDetail({ pid, vid, canDesign, refreshAll, onUndone, toast }: DetailProps) {
+function VersionDetail({ pid, vid, canDesign, refreshAll, onUndone, onDeleted, toast }: DetailProps) {
   const [tab, setTab] = useState<"compare" | "rows">("compare");
   const [accepted, setAccepted] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<"approve" | "reject" | "undo" | null>(null);
+  const [modal, setModal] = useState<"approve" | "reject" | "undo" | "delete" | null>(null);
 
   const q = useQuery({
     queryKey: ["bom-version", pid, vid],
@@ -275,6 +278,11 @@ function VersionDetail({ pid, vid, canDesign, refreshAll, onUndone, toast }: Det
     },
     onError: (e) => toast(errText(e), true),
   });
+  const del = useMutation({
+    mutationFn: () => api.del(`/projects/${pid}/bom/versions/${vid}`),
+    onSuccess: () => { toast(`Sürüm #${v?.seq} silindi.`); setModal(null); onDeleted(vid); refreshAll(); },
+    onError: (e) => toast(errText(e), true),
+  });
   const dl = useMutation({
     mutationFn: () => download(`/projects/${pid}/bom/versions/${vid}/file`, v?.filename || "bom.csv"),
     onError: (e) => toast(errText(e), true),
@@ -304,6 +312,9 @@ function VersionDetail({ pid, vid, canDesign, refreshAll, onUndone, toast }: Det
           </>
         )}
         {canDesign && v.can_undo && <button className="btn small danger" onClick={() => setModal("undo")}>Son onayı geri al</button>}
+        {canDesign && (v.status === "rejected" || v.status === "undone") && (
+          <button className="btn small danger" onClick={() => setModal("delete")}>Sürümü sil</button>
+        )}
       </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
         Yükleyen: {v.uploaded_by || "—"} · {fmtDate(v.uploaded_at)}
@@ -380,7 +391,13 @@ function VersionDetail({ pid, vid, canDesign, refreshAll, onUndone, toast }: Det
       {modal === "reject" && (
         <Confirm title={`Sürüm #${v.seq} reddedilsin mi?`} okText="Reddet" danger busy={reject.isPending}
           onOk={() => reject.mutate()} onClose={() => setModal(null)}>
-          <p>Sürüm “Reddedildi” olarak işaretlenir ve geçmişte kalır. Takip listesi ve güncel sürüm <b>değişmez</b>.</p>
+          <p>Sürüm “Reddedildi” olarak işaretlenir ve geçmişte kalır; isterseniz sonra silebilirsiniz. Takip listesi ve güncel sürüm <b>değişmez</b>.</p>
+        </Confirm>
+      )}
+      {modal === "delete" && (
+        <Confirm title={`Sürüm #${v.seq} silinsin mi?`} okText="Kalıcı olarak sil" danger busy={del.isPending}
+          onOk={() => del.mutate()} onClose={() => setModal(null)}>
+          <p>“{v.filename}” dosyası ve sürümün satırları <b>kalıcı olarak</b> silinir, geri alınamaz. Takip listesi ve güncel sürüm değişmez.</p>
         </Confirm>
       )}
       {modal === "undo" && (

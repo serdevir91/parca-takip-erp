@@ -17,6 +17,7 @@ export default function Projects() {
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState<{ id?: number; name: string; root_part_no: string; description: string } | null>(null);
+  const [purge, setPurge] = useState<Project | null>(null);
   const q = useQuery({
     queryKey: ["projects", showArchived],
     queryFn: () => api.get<Project[]>(`/projects?include_archived=${showArchived}`),
@@ -66,10 +67,12 @@ export default function Projects() {
                   {p.archived ? "Arşivden çıkar" : "Arşivle"}
                 </button>
               )}
+              {isAdmin && <button className="btn small danger" onClick={() => setPurge(p)}>Sil</button>}
             </div>
           </div>
         ))}
       </div>
+      {purge && <PurgeDialog project={purge} onClose={() => setPurge(null)} onDone={() => { setPurge(null); done(); }} />}
       {form && (
         <div className="modal-back" onClick={() => setForm(null)}>
           <form className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}
@@ -88,5 +91,62 @@ export default function Projects() {
         </div>
       )}
     </Page>
+  );
+}
+
+type Impact = { deleted: Record<string, number>; unlinked: Record<string, number> };
+const IMPACT_LABELS: Record<string, string> = {
+  bom_versions: "BOM sürümü", tracked_parts: "takip satırı", work_orders: "iş emri", control_issues: "kontrol kaydı",
+  purchase_orders: "satın alma siparişi", sales_orders: "satış siparişi", invoices: "fatura", stock_moves: "stok hareketi",
+  time_entries: "zaman kaydı", drawings: "teknik resim",
+};
+
+function impactList(counts: Record<string, number>) {
+  return Object.entries(counts).filter(([, n]) => n > 0).map(([k, n]) => (
+    <li key={k}><b>{n.toLocaleString("tr-TR")}</b> {IMPACT_LABELS[k] ?? k}</li>
+  ));
+}
+
+/** Permanent delete: shows what goes and what stays, and asks for the project name. */
+function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const impact = useQuery({
+    queryKey: ["project-delete-impact", project.id],
+    queryFn: () => api.get<Impact>(`/projects/${project.id}/delete-impact`),
+    gcTime: 0,
+  });
+  const purge = useMutation({
+    mutationFn: () => api.post<{ backup: string }>(`/projects/${project.id}/purge`, { name }),
+    onSuccess: (r) => { toast(r.backup ? `Proje silindi. Silmeden önceki yedek: ${r.backup}` : "Proje silindi."); onDone(); },
+    onError: (e) => toast(errText(e), true),
+  });
+  const deleted = impact.data ? impactList(impact.data.deleted) : [];
+  const unlinked = impact.data ? impactList(impact.data.unlinked) : [];
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => { e.preventDefault(); if (name.trim() === project.name) purge.mutate(); }}>
+        <h3 style={{ marginTop: 0 }}>“{project.name}” kalıcı olarak silinsin mi?</h3>
+        {impact.error && <div className="error">{errText(impact.error)}</div>}
+        {impact.isLoading && <p className="muted">Kayıtlar sayılıyor…</p>}
+        {impact.data && (
+          <>
+            <p>Bu işlem geri alınamaz. Silinmeden önce otomatik yedek alınır; veriler yalnızca o yedekten dönebilir.</p>
+            {deleted.length > 0 && <><b>Projeyle birlikte silinir:</b><ul>{deleted}</ul></>}
+            {unlinked.length > 0 && <><b>Silinmez, proje bağlantısı kalkar:</b><ul>{unlinked}</ul></>}
+          </>
+        )}
+        <label>Onaylamak için proje adını yazın: <b>{project.name}</b>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
+        </label>
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
+          <button type="button" className="btn" onClick={onClose} disabled={purge.isPending}>Vazgeç</button>
+          <button className="btn danger" disabled={name.trim() !== project.name || purge.isPending || !impact.data}>
+            {purge.isPending ? "Yedek alınıp siliniyor…" : "Kalıcı olarak sil"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
