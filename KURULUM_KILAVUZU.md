@@ -167,7 +167,7 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | Telefon bağlanamıyor, bilgisayar bağlanıyor | Modemde "misafir ağı" veya "AP/istemci yalıtımı" açık olabilir; telefonu ana Wi-Fi ağına bağlayın. |
 | Adres değişti | Uygulamalar sunucuyu kendileri yeniden arar. Olmazsa "Sunucuyu değiştir" ile yeni adresi seçin. Kalıcı çözüm: modemde sabit IP. |
 | Giriş ekranında **Hesap oluştur** yok | Yönetici Yönetim › Kullanıcılar ekranından hesap isteklerini açmalı. |
-| Telefon: "sertifika değişti" uyarısı | Sunucunun HTTPS sertifikası değişmiş. Değişikliği siz yaptıysanız "Sunucuyu değiştir" ile sunucuyu unutup yeniden bağlanın. Yapmadıysanız bağlanmayın, ağı kontrol edin. |
+| Telefon: "Sunucunun sertifikası değişmiş" uyarısı | Sunucunun HTTPS sertifikası değişmiş. Değişikliği siz yaptıysanız "Sunucuyu değiştir" ile sunucuyu unutup yeniden bağlanın. Yapmadıysanız bağlanmayın, ağı kontrol edin. |
 | Giriş: "Hesabınız yönetici onayı bekliyor" | Yönetici Yönetim › Kullanıcılar ekranından onaylamalı. |
 | Giriş: "Hesabınız pasif" | Yönetici hesabı pasif yapmış; Kullanıcılar ekranından tekrar aktif yapılabilir. |
 | E-posta: "kullanıcı adı/şifreyi kabul etmedi" | Gmail'de normal şifre yerine uygulama şifresi kullanın. |
