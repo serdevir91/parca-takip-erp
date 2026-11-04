@@ -1,7 +1,7 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
-## 1.5.4 yenilikleri
+## 1.5.5 yenilikleri
 
 - **Arka planda çalışma:** Sunucu olan bilgisayarda pencereyi kapatınca sistem artık durmaz. Uygulama gizli simgelere iner, diğer cihazlar çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Sunucuyu durdur ve çık" seçin.
 - **Sistem Ayarları:** Yönetim'de yeni sekme. Uygulama adı, logo, şirket bilgileri, para birimi, KDV, vade, ödeme yöntemleri, belge numarası önekleri, varsayılan birim, şifre ve giriş kuralları, oturum süresi, yükleme sınırı, yedek saati ve açık modüller buradan değişir.

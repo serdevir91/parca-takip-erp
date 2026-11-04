@@ -664,7 +664,8 @@ class DesktopApp:
             user32.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
             visible = lambda: bool(user32.IsWindowVisible(hwnd))  # noqa: E731
             result["shown"] = until(visible)
-            user32.PostMessageW(hwnd, 0x0010, None, None)  # WM_CLOSE: what the title bar X sends
+            # WM_SYSCOMMAND + SC_CLOSE is what the title bar X sends; a bare WM_CLOSE reads as TaskManagerClosing
+            user32.PostMessageW(hwnd, 0x0112, 0xF060, None)
             result["hidden"] = until(lambda: not visible())
             result["server_alive"] = is_erp(self._server.local_url)
             second = subprocess.run([sys.executable], timeout=60, check=False)
