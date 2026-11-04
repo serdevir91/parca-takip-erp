@@ -13,6 +13,7 @@ but the newest backup is always kept.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -21,6 +22,7 @@ import subprocess
 import tarfile
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +31,8 @@ from typing import Any
 from sqlalchemy.engine import make_url
 
 from ..config import get_settings
+
+log = logging.getLogger("erp.backup")
 
 NAME_RE = re.compile(r"^erp_(\d{8}_\d{6})\.tar$")
 _lock = threading.Lock()
@@ -145,7 +149,8 @@ def _not_data(data_dir: Path, database_url: str, backup_dir: Path) -> set[str]:
 
     The live SQLite files above all: closing any handle on them drops the locks SQLite holds in this process,
     which can lose every later write. They are in the backup as the dump. Older backups would nest in each
-    other and a restore would wipe them. The token signing key stays out so a stolen backup forges no logins.
+    other and a restore would wipe them. The token signing key and the HTTPS key stay out so a stolen backup
+    forges no logins and impersonates no server.
     """
     root = data_dir.resolve()
     paths = [backup_dir.resolve()]
@@ -153,7 +158,7 @@ def _not_data(data_dir: Path, database_url: str, backup_dir: Path) -> set[str]:
     if url.get_backend_name() == "sqlite" and url.database:
         db = Path(url.database).resolve()
         paths += [db.with_name(db.name + s) for s in ("", "-wal", "-shm", "-journal")]
-    return {".jwt_secret"} | {p.relative_to(root).as_posix() for p in paths if p.is_relative_to(root)}
+    return {".jwt_secret", "tls"} | {p.relative_to(root).as_posix() for p in paths if p.is_relative_to(root)}
 
 
 def create_backup(database_url: str | None = None, data_dir: Path | None = None,
@@ -212,7 +217,7 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
                    backup_dir: Path | None = None) -> dict[str, Any]:
     """Restore database and data directory from a backup tar. Overwrites current data.
 
-    Run it with the backend stopped (or no users active); see README "Geri yükleme"."""
+    Run it with the backend stopped, or through restore_live; see README "Geri yükleme"."""
     cfg = get_settings()
     database_url = database_url or cfg.database_url
     data_dir = Path(data_dir or cfg.data_dir)
@@ -249,6 +254,44 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
                 if child.name not in keep:   # backups made before 1.5.8 can still hold these
                     shutil.move(str(child), str(data_dir / child.name))
     return manifest
+
+
+def restore_live(path: Path) -> dict[str, Any]:
+    """Restore on a running server. A safety backup comes first; if the restore fails it is put back.
+    The caller holds maintenance.exclusive() and has closed its database session."""
+    from .. import cli
+    from ..db import engine
+
+    read_manifest(path)
+    try:
+        safety = create_backup()
+    except BackupBusy:
+        time.sleep(1.1)
+        safety = create_backup()
+    engine.dispose()
+    try:
+        manifest = restore_backup(path)
+    except Exception:
+        log.exception("restore failed, putting the safety backup back")
+        engine.dispose()
+        restore_backup(backup_path(safety.name))
+        raise
+    engine.dispose()
+    cli.migrate()                # an older backup has an older schema
+    return {**manifest, "safety_backup": safety.name}
+
+
+def adopt_upload(tmp: Path) -> BackupInfo:
+    """Move an uploaded backup into the backup folder under a fresh name. It must be a valid backup."""
+    read_manifest(tmp)
+    d = Path(get_settings().backup_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    target = d / f"erp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar"
+    while target.exists():
+        time.sleep(1.1)
+        target = d / f"erp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar"
+    shutil.move(str(tmp), str(target))
+    return next(b for b in list_backups(d) if b.name == target.name)
 
 
 def status(backup_dir: Path | None = None) -> dict[str, Any]:

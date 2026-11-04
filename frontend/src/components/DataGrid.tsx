@@ -11,6 +11,7 @@ import { ADV, advFilter, AdvancedFilter, advSummary, cellText, FilterSheet, filt
 import { Editor, TableView } from "./dgSheet";
 import { colId, drawnColumns, freezeTo, headerText, isEmpty, type GridColumn, type GridProps } from "./dgTypes";
 import MailDialog, { shareFiles, type MailFile } from "./MailDialog";
+import { useAuth } from "../api/auth";
 import { errText, useToast } from "./Toast";
 
 export { cellText, Icon, multiFilter, type ColFilter };
@@ -138,6 +139,7 @@ export default function DataGrid<T>(p: GridProps<T>) {
   const [sheet, setSheet] = useState<"filter" | "advanced" | "export" | "columns" | "views" | null>(null);
   const [sheetCol, setSheetCol] = useState<string | null>(null);
   const [mail, setMail] = useState<MailFile | null>(null);
+  const canMail = useAuth().can("mail", "edit");
   const toast = useToast();
   const stateKey = p.stateKey ?? (p.exportName || null);
   const layoutKey = stateKey ? `dg.layout.${stateKey}` : null;
@@ -362,7 +364,7 @@ export default function DataGrid<T>(p: GridProps<T>) {
               <div className="dg-menu card" role="menu">
                 <button role="menuitem" className="btn small" onClick={() => void downloadXlsx()}>Excel dosyası indir (.xlsx)</button>
                 <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>CSV indir</button>
-                <button role="menuitem" className="btn small" onClick={() => { setSheet(null); setMail(csvFile()); }}>E-posta ile gönder</button>
+                {canMail && <button role="menuitem" className="btn small" onClick={() => { setSheet(null); setMail(csvFile()); }}>E-posta ile gönder</button>}
               </div>
             )}
           </div>

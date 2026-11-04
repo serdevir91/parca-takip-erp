@@ -340,8 +340,10 @@ def migrate() -> None:
         command.upgrade(cfg, "head")
 
 
-def serve(host: str, port: int, backup: bool) -> None:
+def serve(host: str, port: int, backup: bool, https: bool = False) -> None:
     import uvicorn
+
+    from .services import tls
 
     cfg = get_settings()
     for d in (cfg.data_dir, cfg.backup_dir):
@@ -354,11 +356,14 @@ def serve(host: str, port: int, backup: bool) -> None:
         threading.Thread(target=backup_daemon, args=(cfg.backup_time,), name="backup", daemon=True).start()
     from .services import discovery
 
-    discovery.start_responder(port, cfg.app_version)
-    print(f"LAB ERP: http://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
+    if https:
+        tls.enable()
+    scheme = "https" if tls.enabled() else "http"
+    discovery.start_responder(port, cfg.app_version, scheme, tls.fingerprint())
+    print(f"LAB ERP: {scheme}://{'localhost' if host in ('0.0.0.0', '::') else host}:{port}", flush=True)
     # Clients connect directly (no proxy in front), so only a local proxy may set X-Forwarded-For
     uvicorn.run("app.main:app", host=host, port=port, workers=1, proxy_headers=True,
-                forwarded_allow_ips="127.0.0.1", timeout_keep_alive=75, log_level="info")
+                forwarded_allow_ips="127.0.0.1", timeout_keep_alive=75, log_level="info", **tls.uvicorn_args())
 
 
 def restore(path: Path, yes: bool) -> None:
@@ -396,6 +401,7 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--host", default=os.environ.get("ERP_HOST", "0.0.0.0"))
     v.add_argument("--port", type=int, default=int(os.environ.get("ERP_HTTP_PORT", "8000")))
     v.add_argument("--no-backup", action="store_true", help="Günlük yedeği çalıştırma")
+    v.add_argument("--https", action="store_true", help="Sertifika yoksa üret ve HTTPS ile çalış")
     a = ap.parse_args(argv)
 
     if a.cmd == "seed":
@@ -419,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "migrate":
         migrate()
     elif a.cmd == "serve":
-        serve(a.host, a.port, not a.no_backup)
+        serve(a.host, a.port, not a.no_backup, a.https)
     elif a.cmd == "create-admin":
         pw = a.password
         if not pw:

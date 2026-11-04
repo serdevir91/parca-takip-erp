@@ -5,15 +5,17 @@ import importlib
 import logging
 import pkgutil
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from . import api as api_pkg
 from .bodylimit import BodyLimit
 from .config import get_settings
 from .db import SessionLocal, engine
-from .services import sync
+from .services import mailer, maintenance, sync, tls
 from .services.bootstrap import seed_defaults
 
 log = logging.getLogger("erp")
@@ -38,6 +40,7 @@ async def lifespan(_: FastAPI):
         Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed_defaults(db)
+        mailer.seal_stored(db)
     yield
 
 
@@ -47,11 +50,13 @@ app = FastAPI(title="LAB ERP", version=get_settings().app_version, lifespan=life
               redoc_url=None)
 
 # The SPA: own scripts only (pdf.js needs wasm), inline styles (charts), blob: for previews and the
-# pdf.js worker; connect-src allows the admin-set update feed. API responses (JSON and stored files)
+# pdf.js worker; connect-src adds only the configured update feed. API responses (JSON and stored files)
 # never need to run anything, so they get a sandboxed, empty policy: an uploaded HTML or SVG file opened
 # directly cannot run script on the app origin.
+_feed = urlsplit(get_settings().update_feed_url)
+_FEED_ORIGIN = f" {_feed.scheme}://{_feed.netloc}" if _feed.scheme in ("http", "https") and _feed.netloc else ""
 SPA_CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
-           "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http: https:; "
+           f"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'{_FEED_ORIGIN}; "
            "worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; "
            "form-action 'self'; frame-ancestors 'none'")
 API_CSP = "default-src 'none'; img-src 'self'; sandbox; frame-ancestors 'none'"
@@ -60,6 +65,20 @@ _DOCS_PATHS = ("/api/docs", "/api/openapi.json")
 
 # Added first, so it sits inside the two below: their task groups would turn its refusal into a plain 400
 app.add_middleware(BodyLimit)
+
+
+@app.middleware("http")
+async def restore_gate(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/api/") or path in ("/api/health", "/api/version"):
+        return await call_next(request)
+    if not maintenance.enter():
+        return JSONResponse({"detail": "Sistem yedekten geri yükleniyor, biraz sonra tekrar deneyin"}, 503,
+                            headers={"Retry-After": "30"})
+    try:
+        return await call_next(request)
+    finally:
+        maintenance.leave()
 
 
 @app.middleware("http")
@@ -94,6 +113,16 @@ def sync_rev() -> dict:
 @app.get("/api/health", tags=["system"])
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/tls/cert", tags=["system"])
+def tls_cert() -> Response:
+    """The server's own certificate, for adding it to a browser or phone. Public by nature."""
+    cert = tls.files()[0]
+    if not cert.is_file():
+        raise HTTPException(404, "HTTPS açık değil")
+    return Response(cert.read_bytes(), media_type="application/x-x509-ca-cert",
+                    headers={"Content-Disposition": 'attachment; filename="lab-erp.crt"'})
 
 
 @app.get("/api/version", tags=["system"])

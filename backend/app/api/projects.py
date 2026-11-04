@@ -14,10 +14,13 @@ from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, Purch
                       TimeEntry, Tracking, User, WorkOrder)
 from ..services import audit
 from ..services import backup as backup_svc
-from ..permissions import require
+from ..permissions import can, require
 from .deps import admin, any_user, get_db, project_or_404
 
 projects_view, projects_edit = require("projects", "view"), require("projects", "edit")
+# Screens that pick a project without showing it: these see only ids and names
+PICKER_MODULES = ("parts", "fasteners", "drawings", "control", "planning", "purchasing", "workorders", "stock", "hr",
+                  "attendance", "sales", "finance")
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,6 +45,10 @@ def project_out(db: Session, p: Project) -> dict[str, Any]:
             "pending_versions": pending, "tracked_parts": parts}
 
 
+def _brief(p: Project) -> dict[str, Any]:
+    return {"id": p.id, "name": p.name, "archived": p.archived}
+
+
 def _name_taken(db: Session, name: str, exclude_id: int | None = None) -> bool:
     q = select(Project.id).where(func.lower(Project.name) == name.lower())
     if exclude_id is not None:
@@ -63,11 +70,15 @@ class ProjectPatch(BaseModel):
 
 @router.get("")
 def list_projects(include_archived: bool = False, db: Session = Depends(get_db),
-                  _: User = Depends(any_user)) -> list[dict]:
+                  me: User = Depends(any_user)) -> list[dict]:
     q = select(Project).order_by(Project.archived, Project.name)
     if not include_archived:
         q = q.where(Project.archived.is_(False))
-    return [project_out(db, p) for p in db.scalars(q)]
+    if can(me, "projects"):
+        return [project_out(db, p) for p in db.scalars(q)]
+    if any(can(me, m) for m in PICKER_MODULES):
+        return [_brief(p) for p in db.scalars(q)]
+    return []
 
 
 @router.post("", status_code=201)
@@ -86,7 +97,11 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
 
 
 @router.get("/{pid}")
-def get_project(pid: int, db: Session = Depends(get_db), _: User = Depends(any_user)) -> dict:
+def get_project(pid: int, db: Session = Depends(get_db), me: User = Depends(any_user)) -> dict:
+    if not can(me, "projects"):
+        if any(can(me, m) for m in PICKER_MODULES):
+            return _brief(project_or_404(db, pid))
+        raise HTTPException(403, "Bu proje için yetkiniz yok")
     return project_out(db, project_or_404(db, pid))
 
 

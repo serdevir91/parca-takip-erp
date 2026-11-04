@@ -27,7 +27,7 @@ DEFAULTS: dict[str, Any] = {
             "skip_note": t35core.DEFAULT_SKIP_NOTE},
     "part_no_patterns": list(DEFAULT_PART_NO_PATTERNS),
     "status_rules": {"big_drop_ratio": 0.10},
-    "signup": {"enabled": True},
+    "signup": {"enabled": False},
 }
 
 
@@ -107,4 +107,4 @@ def big_drop_ratio(db: Session) -> float:
 
 
 def signup_enabled(db: Session) -> bool:
-    return bool((get_setting(db, "signup") or {}).get("enabled", True))
+    return bool((get_setting(db, "signup") or {}).get("enabled", False))

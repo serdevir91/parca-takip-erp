@@ -41,12 +41,14 @@ const num: CSSProperties = { textAlign: "right" };
 /** İhtiyaç analizi (MRP) and project cost for one project. */
 export default function Planning() {
   const [tab, setTab] = useState<"need" | "cost">("need");
+  const { can } = useAuth();
+  const canCost = can("finance") || can("purchasing");
   return (
     <Page full>
       <div className="toolbar">
         <div className="tabs" role="tablist" style={{ margin: 0 }}>
           <button role="tab" aria-selected={tab === "need"} className={tab === "need" ? "active" : ""} onClick={() => setTab("need")}>İhtiyaç analizi</button>
-          <button role="tab" aria-selected={tab === "cost"} className={tab === "cost" ? "active" : ""} onClick={() => setTab("cost")}>Maliyet</button>
+          {canCost && <button role="tab" aria-selected={tab === "cost"} className={tab === "cost" ? "active" : ""} onClick={() => setTab("cost")}>Maliyet</button>}
         </div>
       </div>
       {tab === "need" ? <NeedTab /> : <CostTab />}

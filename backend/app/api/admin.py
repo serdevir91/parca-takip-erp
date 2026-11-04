@@ -2,31 +2,38 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
+import tarfile
+import threading
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import hash_password
+from ..config import get_settings
+from ..db import SessionLocal
 from ..permissions import MODULES, catalog, clean_overrides, effective, require
 from ..models import (ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Invoice, Part, Payment, PurchaseOrder, SalesOrder,
                       User)
-from ..services import audit, backup as backup_svc, system
+from ..services import audit, backup as backup_svc, loginguard, maintenance, system, tls, uploads
 from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR, KIND_IMALAT
 from ..services.tracking import material_status_choices
 from ..services.settings import (get_setting, part_no_patterns, purchased_assemblies, set_setting, temin_types,
                                  signup_enabled)
-from .auth import check_email, check_password_rules
+from .auth import _is_default_password, check_email, check_password_rules
 from .deps import admin, get_db
 
 contacts_view, contacts_edit = require("contacts", "view"), require("contacts", "edit")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+MAX_BACKUP_MB = 50_000
 
 FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
 FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
@@ -408,7 +415,7 @@ def _validate_setting(key: str, value: Any) -> Any:
     if key == "signup":
         if not isinstance(value, dict):
             raise HTTPException(400, "Hesap oluşturma ayarı bir nesne olmalı")
-        return {"enabled": bool(value.get("enabled", True))}
+        return {"enabled": bool(value.get("enabled", False))}
     if key == "status_rules":
         if not isinstance(value, dict):
             raise HTTPException(400, "Durum kuralları bir nesne olmalı")
@@ -546,6 +553,94 @@ def backup_now(me: User = Depends(admin), db: Session = Depends(get_db)) -> dict
     audit.record(db, me, "backup", info.name, "size", None, info.size, action="create")
     db.commit()
     return info.to_dict()
+
+
+@router.post("/backups/upload", status_code=201)
+async def upload_backup(file: UploadFile = File(...), me: User = Depends(admin),
+                        db: Session = Depends(get_db)) -> dict[str, Any]:
+    """A backup from another computer: it joins the list and is restored from there."""
+    folder = get_settings().backup_dir / "incoming"
+    try:
+        tmp, size = await uploads.store(file, folder, MAX_BACKUP_MB)
+    except uploads.UploadTooLarge as e:
+        raise HTTPException(413, str(e)) from e
+    try:
+        info = backup_svc.adopt_upload(tmp)
+    except (ValueError, OSError, tarfile.TarError, KeyError) as e:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, f"Bu dosya geçerli bir yedek değil: {e}") from e
+    audit.record(db, me, "backup", info.name, "size", None, size, action="upload")
+    db.commit()
+    return info.to_dict()
+
+
+class RestoreIn(BaseModel):
+    confirm: str = ""            # the backup's name: a stray request cannot wipe the data
+
+
+@router.post("/backups/{name}/restore")
+def restore_backup(name: str, body: RestoreIn, me: User = Depends(admin),
+                   db: Session = Depends(get_db)) -> dict[str, Any]:
+    if body.confirm != name:
+        raise HTTPException(400, "Geri yükleme onaylanmadı")
+    try:
+        path = backup_svc.backup_path(name)
+    except backup_svc.BackupError as e:
+        raise HTTPException(404, str(e)) from e
+    who = me.username
+    db.close()
+    try:
+        with maintenance.exclusive():
+            result = backup_svc.restore_live(path)
+    except TimeoutError as e:
+        raise HTTPException(409, str(e)) from e
+    except (backup_svc.BackupError, ValueError, OSError, tarfile.TarError) as e:
+        raise HTTPException(500, f"Geri yükleme başarısız, veriler eski haline getirildi: {e}") from e
+    _is_default_password.cache_clear()
+    loginguard.reset()
+    with SessionLocal() as s:
+        system.apply_runtime(s)
+        u = s.scalar(select(User).where(User.username == who))
+        if u is not None:
+            audit.record(s, u, "backup", name, "restore", None, result["safety_backup"], action="restore")
+        s.commit()
+    return {"ok": True, "safety_backup": result["safety_backup"], "created_at": result.get("created_at")}
+
+
+# ---------- HTTPS ----------
+class HttpsIn(BaseModel):
+    enabled: bool
+
+
+def _https_out(request: Request) -> dict[str, Any]:
+    on = tls.enabled()
+    return {"enabled": on, "active": request.url.scheme == "https", "fingerprint": tls.fingerprint(),
+            "supervised": os.environ.get("ERP_SUPERVISED") == "1"}
+
+
+@router.get("/https")
+def https_status(request: Request, _: User = Depends(admin)) -> dict[str, Any]:
+    return _https_out(request)
+
+
+@router.put("/https")
+def https_set(body: HttpsIn, request: Request, me: User = Depends(admin),
+              db: Session = Depends(get_db)) -> dict[str, Any]:
+    before = tls.enabled()
+    tls.enable() if body.enabled else tls.disable()
+    if before != body.enabled:
+        audit.record(db, me, "setting", "https", "enabled", before, body.enabled)
+        db.commit()
+    return _https_out(request)
+
+
+@router.post("/server/restart")
+def restart_server(_: User = Depends(admin)) -> dict[str, bool]:
+    """Only under a service manager that starts the process again (the systemd unit of server_install.sh)."""
+    if os.environ.get("ERP_SUPERVISED") != "1":
+        raise HTTPException(409, "Bu sunucu kendini yeniden başlatamıyor. Sunucuyu elle yeniden başlatın.")
+    threading.Timer(1, os.kill, (os.getpid(), signal.SIGTERM)).start()
+    return {"ok": True}
 
 
 @router.get("/backups/{name}")

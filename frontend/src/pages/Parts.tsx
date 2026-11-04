@@ -119,6 +119,7 @@ function mergeServer(r: PartRow, s: PartRow): PartRow {
 export default function Parts() {
   const { pid, project } = useProject();
   const canEdit = useAuth().can("parts", "edit");
+  const canMail = useAuth().can("mail", "edit");
   const toast = useToast();
   const qc = useQueryClient();
 
@@ -526,8 +527,10 @@ export default function Parts() {
             <div className="dg-menu card" role="menu">
               <button role="menuitem" className="btn small" onClick={() => void exportXlsx("pt")}>Excel indir: Parça Takip</button>
               <button role="menuitem" className="btn small" onClick={() => void exportXlsx("tl")}>Excel indir: Takip Listesi</button>
+              {canMail && <>
               <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("pt")); }}>E-posta ile gönder: Parça Takip</button>
               <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("tl")); }}>E-posta ile gönder: Takip Listesi</button>
+              </>}
             </div>
           )}
         </div>

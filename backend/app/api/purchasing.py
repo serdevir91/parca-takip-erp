@@ -20,6 +20,13 @@ purchasing_view, purchasing_edit = require("purchasing", "view"), require("purch
 planning_view, stock_edit = require("planning", "view"), require("stock", "edit")
 
 router = APIRouter(tags=["purchasing"])
+FIRM_MODULES = ("contacts", "purchasing", "sales", "finance", "workorders", "stock")
+
+
+def _project_reader(me: User) -> None:
+    """Needs and costs show a project's content, so "planning" alone is not enough for them."""
+    if not can(me, "projects"):
+        raise HTTPException(403, "Bu proje için yetkiniz yok")
 
 
 @router.get("/firms")
@@ -28,6 +35,8 @@ def firms(kind: str | None = None, me: User = Depends(any_user), db: Session = D
     q = select(Firm).where(Firm.active.is_(True)).order_by(Firm.name)
     if kind:
         q = q.where(Firm.kind.in_([kind] if kind == "customer" else [kind, "both"]))
+    if not any(can(me, m) for m in FIRM_MODULES):
+        return []
     # Contact details only for users who may see the address book
     details = can(me, "contacts", "view")
     return [{"id": f.id, "name": f.name, "kind": f.kind, "lead_days": f.lead_days,
@@ -277,7 +286,8 @@ class FromNeedIn(BaseModel):
 
 
 @router.get("/projects/{pid}/requirements")
-def requirements(pid: int, _: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+def requirements(pid: int, me: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _project_reader(me)
     rows = erp.requirements(db, project_or_404(db, pid))
     return {"rows": rows,
             "summary": {"items": len(rows), "shortage": sum(1 for r in rows if r["shortage"] > 0),
@@ -340,4 +350,7 @@ def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(stock_edit
 
 @router.get("/projects/{pid}/costs")
 def costs(pid: int, me: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _project_reader(me)
+    if not (can(me, "finance") or can(me, "purchasing")):
+        raise HTTPException(403, "Maliyetleri görmek için satın alma veya finans yetkisi gerekli")
     return erp.project_costs(db, project_or_404(db, pid), show_people=can(me, "hr"))

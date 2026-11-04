@@ -27,6 +27,9 @@ chat_view = require("chat", "view")
 chat_edit = require("chat", "edit")
 MAX_FILE_MB = 500
 MAX_THUMB_MB = 2
+# Files that run when opened; everything else (drawings, office files, archives) is fine to share
+BLOCKED_EXT = {"exe", "msi", "bat", "cmd", "com", "scr", "pif", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
+               "hta", "lnk", "jar", "reg", "dll", "html", "htm", "xhtml", "svg", "shtml", "mht", "mhtml"}
 PAGE = 60
 
 
@@ -271,6 +274,9 @@ async def send(room_id: int, body: str = Form(""), file: UploadFile | None = Fil
     msg = ChatMessage(room_id=room_id, user_id=me.id, username=display(me), body=text)
     if has_file:
         assert file is not None
+        if uploads.ext_of(uploads.safe_name(file.filename)) in BLOCKED_EXT:
+            raise HTTPException(415, "Bu dosya türü sohbette paylaşılamaz (program veya web sayfası). "
+                                     "Gerekirse sıkıştırıp gönderin.")
         folder = get_settings().chat_dir / str(room_id)
         try:
             path, size = await uploads.store(file, folder, MAX_FILE_MB)

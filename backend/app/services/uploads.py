@@ -44,8 +44,8 @@ def safe_name(name: str | None, fallback: str = "dosya") -> str:
 async def store(file: UploadFile, folder: Path, max_mb: int) -> tuple[Path, int]:
     """Stream `file` to `folder/<random>.<ext>`. Returns (path, size); removes the partial file on error."""
     folder.mkdir(parents=True, exist_ok=True)
-    ext = ext_of(file.filename or "")
-    path = folder / (uuid.uuid4().hex + (f".{ext}" if ext and len(ext) <= 10 else ""))
+    ext = ext_of(safe_name(file.filename))
+    path = folder / (uuid.uuid4().hex + (f".{ext}" if ext.isalnum() and len(ext) <= 10 else ""))
     size, limit = 0, max_mb * 1024 * 1024
     try:
         with path.open("wb") as out:

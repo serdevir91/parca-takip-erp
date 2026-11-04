@@ -19,7 +19,7 @@ MAGIC = b"PARCA_TAKIP_ERP_DISCOVER"
 log = logging.getLogger("erp.discovery")
 
 
-def start_responder(http_port: int, version: str) -> bool:
+def start_responder(http_port: int, version: str, scheme: str = "http", fingerprint: str = "") -> bool:
     """Answer discovery broadcasts in a daemon thread. False if the UDP port is taken (another server)."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -29,7 +29,8 @@ def start_responder(http_port: int, version: str) -> bool:
         log.warning("discovery responder not started: %s", e)
         sock.close()
         return False
-    reply = json.dumps({"name": socket.gethostname(), "port": http_port, "version": version}).encode()
+    reply = json.dumps({"name": socket.gethostname(), "port": http_port, "version": version, "scheme": scheme,
+                        "fingerprint": fingerprint}).encode()
 
     def loop() -> None:
         while True:
@@ -77,8 +78,10 @@ def _broadcast(timeout: float) -> dict[str, dict]:
             try:
                 data, (host, _) = s.recvfrom(512)
                 info = json.loads(data.decode())
-                url = f"http://{host}:{int(info['port'])}"
-                found[url] = {"url": url, "name": str(info.get("name") or host), "version": info.get("version")}
+                scheme = "https" if info.get("scheme") == "https" else "http"
+                url = f"{scheme}://{host}:{int(info['port'])}"
+                found[url] = {"url": url, "name": str(info.get("name") or host), "version": info.get("version"),
+                              "fingerprint": str(info.get("fingerprint") or "")}
             except (OSError, ValueError, KeyError):
                 continue
     return found

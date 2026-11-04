@@ -1,6 +1,6 @@
 """Outgoing e-mail over SMTP. The admin enters the server in Yönetim > E-posta (settings key "smtp").
 
-The password is stored in the settings table and never sent back to the browser. Sending is
+The password is stored encrypted in the settings table and never sent back to the browser. Sending is
 synchronous with a short timeout; callers that must not wait (sign-up notices) run it in the
 background.
 """
@@ -17,7 +17,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import system
+from . import secretbox, system
 from .settings import get_setting, set_setting
 
 log = logging.getLogger("erp.mail")
@@ -52,7 +52,17 @@ def config(db: Session) -> SmtpConfig:
     for k in c.__dataclass_fields__:
         if k in v and v[k] is not None:
             setattr(c, k, v[k])
+    c.password = secretbox.open_(c.password)
     return c
+
+
+def seal_stored(db: Session) -> None:
+    """Encrypt a password saved in plain text by an older version."""
+    v = get_setting(db, "smtp") or {}
+    raw = v.get("password") or ""
+    if raw and not secretbox.sealed(raw):
+        set_setting(db, "smtp", {**v, "password": secretbox.seal(raw)})
+        db.commit()
 
 
 def public(c: SmtpConfig) -> dict[str, Any]:
@@ -79,7 +89,7 @@ def save(db: Session, body: dict[str, Any]) -> SmtpConfig:
         raise ValueError("Port 1-65535 arasında olmalı")
     if c.from_addr and not valid_email(c.from_addr):
         raise ValueError("Gönderen adresi geçerli bir e-posta olmalı")
-    set_setting(db, "smtp", c.__dict__.copy())
+    set_setting(db, "smtp", {**c.__dict__, "password": secretbox.seal(c.password)})
     return c
 
 

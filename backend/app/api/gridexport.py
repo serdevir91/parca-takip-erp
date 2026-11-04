@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -21,6 +22,8 @@ from .deps import any_user
 router = APIRouter(prefix="/export", tags=["export"])
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 KEEP_SECONDS = 3600
+MAX_CELLS = 1_000_000            # a workbook this size already takes hundreds of MB while it is built
+_building = threading.BoundedSemaphore(2)
 
 
 class GridIn(BaseModel):
@@ -36,8 +39,20 @@ def _dir() -> Path:
 
 
 @router.post("/grid")
-def grid(body: GridIn, _: User = Depends(any_user)) -> dict:
+def grid(body: GridIn, me: User = Depends(any_user)) -> dict:
     """Builds the file and returns an id; the file is then fetched with GET, which every client can save."""
+    if len(body.columns) * len(body.rows) > MAX_CELLS:
+        raise HTTPException(413, "Liste Excel için çok büyük. Filtreleyip daha az satır veya sütun indirin.")
+    if not _building.acquire(blocking=False):
+        raise HTTPException(429, "Başka Excel dosyaları hazırlanıyor, biraz sonra tekrar deneyin")
+    try:
+        return {"id": _write(body, me.id)}
+    finally:
+        _building.release()
+
+
+def _write(body: GridIn, owner: int) -> str:
+    width = len(body.columns)
     wb = Workbook()
     ws = wb.active
     ws.title = "Liste"
@@ -46,7 +61,7 @@ def grid(body: GridIn, _: User = Depends(any_user)) -> dict:
         c.font = Font(bold=True)
         c.fill = PatternFill("solid", fgColor="E7EDF5")
     for row in body.rows:
-        ws.append(row)
+        ws.append(row[:width])
     for i, w in enumerate(body.widths[:len(body.columns)], 1):
         ws.column_dimensions[L(i)].width = max(6, min(60, w / 7))
     ws.freeze_panes = "A2"
@@ -56,13 +71,13 @@ def grid(body: GridIn, _: User = Depends(any_user)) -> dict:
         if time.time() - old.stat().st_mtime > KEEP_SECONDS:
             old.unlink(missing_ok=True)
     fid = uuid.uuid4().hex
-    (folder / f"{fid}.xlsx").write_bytes(excel_export.to_bytes(wb))
-    return {"id": fid}
+    (folder / f"{owner}_{fid}.xlsx").write_bytes(excel_export.to_bytes(wb))
+    return fid
 
 
 @router.get("/grid/{fid}")
-def grid_file(fid: str, name: str = "liste", _: User = Depends(any_user)) -> Response:
-    path = _dir() / f"{fid}.xlsx"
+def grid_file(fid: str, name: str = "liste", me: User = Depends(any_user)) -> Response:
+    path = _dir() / f"{me.id}_{fid}.xlsx"
     if not re.fullmatch(r"[0-9a-f]{32}", fid) or not path.is_file():
         raise HTTPException(404, "Dosya bulunamadı, listeyi yeniden indirin")
     return Response(path.read_bytes(), media_type=XLSX,

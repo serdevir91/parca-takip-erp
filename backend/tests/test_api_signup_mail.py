@@ -24,7 +24,8 @@ def _signup(client, **kw):
 
 
 @pytest.fixture(autouse=True)
-def _reset_guard():
+def _reset_guard(client, admin_headers):
+    client.put("/api/admin/settings/signup", json={"value": {"enabled": True}}, headers=admin_headers)
     loginguard.reset()
     yield
     loginguard.reset()

@@ -32,7 +32,7 @@ def test_uploaded_html_is_never_served_as_html(client, admin_headers):
     room = client.post("/api/chat/direct", headers=ah, json={"user_id": b}).json()["id"]
     evil = b"<script>alert(localStorage.erp_token)</script>"
     m = client.post(f"/api/chat/rooms/{room}/messages", headers=ah, data={"body": ""},
-                    files={"file": ("evil.html", evil, "text/html")}).json()
+                    files={"file": ("evil.txt", evil, "text/html")}).json()
     f = client.get(f"/api/chat/messages/{m['id']}/file", headers=ah)
     assert f.status_code == 200 and f.content == evil
     assert f.headers["content-type"] == "application/octet-stream"

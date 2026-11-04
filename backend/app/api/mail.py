@@ -12,11 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, User
-from ..permissions import can
+from ..permissions import can, require
 from ..services import audit, mailer, system
 from .deps import admin, any_user, get_db
 
 router = APIRouter(prefix="/mail", tags=["mail"])
+mail_edit = require("mail", "edit")
 
 MAX_RECIPIENTS = 20
 MAX_BYTES = 20 * 1024 * 1024   # most providers refuse bigger messages
@@ -57,7 +58,7 @@ def status(_: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[s
 
 
 @router.get("/recipients")
-def recipients(user: User = Depends(any_user), db: Session = Depends(get_db)) -> list[dict[str, str]]:
+def recipients(user: User = Depends(mail_edit), db: Session = Depends(get_db)) -> list[dict[str, str]]:
     """Address suggestions: colleagues with an e-mail, plus firms when the user may see contacts."""
     out = [{"name": u.full_name or u.username, "email": u.email, "kind": "Kullanıcı"}
            for u in db.scalars(select(User).where(User.active.is_(True), User.email != "").order_by(User.full_name))]
@@ -69,7 +70,7 @@ def recipients(user: User = Depends(any_user), db: Session = Depends(get_db)) ->
 
 @router.post("/send")
 async def send(to: str = Form(...), subject: str = Form(...), body: str = Form(""), cc: str = Form(""),
-               files: list[UploadFile] = File(default=[]), user: User = Depends(any_user),
+               files: list[UploadFile] = File(default=[]), user: User = Depends(mail_edit),
                db: Session = Depends(get_db)) -> dict[str, Any]:
     """Send a message with attachments (the lists the screen exported). Reply-To is the sender."""
     cfg = mailer.config(db)
