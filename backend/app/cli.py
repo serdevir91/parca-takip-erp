@@ -15,7 +15,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import inspect, select
@@ -25,7 +25,7 @@ from .auth import hash_password
 from .config import get_settings
 from .db import SessionLocal, engine
 from .models import ROLE_ADMIN, Part, Project, Tracking, User
-from .services import audit, backup as backup_svc, system
+from .services import audit, backup as backup_svc, fx, system
 from .services.bootstrap import seed_defaults
 
 log = logging.getLogger("erp.cli")
@@ -302,15 +302,35 @@ def _saved_backup_time(at: str) -> str:
         return at
 
 
+def daily_rates(last: date | None) -> date:
+    """Try the Merkez Bankası rates once a day, best effort: most sites have no internet, and nothing here may
+    disturb the server. Returns the day of the last try."""
+    today = date.today()
+    if last == today:
+        return today
+    try:
+        with SessionLocal() as db:
+            fx.fetch(db)
+            db.commit()
+    except fx.RateFetchError as e:
+        print(f"Kurlar alınamadı: {e}", file=sys.stderr, flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"Kur güncelleme hatası: {e}", file=sys.stderr, flush=True)
+    return today
+
+
 def backup_daemon(at: str) -> None:
-    """Sleep until the backup time (local time, TZ env) every day and take a backup; never exits on errors."""
+    """Sleep until the backup time (local time, TZ env) every day and take a backup; never exits on errors.
+    The same loop tries the daily exchange rate fetch."""
     start = at
+    rates_day: date | None = None
     at = _saved_backup_time(start)
     print(f"Günlük yedekleme saati {at}, saklama {get_settings().backup_keep_days} gün", flush=True)
     while True:
         nxt = _next_run(at, datetime.now())
         print(f"Sonraki yedek: {nxt:%Y-%m-%d %H:%M}", flush=True)
         while (left := (nxt - datetime.now()).total_seconds()) > 0:
+            rates_day = daily_rates(rates_day)
             time.sleep(min(left, 300))
             if (new := _saved_backup_time(start)) != at:
                 at = new

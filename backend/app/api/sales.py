@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, SalesOrder, User
 from ..permissions import require
-from ..services import audit, commerce, system
+from ..services import audit, commerce, fx, system
 from .deps import get_db, project_or_404
 
 sales_view, sales_edit = require("sales", "view"), require("sales", "edit")
@@ -37,6 +37,7 @@ class SoIn(BaseModel):
     valid_until: date | None = None
     due_date: date | None = None
     currency: str = Field(default="", max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     tax_rate: float | None = Field(default=None, ge=0, le=100)
     discount_pct: float = Field(default=0.0, ge=0, le=100)
     note: str = ""
@@ -51,6 +52,7 @@ class SoUpdate(BaseModel):
     valid_until: date | None = None
     due_date: date | None = None
     currency: str | None = Field(default=None, max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)    # null = take it from the table again
     tax_rate: float | None = Field(default=None, ge=0, le=100)
     discount_pct: float | None = Field(default=None, ge=0, le=100)
     note: str | None = None
@@ -59,6 +61,26 @@ class SoUpdate(BaseModel):
 
 class StatusIn(BaseModel):
     status: str
+
+
+class DeliverLine(BaseModel):
+    line_id: int
+    qty: float = Field(allow_inf_nan=False)     # negative takes goods back
+
+
+class DeliverIn(BaseModel):
+    lines: list[DeliverLine]
+    note: str = Field(default="", max_length=300)
+
+
+class InvoicePick(BaseModel):
+    line_id: int
+    qty: float = Field(gt=0, allow_inf_nan=False)
+
+
+class FromSoIn(BaseModel):
+    lines: list[InvoicePick] | None = None      # omitted = what was delivered and not billed yet
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 def _so_or_404(db: Session, so_id: int) -> SalesOrder:
@@ -70,7 +92,9 @@ def _so_or_404(db: Session, so_id: int) -> SalesOrder:
 
 def _out(db: Session, so: SalesOrder) -> dict[str, Any]:
     p = db.get(Project, so.project_id) if so.project_id else None
-    return commerce.so_out(so, True, p.name if p else None, commerce.invoiced_by_so(db).get(so.id, 0.0))
+    out = commerce.so_out(so, True, p.name if p else None, commerce.invoiced_by_so(db).get(so.id, 0.0), fx.Book(db))
+    out["deliveries"] = commerce.delivery_rows(db, so)
+    return commerce.with_billing(db, so, out)
 
 
 @router.get("/sales-orders")
@@ -87,8 +111,9 @@ def list_orders(status: str | None = None, firm_id: int | None = None, project_i
         q = q.where(SalesOrder.project_id == project_id)
     names = dict(db.execute(select(Project.id, Project.name)).all())
     inv = commerce.invoiced_by_so(db)
-    return {"rows": [commerce.so_out(so, False, names.get(so.project_id or 0), inv.get(so.id, 0.0))
-                     for so in db.scalars(q)], "statuses": commerce.SO_STATUS}
+    book = fx.Book(db)
+    return {"rows": [commerce.so_out(so, False, names.get(so.project_id or 0), inv.get(so.id, 0.0), book)
+                     for so in db.scalars(q)], "statuses": commerce.SO_STATUS, "base": book.base}
 
 
 @router.post("/sales-orders", status_code=201)
@@ -99,10 +124,12 @@ def create_order(body: SoIn, me: User = Depends(sales_edit), db: Session = Depen
     if not firm and not body.firm_name.strip():
         raise HTTPException(400, "Müşteri seçin")
     sets = system.system(db)["commerce"]
+    currency = fx.clean_currency(body.currency or sets["currency"])
     so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=firm.id if firm else None,
                     firm_name=firm.name if firm else body.firm_name.strip(), project_id=body.project_id,
                     status="draft", order_date=body.order_date or date.today(), valid_until=body.valid_until,
-                    due_date=body.due_date, currency=body.currency or sets["currency"],
+                    due_date=body.due_date, currency=currency,
+                    rate=body.rate if body.rate is not None else fx.rate_on(db, currency, body.order_date),
                     tax_rate=sets["vat"] if body.tax_rate is None else body.tax_rate,
                     discount_pct=body.discount_pct, note=body.note, created_by=me.username)
     commerce.set_so_lines(so, [l.model_dump() for l in body.lines])
@@ -139,8 +166,14 @@ def update_order(so_id: int, body: SoUpdate, me: User = Depends(sales_edit),
     for k in ("order_date", "valid_until", "due_date", "currency", "tax_rate", "discount_pct", "note"):
         if k in sent and (getattr(body, k) is not None or k.endswith(("_date", "_until"))):
             changes[k] = getattr(body, k)
-    if so.status == "confirmed" and ({"tax_rate", "discount_pct", "currency"} & changes.keys()
-                                     or body.lines is not None):
+    if "currency" in changes:
+        changes["currency"] = fx.clean_currency(changes["currency"])
+    if "rate" in sent or changes.get("currency", so.currency) != so.currency:
+        changes["rate"] = body.rate if body.rate is not None else fx.rate_on(
+            db, changes.get("currency", so.currency), fx.first_day(changes.get("order_date"), so.order_date, so.created_at))
+    if so.status in commerce.SO_SHIPPING and (
+            any(k in changes and changes[k] != getattr(so, k) for k in ("tax_rate", "discount_pct", "currency", "rate"))
+            or body.lines is not None):
         raise HTTPException(400, "Onaylanmış siparişin fiyatları değiştirilemez; önce iptal edip yenisini açın")
     audit.record_changes(db, me, so, changes, "sales_order", so.no, so.project_id)
     if body.lines is not None:
@@ -159,11 +192,48 @@ def order_status(so_id: int, body: StatusIn, me: User = Depends(sales_edit),
     return _out(db, so)
 
 
+def _picked(so: SalesOrder, rows: list[DeliverLine]) -> list[tuple[Any, float]]:
+    by_id = {l.id: l for l in so.lines}
+    items = []
+    for r in rows:
+        if r.line_id not in by_id:
+            raise HTTPException(400, f"Satır bu siparişe ait değil: {r.line_id}")
+        if r.qty:
+            items.append((by_id[r.line_id], r.qty))
+    if not items:
+        raise HTTPException(400, "Miktar girin")
+    return items
+
+
+@router.post("/sales-orders/{so_id}/deliver")
+def deliver(so_id: int, body: DeliverIn, me: User = Depends(sales_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Sevk: positive quantities ship, negative ones come back."""
+    so = _so_or_404(db, so_id)
+    commerce.deliver(db, me, so, _picked(so, body.lines), body.note)
+    db.commit()
+    return _out(db, so)
+
+
+@router.post("/sales-orders/{so_id}/return")
+def take_back(so_id: int, body: DeliverIn, me: User = Depends(sales_edit),
+              db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Müşteriden iade: quantities are positive here."""
+    so = _so_or_404(db, so_id)
+    items = _picked(so, body.lines)
+    if any(q < 0 for _, q in items):
+        raise HTTPException(400, "İade miktarı sıfırdan büyük olmalı")
+    commerce.deliver(db, me, so, [(l, -q) for l, q in items], body.note)
+    db.commit()
+    return _out(db, so)
+
+
 @router.post("/sales-orders/{so_id}/invoice", status_code=201)
-def make_invoice(so_id: int, me: User = Depends(finance_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+def make_invoice(so_id: int, body: FromSoIn | None = None, me: User = Depends(finance_edit),
+                 db: Session = Depends(get_db)) -> dict[str, Any]:
     """Draft sales invoice from the order (needs finance edit permission)."""
     so = _so_or_404(db, so_id)
-    inv = commerce.invoice_from_so(db, me, so)
+    picks = [(l.line_id, l.qty) for l in body.lines] if body and body.lines is not None else None
+    inv = commerce.invoice_from_so(db, me, so, picks, body.rate if body else None)
     db.commit()
     return commerce.inv_out(inv)
 
@@ -174,7 +244,7 @@ def copy_order(so_id: int, me: User = Depends(sales_edit), db: Session = Depends
     src = _so_or_404(db, so_id)
     so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=src.firm_id, firm_name=src.firm_name,
                     project_id=src.project_id, status="draft", order_date=date.today(), currency=src.currency,
-                    tax_rate=src.tax_rate, discount_pct=src.discount_pct, note=src.note, created_by=me.username)
+                    rate=fx.rate_on(db, src.currency), tax_rate=src.tax_rate, discount_pct=src.discount_pct, note=src.note, created_by=me.username)
     commerce.set_so_lines(so, [commerce.line_out(l) for l in src.lines])
     db.add(so)
     db.flush()

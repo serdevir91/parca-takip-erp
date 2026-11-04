@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Invoice, Payment, Project, PurchaseOrder, User
 from ..permissions import require
-from ..services import audit, commerce, system
+from ..services import audit, commerce, fx, system
 from .deps import get_db, project_or_404
 
 finance_view, finance_edit = require("finance", "view"), require("finance", "edit")
@@ -26,6 +26,7 @@ class LineIn(BaseModel):
     unit: str = Field(default="Adet", max_length=20)
     qty: float = Field(gt=0)
     unit_price: float = Field(default=0.0, ge=0)
+    source_line_id: int | None = None       # the order line of an invoice made from an order
 
 
 class InvoiceIn(BaseModel):
@@ -37,6 +38,7 @@ class InvoiceIn(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     currency: str = Field(default="", max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     tax_rate: float | None = Field(default=None, ge=0, le=100)
     note: str = ""
     lines: list[LineIn] = []
@@ -49,14 +51,22 @@ class InvoiceUpdate(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     currency: str | None = Field(default=None, max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)    # null = take it from the table again
     tax_rate: float | None = Field(default=None, ge=0, le=100)
     note: str | None = None
     lines: list[LineIn] | None = None
 
 
+class InvoicePick(BaseModel):
+    line_id: int
+    qty: float = Field(gt=0, allow_inf_nan=False)
+
+
 class FromPoIn(BaseModel):
     no: str = Field(max_length=40)
     tax_rate: float | None = Field(default=None, ge=0, le=100)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    lines: list[InvoicePick] | None = None      # omitted = what was received and not billed yet
 
 
 class StatusIn(BaseModel):
@@ -70,6 +80,7 @@ class PaymentIn(BaseModel):
     pay_date: date | None = None
     amount: float = Field(gt=0)
     currency: str = Field(default="", max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     method: str = Field(default="Havale/EFT", max_length=30)
     note: str = ""
 
@@ -83,8 +94,9 @@ def _inv_or_404(db: Session, inv_id: int) -> Invoice:
 
 def _out(db: Session, inv: Invoice) -> dict[str, Any]:
     p = db.get(Project, inv.project_id) if inv.project_id else None
-    out = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), True, p.name if p else None)
-    out["payments"] = [commerce.pay_out(x, inv.no) for x in
+    book = fx.Book(db)
+    out = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), True, p.name if p else None, book)
+    out["payments"] = [commerce.pay_out(x, inv.no, book) for x in
                        db.scalars(select(Payment).where(Payment.invoice_id == inv.id).order_by(Payment.pay_date))]
     return out
 
@@ -111,7 +123,8 @@ def list_invoices(kind: str | None = None, status: str | None = None, firm_id: i
     invs = list(db.scalars(q))
     paid = commerce.paid_by_invoice(db, [i.id for i in invs])
     names = dict(db.execute(select(Project.id, Project.name)).all())
-    rows = [commerce.inv_out(i, paid.get(i.id, 0.0), False, names.get(i.project_id or 0)) for i in invs]
+    book = fx.Book(db)
+    rows = [commerce.inv_out(i, paid.get(i.id, 0.0), False, names.get(i.project_id or 0), book) for i in invs]
     if pay_state == "open":
         rows = [r for r in rows if r["pay_state"] in ("unpaid", "partial", "overdue")]
     elif pay_state:
@@ -127,13 +140,14 @@ def create_invoice(body: InvoiceIn, me: User = Depends(finance_edit), db: Sessio
     if body.project_id is not None:
         project_or_404(db, body.project_id)
     sets = system.system(db)["commerce"]
+    currency = fx.clean_currency(body.currency or sets["currency"])
     inv = commerce.new_invoice(db, me, body.kind, firm=firm, no=body.no, project_id=body.project_id,
-                               invoice_date=body.invoice_date, due_date=body.due_date,
-                               currency=body.currency or sets["currency"],
+                               invoice_date=body.invoice_date, due_date=body.due_date, currency=currency,
+                               rate=body.rate if body.rate is not None else fx.rate_on(db, currency, body.invoice_date),
                                tax_rate=sets["vat"] if body.tax_rate is None else body.tax_rate, note=body.note)
     if not firm:
         inv.firm_name = body.firm_name.strip()
-    commerce.set_inv_lines(inv, [l.model_dump() for l in body.lines])
+    commerce.set_inv_lines(inv, [{**l.model_dump(), "source_line_id": None} for l in body.lines])
     db.flush()
     audit.record(db, me, "invoice", inv.no, "no", None, inv.no, inv.project_id, action="create")
     db.commit()
@@ -147,7 +161,8 @@ def invoice_from_po(po_id: int, body: FromPoIn, me: User = Depends(finance_edit)
     if po is None:
         raise HTTPException(404, "Sipariş bulunamadı")
     inv = commerce.invoice_from_po(db, me, po, body.no,
-                                 system.system(db)["commerce"]["vat"] if body.tax_rate is None else body.tax_rate)
+                                   system.system(db)["commerce"]["vat"] if body.tax_rate is None else body.tax_rate,
+                                   [(l.line_id, l.qty) for l in body.lines] if body.lines is not None else None, body.rate)
     db.commit()
     return _out(db, inv)
 
@@ -179,9 +194,15 @@ def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_
     for k in ("invoice_date", "due_date", "currency", "tax_rate", "note"):
         if k in sent and (getattr(body, k) is not None or k == "due_date"):
             changes[k] = getattr(body, k)
+    if "currency" in changes:
+        changes["currency"] = fx.clean_currency(changes["currency"])
+    if "rate" in sent or changes.get("currency", inv.currency) != inv.currency:
+        changes["rate"] = body.rate if body.rate is not None else fx.rate_on(
+            db, changes.get("currency", inv.currency),
+            fx.first_day(changes.get("invoice_date"), inv.invoice_date, inv.created_at))
     audit.record_changes(db, me, inv, changes, "invoice", inv.no, inv.project_id)
     if body.lines is not None:
-        commerce.set_inv_lines(inv, [l.model_dump() for l in body.lines])
+        commerce.set_order_inv_lines(db, inv, [l.model_dump() for l in body.lines])
         audit.record(db, me, "invoice", inv.no, "lines", None, len(body.lines), inv.project_id)
     db.commit()
     return _out(db, inv)
@@ -199,6 +220,8 @@ def invoice_status(inv_id: int, body: StatusIn, me: User = Depends(finance_edit)
         raise HTTPException(400, "Satırı olmayan fatura kesilemez")
     if body.status == "cancelled" and commerce.paid_by_invoice(db, [inv.id]).get(inv.id):
         raise HTTPException(400, "Ödemesi girilmiş fatura iptal edilemez; önce ödemeleri silin")
+    if body.status == "issued" and inv.rate is None:
+        inv.rate = fx.rate_on(db, inv.currency, fx.first_day(inv.invoice_date, inv.created_at))
     audit.record(db, me, "invoice", inv.no, "status", inv.status, body.status, inv.project_id)
     inv.status = body.status
     db.commit()
@@ -241,7 +264,8 @@ def list_payments(direction: str | None = None, firm_id: int | None = None, _: U
     if firm_id is not None:
         q = q.where(Payment.firm_id == firm_id)
     nos = dict(db.execute(select(Invoice.id, Invoice.no)).all())
-    return [commerce.pay_out(p, nos.get(p.invoice_id or 0)) for p in db.scalars(q)]
+    book = fx.Book(db)
+    return [commerce.pay_out(p, nos.get(p.invoice_id or 0), book) for p in db.scalars(q)]
 
 
 @router.post("/payments", status_code=201)
@@ -250,7 +274,10 @@ def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Sessio
         raise HTTPException(400, "Yön tahsilat veya ödeme olmalı")
     inv = _inv_or_404(db, body.invoice_id) if body.invoice_id is not None else None
     firm_id = body.firm_id
+    currency = fx.clean_currency(body.currency or (inv.currency if inv else system.system(db)["commerce"]["currency"]))
     if inv is not None:
+        if currency != fx.norm(inv.currency):
+            raise HTTPException(400, f"Faturaya bağlı ödeme faturanın para biriminde ({inv.currency}) girilir")
         if inv.status != "issued":
             raise HTTPException(400, "Ödeme yalnızca kesilmiş faturaya bağlanabilir")
         want = "in" if inv.kind == "sales" else "out"
@@ -263,11 +290,11 @@ def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Sessio
     firm = commerce.firm_or_404(db, firm_id)
     if firm is None and inv is None:
         raise HTTPException(400, "Firma veya fatura seçin")
+    pay_date = body.pay_date or date.today()
     p = Payment(direction=body.direction, firm_id=firm.id if firm else None,
                 firm_name=firm.name if firm else (inv.firm_name if inv else ""), invoice_id=inv.id if inv else None,
-                pay_date=body.pay_date or date.today(), amount=body.amount,
-                currency=inv.currency if inv else body.currency or system.system(db)["commerce"]["currency"], method=body.method, note=body.note,
-                created_by=me.username)
+                pay_date=pay_date, amount=body.amount, currency=currency, method=body.method, note=body.note,
+                rate=body.rate if body.rate is not None else fx.rate_on(db, currency, pay_date), created_by=me.username)
     db.add(p)
     db.flush()
     audit.record(db, me, "payment", p.id, "amount", None, p.amount, inv.project_id if inv else None, action="create")

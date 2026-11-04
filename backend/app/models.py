@@ -352,7 +352,7 @@ class StockMove(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("stock_items.id", ondelete="CASCADE"), index=True)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
-    kind: Mapped[str] = mapped_column(String(20))       # in | out | count | receipt | production | issue
+    kind: Mapped[str] = mapped_column(String(20))       # erp.MOVE_KINDS
     qty: Mapped[float] = mapped_column(Float)
     balance: Mapped[float] = mapped_column(Float)
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -364,7 +364,7 @@ class StockMove(Base):
 
 
 class PurchaseOrder(Base):
-    """Satın alma siparişi. status: draft | sent | partial | received | cancelled."""
+    """Satın alma siparişi. status: draft | sent | partial | received | closed | cancelled."""
     __tablename__ = "purchase_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     no: Mapped[str] = mapped_column(String(30), unique=True)
@@ -472,7 +472,7 @@ class SyncState(Base):
 
 
 class SalesOrder(Base):
-    """Teklif / satış siparişi. status: draft | quoted | confirmed | delivered | cancelled | lost."""
+    """Teklif / satış siparişi. status: draft | quoted | confirmed | partial | delivered | cancelled | lost."""
     __tablename__ = "sales_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     no: Mapped[str] = mapped_column(String(30), unique=True)
