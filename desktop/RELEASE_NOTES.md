@@ -1,6 +1,24 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.9 yenilikleri
+
+- **Bildirim merkezi:** Üst çubuktaki zil geciken sipariş ve faturaları, düşük stoğu, bekleyen onayları gösterir. Herkes yalnızca yetkili olduğu konuları görür.
+- **İzin ve rapor:** Çalışan izin ister, yönetici onaylar. Mesai düzeltme talebi aynı yoldan gider.
+- **Mesaiden işe saat:** Günün mesaisi proje ve iş emirlerine dağıtılır, maliyete yansır.
+- **Barkod ve QR:** Telefon kamerası veya okuyucuyla stok, sipariş ve iş emri açılır. Etiket yazdırılır.
+- **Sipariş önerisi:** Düşük stok ve açık ihtiyaçlardan satın alma önerisi çıkar.
+- **İş emri:** Malzeme tüketimi, iade ve operasyon adımları iş emrinden yürür.
+- **Döviz:** TCMB kurları alınır, toplamlar ana para biriminde gösterilir.
+- **Kısmi sevk ve iade:** Satış siparişi parça parça sevk edilir, iade kaydedilir. Satırdan fatura kesilir.
+- **Tedarikçi performansı:** Zamanında teslim ve eksik teslim oranları görünür.
+- **Proje şablonları:** Bir proje şablon yapılır, yeni proje ondan açılır.
+- **Çakışma uyarısı:** Parça tablosunda başkasının değiştirdiği alanın üzerine sessizce yazılmaz, seçim size sorulur.
+- **Görünümler sunucuda:** Kayıtlı görünümler, sütun düzeni ve tema hesabınızla her cihaza gelir.
+- **Tek tıkla HTTPS:** Yönetim › HTTPS ekranından açılır. Android ve masaüstü sertifikayı kaydeder, değişirse bağlanmaz.
+- **Ekrandan geri yükleme:** Yönetim › Yedekler ekranından yedek seçilir veya dosya yüklenir.
+- **Güvenlik:** Masaüstü güncellemesi imza doğrulaması olmadan kurulmaz. SMTP şifresi şifreli saklanır. E-posta, firma ve proje okuma yetkiye bağlandı. Yeni kurulumlarda hesap isteği kapalı gelir. Sohbet dosyaları, tarayıcı güvenlik başlıkları ve sunucu değişikliği onayı sıkılaştırıldı.
+
 ## 1.5.8 yenilikleri
 
 - **Mesai takibi:** Çalışan giriş ve çıkış düğmesiyle mesaisini tutar, yalnızca kendisininkini görür. Yetkili yönetici herkesi görür, düzeltir, Excel'e aktarır. Haftalık fazla mesai otomatik hesaplanır.

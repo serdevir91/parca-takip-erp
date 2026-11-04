@@ -92,7 +92,8 @@ Herhangi bir cihazda tarayıcıya sunucunun adresini yazın (örnek `http://192.
 
 ## 3. Hesap açma ve onay
 
-Yeni çalışanlar kendi hesaplarını ister, yönetici onaylar.
+Yeni çalışanlar kendi hesaplarını ister, yönetici onaylar. Bu özellik yeni kurulumlarda kapalıdır. Yönetici önce
+**Yönetim › Kullanıcılar** ekranından hesap isteklerini açar. Açmak istemezseniz hesapları aynı ekrandan siz oluşturun.
 
 **Çalışan:**
 
@@ -165,6 +166,8 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | "Sunucuya ulaşılamadı" | Sunucuda Windows Güvenlik Duvarı'nda "LAB ERP" (veya Python) için **Özel** ağ izni olmalı. Ağ profili **Özel** olmalı. |
 | Telefon bağlanamıyor, bilgisayar bağlanıyor | Modemde "misafir ağı" veya "AP/istemci yalıtımı" açık olabilir; telefonu ana Wi-Fi ağına bağlayın. |
 | Adres değişti | Uygulamalar sunucuyu kendileri yeniden arar. Olmazsa "Sunucuyu değiştir" ile yeni adresi seçin. Kalıcı çözüm: modemde sabit IP. |
+| Giriş ekranında **Hesap oluştur** yok | Yönetici Yönetim › Kullanıcılar ekranından hesap isteklerini açmalı. |
+| Telefon: "sertifika değişti" uyarısı | Sunucunun HTTPS sertifikası değişmiş. Değişikliği siz yaptıysanız "Sunucuyu değiştir" ile sunucuyu unutup yeniden bağlanın. Yapmadıysanız bağlanmayın, ağı kontrol edin. |
 | Giriş: "Hesabınız yönetici onayı bekliyor" | Yönetici Yönetim › Kullanıcılar ekranından onaylamalı. |
 | Giriş: "Hesabınız pasif" | Yönetici hesabı pasif yapmış; Kullanıcılar ekranından tekrar aktif yapılabilir. |
 | E-posta: "kullanıcı adı/şifreyi kabul etmedi" | Gmail'de normal şifre yerine uygulama şifresi kullanın. |

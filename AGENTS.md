@@ -83,6 +83,10 @@ Read this file first. Do not re-scan the whole project.
 - Temin types (v1.5.7): setting `temin_types`, a list of `{name, kind, drawing, order}`; defaults in
   `core/status.py`. Rows keep the type's name in `procurement`; status logic goes through `state.base_kind` and
   `needs_drawing`, never a comparison with a literal name. `FIXED_TEMINS` cannot be removed.
+- Workspace features (v1.5.9): `api/notifications.py` computes each user's list from permissions and stores only dismissals; keys carry state (`low:{id}:{qty}`), so a changed fact comes back. `api/prefs.py` + `frontend/src/api/prefs.ts` mirror `dg.*`, `parts.*`, `erp_theme` to the server; the server wins on load, so a key written straight to localStorage without `savePref` is removed. `api/templates.py` makes projects from templates.
+- Edit conflicts (v1.5.9): `/parts` returns `rev` (max AuditLog.id, read before the rows); PATCH and `/parts/cells` take it, `tracking.recent_edits` + `conflict_of` report other users' changes; PATCH answers 409, cells saves the rest and returns `conflicts`. UI: `components/EditConflicts.tsx`. Bulk edit overwrites on purpose. Only the parts grid is covered.
+- Money totals (v1.5.9): `fx.Book(db)` converts with stored rates; `po_out`, `so_out` give `base_total` (None without a rate), `commerce.balances` gives `base_*`. Never add document currencies 1:1. `commerce.SO_SHIPPING` is confirmed + partial.
+- Stock returns: one kind, `issue_return`, in `ISSUE_KINDS`; `project_costs` nets it off.
 - Attendance (v1.5.8): table `attendance` (migration 0009), `core/attendance.py` (arithmetic), `api/attendance.py`. `/attendance/me`, `clock-in`, `clock-out` are any_user on the card linked to the login; the list and edits need module `attendance`. Datetimes are naive server wall clock; `work_date` is the day the shift began; overtime is weekly over `production.week_hours`.
 - Part names (v1.5.7): global `part_names` table (migration 0008), row field `part_name`, `tracking.set_names`.
   `POST /projects/{id}/parts/cells` saves many cells at once and reports bad ones per cell; `/parts/names` takes a
@@ -167,6 +171,8 @@ Version comes from `config.py`. Release signing: gitignored `keystore.properties
 env (CI secrets; the job skips the APK when they are missing). `splits.abi` builds arm64-v8a, armeabi-v7a, x86_64, x86 and
 universal; release assets are `LabERP-<v>-<abi>.apk` + `LabERP-<v>.apk` (upload the universal one last:
 1.3.0 clients take the last `.apk` asset). `MainActivity.pickApk` picks the split for `Build.SUPPORTED_ABIS`. Build: `JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
+Desktop updates are signed: the shell refuses a download without a valid `<exe>.sig`. After CI publishes a release, download the exe, run `backend/.venv/bin/python desktop/sign_update.py <exe>` and `gh release upload v<x> <exe>.sig --clobber`. The Ed25519 private key is `~/.config/lab-erp/update_signing_ed25519.pem`, on the Mac mini only; losing it means shipping a new public key by hand to every desktop install.
+HTTPS pinning: Android `Pin.java` keeps the first certificate per server (TOFU), `onReceivedSslError` and `saveFile`/`shareFile` check it, forgetting the server clears it. The desktop shell checks its pin when it connects, not on each request.
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules

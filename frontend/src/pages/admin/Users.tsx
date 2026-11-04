@@ -57,7 +57,7 @@ export default function UsersTab() {
     },
     onError: (e) => toast(errText(e), true),
   });
-  const signupOn = settings.data?.signup?.enabled ?? true;
+  const signupOn = settings.data?.signup?.enabled ?? false;
   const setSignup = useMutation({
     mutationFn: (enabled: boolean) => api.put("/admin/settings/signup", { value: { enabled } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "settings"] }),

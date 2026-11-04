@@ -78,10 +78,10 @@ sunucuda ve bilgisayarda yapılacakları adım adım gösterir. **Bağlantıyı 
 | Alan | Özellikler |
 |---|---|
 | **Mühendislik** | Proje ve BOM sürümleri, ürün ağacı oluşturma, Excel gibi tablo, gelişmiş filtre, toplu durum değiştirme, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
-| **Üretim** | İhtiyaç analizi, iş emirleri, stok kartları ve hareketleri, proje maliyeti |
-| **Ticari** | Satın alma, cari kartlar, teklif, satış siparişi, fatura, tahsilat ve ödeme |
-| **Ekip** | Personel kartları, zaman kaydı, mesai takibi, sohbet, e-posta ile paylaşım |
-| **Yönetim** | Modül bazında yetki, kayıt onayı, denetim kaydı, otomatik yedek, sistem ayarları |
+| **Üretim** | İhtiyaç analizi, iş emirleri, operasyon ve malzeme tüketimi, stok kartları ve hareketleri, barkod ve QR, otomatik sipariş önerisi, proje maliyeti |
+| **Ticari** | Satın alma, tedarikçi performansı, cari kartlar, teklif, satış siparişi, kısmi sevk ve iade, fatura, tahsilat ve ödeme, TCMB döviz kurları |
+| **Ekip** | Personel kartları, zaman kaydı, mesai takibi ve düzeltme talebi, izin ve rapor, mesaiden işe saat dağıtma, sohbet, e-posta ile paylaşım |
+| **Yönetim** | Modül bazında yetki, kayıt onayı, denetim kaydı, bildirim merkezi, otomatik yedek, ekrandan geri yükleme, tek tıkla HTTPS, proje şablonları, sistem ayarları |
 | **Platform** | Windows uygulaması, Android uygulaması, tarayıcı, Docker veya Docker'sız Linux sunucu |
 
 ## Hemen deneyin
@@ -536,6 +536,9 @@ powershell -ExecutionPolicy Bypass -File deploy\backup.ps1 -CopyTo E:\Yedek
 
 Geri yükleme mevcut veritabanının ve dosyaların **üzerine yazar**. Önce o anki durumun yedeğini alın.
 
+Docker'sız kurulumda en kolay yol **Yönetim › Yedekler** ekranıdır: listeden yedeği seçin veya `.tar` dosyasını
+yükleyin. Geri yükleme bitince oturum yenilenir. Docker kurulumunda veya komut satırından:
+
 ```bash
 # 1. Kullanıcıların işlem yapmaması için backend ve backup servislerini durdurun
 docker compose stop backend backup frontend
@@ -623,6 +626,13 @@ değişince diğer cihazlardaki oturumlar kapanır.
   bozuk Excel ve ZIP dosyaları reddedilir.
 - **Tarayıcı:** Sunucu güvenlik başlıkları gönderir (CSP, `X-Frame-Options`, `nosniff`); arayüz başka sitelerin
   içine gömülemez.
+- **HTTPS:** **Yönetim › HTTPS** ekranı Docker'sız sunucuda kendi sertifikasını üretir ve HTTPS'i açar. Android ve
+  masaüstü uygulaması sertifikayı ilk bağlantıda kaydeder, sonra değişirse bağlanmaz. Bu ayar kapalıyken trafik
+  yerel ağda şifresiz gider. Docker kurulumunda HTTPS nginx ayarından yapılır.
+- **Kayıt:** Yeni kurulumlarda **Hesap oluştur** kapalıdır; yönetici **Yönetim › Kullanıcılar** ekranından açar.
+  Eski kurulumlarda kayıtlı ayar değişmez.
+- **E-posta:** SMTP şifresi şifrelenmiş saklanır. E-posta modülü artık yetkiyle açılır.
+- **Masaüstü güncellemesi:** Windows uygulaması yalnızca Ed25519 imzası doğrulanan kurulum dosyasını çalıştırır.
 - **API belgeleri** (`/api/docs`) varsayılan olarak kapalıdır; `ERP_API_DOCS=true` ile açılır.
 - **Windows kurulumu:** `.env` ve `ayarlar.env` dosyalarına yalnızca Yöneticiler, SYSTEM ve kurulumu yapan
   kullanıcı erişebilir.
