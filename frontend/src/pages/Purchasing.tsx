@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, download } from "../api/client";
 import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
+import LabelsModal from "../components/Labels";
 import { Page, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
@@ -21,7 +23,9 @@ export default function Purchasing() {
   const [status, setStatus] = useState("open");
   const [projectFilter, setProjectFilter] = useState<number | null>(null);
   const [q, setQ] = useState("");
-  const [openId, setOpenId] = useState<number | null>(null);
+  // ?po=<id>: opened from a link, such as the drafts made from Sipariş önerileri
+  const [params] = useSearchParams();
+  const [openId, setOpenId] = useState<number | null>(Number(params.get("po")) || null);
   const [creating, setCreating] = useState(false);
 
   const projectId = pid || projectFilter;
@@ -116,6 +120,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
   const refresh = useRefresh();
   const [editing, setEditing] = useState(false);
   const [receiving, setReceiving] = useState(false);
+  const [labels, setLabels] = useState(false);
   const q = useQuery({ queryKey: ["purchase-order", id], queryFn: () => api.get<PurchaseOrder>(`/purchase-orders/${id}`) });
   const po = q.data;
 
@@ -137,6 +142,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
 
   if (editing && po) return <OrderEditor order={po} projectId={po.project_id} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />;
   if (receiving && po) return <ReceiveModal order={po} onClose={() => setReceiving(false)} />;
+  if (labels && po) return <LabelsModal labels={[{ payload: `PO:${po.no}`, title: po.no, sub: po.firm_name }]} onClose={() => setLabels(false)} />;
 
   const busy = setStatus.isPending || del.isPending;
   const s = po?.status;
@@ -146,6 +152,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
         <button className="btn" onClick={() => void download(`/purchase-orders/${id}/xlsx`, `${po.no}.xlsx`).catch((e) => toast(errText(e), true))}>
           Sipariş formu (Excel)
         </button>
+        <button className="btn" onClick={() => setLabels(true)}>QR etiket</button>
         {can("finance", "edit") && (s === "sent" || s === "partial" || s === "received") && (
           <button className="btn" disabled={invoice.isPending} onClick={() => {
             const no = prompt("Tedarikçi fatura numarası:")?.trim();

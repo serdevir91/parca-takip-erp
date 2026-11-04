@@ -825,3 +825,44 @@ div.chat-pick-row { cursor: default; }
 .att-clock { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .att-btn { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; padding: 12px 22px; }
 @media (max-width: 720px) { .att-btn { width: 100%; justify-content: center; } }
+
+/* === Barkod okutma ve QR etiket === */
+.scan { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.scan form { display: flex; gap: 8px; }
+.scan form input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; }
+.scan-ways { display: flex; gap: 8px; flex-wrap: wrap; }
+.scan-ways .btn { flex: 1; min-height: 44px; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.scan-ways input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.scan-video { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
+.scan-video video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-video::after { content: ""; position: absolute; inset: 15%; border: 2px solid rgba(255, 255, 255, .8); border-radius: 8px; pointer-events: none; }
+.scan-card h3 { margin: 0 0 4px; overflow-wrap: anywhere; }
+.scan-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0; }
+.scan-facts dt { color: var(--muted); }
+.scan-facts dd { margin: 0; overflow-wrap: anywhere; }
+.scan-act { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+.scan-act .row { flex-wrap: nowrap; }
+.scan-act input, .scan-act select { min-height: 40px; font-size: 16px; min-width: 0; flex: 1; box-sizing: border-box; }
+.scan-act .btn { min-height: 40px; }
+.scan-line { display: grid; grid-template-columns: 1fr 96px; gap: 4px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.scan-line small { color: var(--muted); }
+.scan-warn { margin: 8px 0 0; padding: 8px 8px 8px 24px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.wo-section { margin-top: 16px; }
+.wo-section > .row { justify-content: space-between; margin-bottom: 6px; }
+.wo-section h4 { margin: 0; }
+.wo-qty { width: 70px; }
+.label-sheet { display: flex; flex-wrap: wrap; gap: 8px; max-height: 60vh; overflow: auto; }
+.label { width: 63mm; height: 37mm; box-sizing: border-box; padding: 2mm; display: flex; gap: 2mm; align-items: center; overflow: hidden; background: #fff; color: #000; border: .2mm dashed #bbb; }
+.label svg { width: 31mm; height: 31mm; flex: none; }
+.label div { min-width: 0; overflow: hidden; max-height: 100%; overflow-wrap: anywhere; font-size: 8pt; line-height: 1.25; }
+.label b { display: block; font-size: 9pt; }
+.label-print { display: none; }
+@media print {
+  @page { size: A4; margin: 8mm; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body > *:not(.label-print) { display: none !important; }
+  .label-print { display: flex; flex-wrap: wrap; align-content: flex-start; }
+  .label { break-inside: avoid; }
+}
+.scan-act .seg { display: flex; }
+.scan-act .seg button { flex: 1; min-height: 40px; }

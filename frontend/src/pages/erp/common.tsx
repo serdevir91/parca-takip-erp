@@ -19,12 +19,27 @@ export type WorkOrder = {
   id: number; no: string; project_id: number | null; project_name: string | null; part_no: string; description: string;
   qty: number; done_qty: number; remaining: number; firm_name: string; subcontract: boolean; status: string;
   status_label: string; start_date: string | null; due_date: string | null; overdue: boolean; unit_cost: number | null;
-  total_cost: number | null; note: string; created_at: string | null; created_by: string;
+  total_cost: number | null; note: string; created_at: string | null; created_by: string; ops_done: number; ops_total: number;
+};
+/** What a completion could not take out of stock; the completion itself stands. */
+export type WoWarning = { code: string; description: string; unit: string; needed: number; issued: number; short: number; message: string };
+export type WoMaterial = {
+  id: number; seq: number; code: string; description: string; unit: string; planned_qty: number; issued_qty: number;
+  remaining: number; has_card: boolean; stock_qty: number | null;
+};
+export type WoOp = {
+  id: number; seq: number; name: string; planned_hours: number | null; status: string; status_label: string;
+  done_by: string; done_at: string | null; note: string;
 };
 export type StockItem = {
   id: number; code: string; name: string; kind: ItemKind | string; kind_label: string; unit: string; qty: number;
   min_qty: number; unit_cost: number | null; value: number | null; low: boolean; location: string; note: string;
-  updated_at: string | null;
+  updated_at: string | null; reorder_qty: number; preferred_firm_id: number | null;
+};
+export type ReorderRow = {
+  item_id: number; code: string; name: string; unit: string; qty: number; min_qty: number; on_order: number; available: number;
+  reorder_qty: number; suggested_qty: number; firm_id: number | null; firm_name: string; firm_source: string; firm_missing: boolean;
+  last_price: number | null; last_currency: string | null;
 };
 export type StockMove = {
   id: number; ts: string | null; kind: string; kind_label: string; qty: number; balance: number; unit_cost: number | null;
@@ -44,8 +59,9 @@ export const PO_COLORS: Record<string, string> = {
   draft: "E7E6E6", sent: "FFEB9C", partial: "F8CBAD", received: "C6EFCE", cancelled: "D9D9D9",
 };
 export const WO_COLORS: Record<string, string> = {
-  planned: "E7E6E6", in_progress: "FFEB9C", done: "C6EFCE", cancelled: "D9D9D9",
+  planned: "E7E6E6", in_progress: "FFEB9C", done: "C6EFCE", closed: "BDD7EE", cancelled: "D9D9D9",
 };
+export const OP_COLORS: Record<string, string> = { pending: "E7E6E6", in_progress: "FFEB9C", done: "C6EFCE" };
 
 export const fmtQty = (n: number | null | undefined) =>
   n == null ? "" : n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
