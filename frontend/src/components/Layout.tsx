@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, IdCard, Layers,
-  ListTree, LogOut, Menu, MessageCircle, Moon, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
+  ListTree, LogOut, Menu, MessageCircle, Moon, Network, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -63,6 +63,7 @@ const PROJECT_ITEMS: Item[] = [
   { to: "", label: "Proje özeti", icon: Layers, module: "projects", end: true },
   { to: "/parts", label: "Parça listesi", icon: ListTree, module: "parts" },
   { to: "/fasteners", label: "Bağlantı elemanları", icon: Wrench, module: "fasteners" },
+  { to: "/tree", label: "Ürün ağacı", icon: Network, module: "projects" },
   { to: "/bom", label: "BOM sürümleri", icon: GitCompare, module: "projects" },
   { to: "/drawings", label: "Teknik resimler", icon: FileText, module: "drawings" },
   { to: "/control", label: "Kontrol listesi", icon: ClipboardCheck, module: "control" },

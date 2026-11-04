@@ -474,7 +474,7 @@ function CardView<T>({ p, table, rows, onCheck }: ViewProps<T> & { onCheck: (row
           return (
             <div key={row.id} data-index={vi.index} ref={virt.measureElement}
               className={`dgc${row.getIsSelected() ? " selected" : ""}${p.onRowClick ? " clickable" : ""}`}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, transform: `translateY(${vi.start}px)`, ...(accent ? { borderLeftColor: accent } : {}), ...p.rowStyle?.(row.original) }}
+              style={{ position: "absolute", top: 0, left: 0, right: 0, transform: `translateY(${vi.start}px)`, ...p.rowStyle?.(row.original), ...(accent ? { borderLeftColor: accent } : {}), ...p.rowStyle?.(row.original) }}
               onClick={() => p.onRowClick?.(row.original)}>
               {p.cardLead?.(row.original)}
               <div className="dgc-body">

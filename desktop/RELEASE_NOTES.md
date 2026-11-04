@@ -1,6 +1,13 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.6 yenilikleri
+
+- **Ürün ağacı:** Proje menüsünde yeni ekran. CAD listesi olmadan ürünü montaj montaj kurun: alt montaj ve parça ekleyin, üst montajdaki adeti, temin şeklini, malzemeyi ve ağırlığı yazın, toplam adet kendiliğinden çarpılır.
+- **Kalem seçimi:** Daha önce kullanılan bir numarayı yazınca seçin. Bilgileri gelir, montajsa alt kalemleri de eklenir.
+- **Taslak ve sürüm:** Ağaç kendiliğinden taslak olarak kaydedilir. Var olan bir BOM sürümünden de başlayabilirsiniz. Gönderince bekleyen BOM sürümü olur, karşılaştırıp onaylarsınız.
+- **Gizle:** Parça listesi ve Bağlantı elemanları ekranlarında seçilen satırlar gizlenir. Satır listede kalır, yalnızca soluk görünür; İhtiyaç ekranında da soluktur. Adet, durum ve ihtiyaç hesabı değişmez.
+
 ## 1.5.5 yenilikleri
 
 - **Arka planda çalışma:** Sunucu olan bilgisayarda pencereyi kapatınca sistem artık durmaz. Uygulama gizli simgelere iner, diğer cihazlar çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Sunucuyu durdur ve çık" seçin.

@@ -19,7 +19,7 @@ const EXPORT_TAKIP_LISTESI = (pid: number) => `/excel/${pid}/takip-listesi`;
 
 type View = "tree" | "flat";
 type PartsResp = { version_id: number | null; view: string; total: number; count: number; total_qty: number; rows: PartRow[] };
-type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean };
+type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean; _dim?: boolean };
 type EditVars = { partNo: string; changes: Record<string, unknown> };
 
 const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived",
@@ -62,7 +62,7 @@ function save(key: string, v: unknown): void {
 
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("tr-TR"));
 const getRowId = (r: GridRow) => r._key;
-const rowStyle = (r: GridRow): CSSProperties | undefined => (r.archived ? { opacity: 0.55 } : undefined);
+const rowStyle = (r: GridRow): CSSProperties | undefined => (r._dim ? { opacity: 0.35 } : r.archived ? { opacity: 0.55 } : undefined);
 const cardColor = (r: GridRow) => (r.status_color ? `#${r.status_color}` : undefined);
 const tracked = (r: PartRow) => !r.fastener && !r.archived && (r.depth ?? 1) > 0;
 
@@ -198,9 +198,16 @@ export default function Parts() {
   }, [mainQ.data]);
 
   const data = useMemo<GridRow[]>(() => {
-    if (!showArchived || !archQ.data) return baseRows;
-    return [...baseRows, ...archQ.data.rows.map((r) => ({ ...r, archived: true, _key: `a${r.part_no}` }))];
-  }, [baseRows, showArchived, archQ.data]);
+    // A hidden assembly dims everything below it in the tree
+    const dimmed = new Set<string>();
+    const rows = baseRows.map((r) => {
+      const dim = !!r.hidden || (view === "tree" && !!r.parent_level && dimmed.has(r.parent_level));
+      if (dim && r.level) dimmed.add(r.level);
+      return dim ? { ...r, _dim: true } : r;
+    });
+    if (!showArchived || !archQ.data) return rows;
+    return [...rows, ...archQ.data.rows.map((r) => ({ ...r, archived: true, _dim: r.hidden, _key: `a${r.part_no}` }))];
+  }, [baseRows, showArchived, archQ.data, view]);
 
   const toggleRef = useRef<(key: string) => void>(() => {});
   toggleRef.current = (key: string) =>
@@ -387,6 +394,30 @@ export default function Parts() {
     return [...out];
   }, [selection, data]);
 
+  const selectedFasteners = useMemo(() => {
+    const out = new Set<string>();
+    for (const r of data) if (selection[r._key] && r.fastener && r.fastener_key) out.add(r.fastener_key);
+    return [...out];
+  }, [selection, data]);
+  const selectedCount = selectedPartNos.length + selectedFasteners.length;
+  const allHidden = selectedCount > 0 && data.every((r) => !selection[r._key] || r.hidden || (!r.fastener && (r.depth ?? 1) === 0));
+  const hide = useMutation({
+    mutationFn: async (hidden: boolean) => {
+      if (selectedPartNos.length) {
+        await api.post(`/projects/${pid}/parts/bulk`, { part_nos: selectedPartNos, changes: { hidden } });
+      }
+      if (selectedFasteners.length) {
+        await api.put(`/projects/${pid}/fasteners/settings`, { keys: selectedFasteners, hidden });
+      }
+    },
+    onSuccess: () => {
+      setSelection({});
+      qc.invalidateQueries({ queryKey: ["parts", pid] });
+      qc.invalidateQueries({ queryKey: ["fasteners", pid] });
+    },
+    onError: (e) => toast(errText(e), true),
+  });
+
   const base = (project?.root_part_no || "Proje").replace(/[^\w.-]+/g, "_");
   const xlsxFile = (kind: "pt" | "tl"): MailFile => kind === "pt"
     ? { path: EXPORT_PARCA_TAKIP(pid), name: `${base}_Parca_Takip.xlsx` }
@@ -510,6 +541,10 @@ export default function Parts() {
                   <>
                     <button className="btn small primary" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>
                       Toplu düzenle{selectedPartNos.length ? ` (${selectedPartNos.length.toLocaleString("tr-TR")})` : ""}
+                    </button>
+                    <button className="btn small" disabled={!selectedCount || hide.isPending} onClick={() => hide.mutate(!allHidden)}
+                      title="Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez.">
+                      {allHidden ? "Gizlemeyi kaldır" : "Gizle"}
                     </button>
                   </>
                 )}

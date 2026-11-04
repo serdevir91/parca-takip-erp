@@ -37,6 +37,7 @@ class TrackingPatch(BaseModel):
     manufacturer: str | None = None
     material_status: str | None = None
     is_new: bool | None = None
+    hidden: bool | None = None
 
 
 class BulkIn(BaseModel):
@@ -64,8 +65,9 @@ def _patch_changes(body: TrackingPatch) -> dict[str, Any]:
     ch = body.model_dump(exclude_unset=True)
     if "progress" in ch and ch["progress"] is None:
         raise HTTPException(400, "İlerleme boş olamaz")
-    if "is_new" in ch and ch["is_new"] is None:
-        del ch["is_new"]
+    for f in ("is_new", "hidden"):
+        if f in ch and ch[f] is None:
+            del ch[f]
     return ch
 
 

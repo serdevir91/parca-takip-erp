@@ -21,7 +21,7 @@ fasteners_view, fasteners_edit = require("fasteners", "view"), require("fastener
 
 router = APIRouter(tags=["fasteners"])
 
-SETTING_FIELDS = ("spare_pct", "supplier", "unit", "unit_price", "order_status", "note")
+SETTING_FIELDS = ("spare_pct", "supplier", "unit", "unit_price", "order_status", "note", "hidden")
 TEMPLATE_FIELDS = ("desc", "std", "size", "d", "l")
 
 
@@ -34,6 +34,7 @@ class SettingsIn(BaseModel):
     clear_price: bool = False
     order_status: str | None = None
     note: str | None = None
+    hidden: bool | None = None
 
 
 class RuleIn(BaseModel):

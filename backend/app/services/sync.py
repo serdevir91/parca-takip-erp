@@ -34,4 +34,4 @@ def current(engine: Engine) -> int:
 
 def counts(method: str, path: str, status: int) -> bool:
     return (method in WRITE_METHODS and status < 400 and path.startswith("/api/")
-            and not path.startswith(SKIP_PATHS) and not path.endswith("/preview"))
+            and not path.startswith(SKIP_PATHS) and not path.endswith(("/preview", "/bom/draft")))

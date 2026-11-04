@@ -20,7 +20,7 @@ from .state import temin_choices
 
 # Fields a user may change on a tracking row (inline or bulk edit)
 EDITABLE_FIELDS = ("procurement_override", "progress", "note", "t35_note", "manufacturer",
-                   "material_status", "is_new")
+                   "material_status", "is_new", "hidden")
 
 
 def material_status_choices(db: Session) -> list[str]:
@@ -60,9 +60,9 @@ def clean_changes(db: Session, changes: dict[str, Any]) -> dict[str, Any]:
             if v and v not in choices:
                 raise HTTPException(400, f"Geçersiz malzeme durumu: {v}. Seçenekler: {', '.join(choices)}")
             out[f] = v
-        elif f == "is_new":
+        elif f in ("is_new", "hidden"):
             if not isinstance(v, bool):
-                raise HTTPException(400, "Yeni etiketi doğru/yanlış olmalı")
+                raise HTTPException(400, "Bu alan doğru/yanlış olmalı")
             out[f] = v
         else:  # note, t35_note
             out[f] = "" if v is None else str(v)
@@ -122,7 +122,7 @@ def tracking_view(t: Tracking) -> dict[str, Any]:
     return {
         "id": None, "part_no": t.part_no, "procurement_override": t.procurement_override,
         "progress": t.progress, "note": t.note, "t35_note": t.t35_note, "manufacturer": t.manufacturer,
-        "material_status": t.material_status, "is_new": t.is_new, "archived": t.archived,
+        "material_status": t.material_status, "is_new": t.is_new, "archived": t.archived, "hidden": t.hidden,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None, "updated_by": t.updated_by,
     }
 

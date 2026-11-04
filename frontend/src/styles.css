@@ -488,6 +488,39 @@ div.chat-pick-row { cursor: default; }
   .chat-bubble { max-width: 86%; }
 }
 
+/* === Ürün ağacı === */
+.tree-start { max-width: 640px; }
+.tree-start h3 { margin-top: 0; }
+.tree-start ol { margin: 0 0 14px; padding-left: 20px; line-height: 1.7; }
+.tree-bar { flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tree-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; border-left: 3px solid var(--danger); }
+.tree-alert ul { margin: 0; padding-left: 18px; }
+.tree-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; align-items: start; }
+.tree-list { padding: 6px; max-height: calc(100vh - 210px); overflow: auto; }
+.tree-row { display: flex; align-items: center; gap: 6px; min-height: 30px; padding-right: 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.tree-row:hover { background: var(--surface-2); }
+.tree-row.on { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.tree-fold { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.tree-asm { color: var(--accent); flex: none; }
+.tree-lvl { font-size: 11px; }
+.tree-no { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.tree-qty { font-size: 12px; margin-left: auto; padding-left: 12px; }
+.tree-form { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; position: sticky; top: 8px; }
+.tree-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; min-width: 0; }
+.tree-form input, .tree-form select { width: 100%; }
+.tree-form > .muted { font-size: 12px; }
+.tree-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.tree-pick { position: relative; }
+.tree-picks { position: absolute; z-index: 20; top: 100%; left: 0; right: 0; max-height: 240px; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / .18); }
+.tree-picks button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: none; text-align: left; cursor: pointer; }
+.tree-picks button:hover { background: var(--surface-2); }
+.tree-picks .muted { margin-left: auto; font-size: 12px; }
+@media (max-width: 800px) {
+  .tree-layout { grid-template-columns: minmax(0, 1fr); }
+  .tree-list { max-height: 42vh; }
+  .tree-form { position: static; }
+}
+
 /* === Mobil (telefon) === */
 /* Below 800px the sidebar is an off-canvas menu (Layout navOpen), dialogs become bottom sheets and
    wide tables scroll sideways. The Android app pads the window itself; env() covers iPhone browsers. */

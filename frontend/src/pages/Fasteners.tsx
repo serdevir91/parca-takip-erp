@@ -18,7 +18,7 @@ type FastenerItem = {
   total_qty: number; rows: number; groups: string[]; names: string[];
   spare_pct: number; spare_qty: number; order_qty: number;
   supplier: string; unit: string; unit_price: number | null; total_price: number | null;
-  order_status: string; status_color: string; note: string;
+  order_status: string; status_color: string; note: string; hidden?: boolean;
 };
 type FastenerSummary = {
   items: FastenerItem[]; statuses: string[]; colors: Record<string, string>;
@@ -27,12 +27,12 @@ type FastenerSummary = {
 type FastenerRow = {
   id: number; seq: number; level: string; depth: number; file_name: string; part_no: string;
   qty: number; multiplier: number; total_qty: number; parent_part_no: string | null; main_group: string | null;
-  in_purchased: boolean; fastener_key: string; fastener_type: string | null; fastener_desc: string | null;
+  in_purchased: boolean; hidden?: boolean; fastener_key: string; fastener_type: string | null; fastener_desc: string | null;
   fastener_std: string | null; fastener_size: string | null; status: string; status_color: string;
 };
 type SettingsBody = {
   keys: string[]; spare_pct?: number; supplier?: string; unit?: string; unit_price?: number;
-  clear_price?: boolean; order_status?: string; note?: string;
+  clear_price?: boolean; order_status?: string; note?: string; hidden?: boolean;
 };
 
 /** Pastel badge colours per fastener type (FASTENER_COLORS in the backend are per order status). */
@@ -272,6 +272,7 @@ function SummaryTab(p: {
   }, [visible]);
 
   const selectedKeys = useMemo(() => Object.keys(selection).filter((k) => selection[k]), [selection]);
+  const allHidden = selectedKeys.length > 0 && items.every((i) => !selection[i.key] || i.hidden);
   const targetKeys = selectedKeys.length ? selectedKeys : visible.map((i) => i.key);
 
   return (
@@ -287,9 +288,19 @@ function SummaryTab(p: {
         data={items} columns={columns} getRowId={(r) => r.key}
         onEdit={canEdit ? onEdit : undefined}
         selectable={canEdit} selection={selection} onSelectionChange={setSelection}
+        rowStyle={(r) => (r.hidden ? { opacity: 0.35 } : undefined)}
         onVisibleRowsChange={setVisible}
         emptyText="Bağlantı elemanı yok."
-        toolbar={<span className="muted">Satın alınan montajların içindeki bağlantı elemanları özete dahil değildir.</span>}
+        toolbar={<>
+          {canEdit && (
+            <button className="btn small" disabled={!selectedKeys.length || p.saving}
+              title="Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez."
+              onClick={() => { onSave({ keys: selectedKeys, hidden: !allHidden }); setSelection({}); }}>
+              {allHidden ? "Gizlemeyi kaldır" : "Gizle"}
+            </button>
+          )}
+          <span className="muted">Satın alınan montajların içindeki bağlantı elemanları özete dahil değildir.</span>
+        </>}
       />
       <div className="toolbar fx-foot">
         <b>Genel toplam ({fmtInt(visible.length)} kalem)</b>
@@ -437,7 +448,7 @@ function DetailTab(p: { rows: FastenerRow[]; statuses: string[]; canEdit: boolea
         exportName="Bağlantı elemanı satırları"
         data={data} columns={columns} getRowId={(r) => String(r.id)}
         onEdit={canEdit ? (r, col, v) => { if (col === "status") onSave({ keys: [r.fastener_key], order_status: v }); } : undefined}
-        rowStyle={(r) => (r.in_purchased ? { color: "var(--muted)" } : undefined)}
+        rowStyle={(r) => ({ ...(r.in_purchased ? { color: "var(--muted)" } : {}), ...(r.hidden ? { opacity: 0.35 } : {}) })}
         onVisibleRowsChange={setVisible}
         emptyText="Bağlantı elemanı satırı yok."
         toolbar={

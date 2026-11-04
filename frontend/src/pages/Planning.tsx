@@ -16,7 +16,7 @@ import { FirmSelect, MakerInput, addDays, fmtMoney, fmtQty, useFirms, type Purch
 type Need = {
   code: string; kind: "part" | "fastener"; description: string; unit: string; required: number; procurement: string;
   status: string; status_color: string; progress: string | null; main_group: string; material: string;
-  manufacturer: string; unit_price: number | null; done: boolean; issued: number; on_order: number;
+  manufacturer: string; unit_price: number | null; done: boolean; hidden?: boolean; issued: number; on_order: number;
   in_production: number; stock: number; net_need: number; from_stock: number; shortage: number;
   action: "" | "stock" | "purchase" | "work_order"; unit_cost: number | null;
   purchase_orders: string[]; work_orders: string[];
@@ -123,6 +123,7 @@ function NeedTab() {
         exportName="İhtiyaç listesi"
         data={rows} columns={columns} getRowId={(r) => r.code}
         selectable={canEdit} selection={selection} onSelectionChange={setSelection}
+        rowStyle={(r) => (r.hidden ? { opacity: 0.35 } : undefined)}
         emptyText={quick === "short" ? "Eksik yok." : "Kayıt yok. Projenin onaylı bir BOM sürümü olmalı."}
         toolbar={<>
           {QUICK.map((x) => (

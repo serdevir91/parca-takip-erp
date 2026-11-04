@@ -119,8 +119,10 @@ class ProjectView:
         t = self.tracking.get(r.part_no)
         proc = self.procurement_of(r.part_no, r.procurement, is_asm, r.is_purchased_assembly)
         progress = t.progress if t else PROG_WAIT
+        hidden = bool(t and t.hidden)
         if fastener:
             fs = self.fastener_settings.get(r.fastener_key or "")
+            hidden = bool(fs and fs.hidden)
             status = fs.order_status if fs else FASTENER_ORDER_STATUSES[0]
             color = FASTENER_COLORS.get(status, "")
         else:
@@ -145,7 +147,7 @@ class ProjectView:
             "status_kind": status_kind(proc, is_asm and not r.is_purchased_assembly),
             "note": t.note if t else "", "t35_note": t.t35_note if t else "",
             "manufacturer": t.manufacturer if t else "", "material_status": t.material_status if t else "",
-            "is_new": bool(t and t.is_new), "updated_at": t.updated_at.isoformat() if t and t.updated_at else None,
+            "is_new": bool(t and t.is_new), "hidden": hidden, "updated_at": t.updated_at.isoformat() if t and t.updated_at else None,
             "updated_by": t.updated_by if t else "",
         }
         v.update(self.drawing_info(r.part_no, r.rev))
@@ -232,7 +234,7 @@ class ProjectView:
                     "spare_pct": fs.spare_pct if fs else self.fastener_defaults["spare_pct"], "supplier": fs.supplier if fs else "",
                     "unit": fs.unit if fs else self.fastener_defaults["unit"], "unit_price": fs.unit_price if fs else None,
                     "order_status": fs.order_status if fs else FASTENER_ORDER_STATUSES[0],
-                    "note": fs.note if fs else "",
+                    "note": fs.note if fs else "", "hidden": bool(fs and fs.hidden),
                 }
             it["total_qty"] += r.total_qty
             it["rows"] += 1

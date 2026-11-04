@@ -40,6 +40,9 @@ Proje, BOM, teknik resim, satın alma, stok, iş emri, satış, finans ve person
 <td width="50%"><img src="docs/screenshots/bom.png" alt="BOM sürümleri"><br><b>BOM sürümleri.</b> SolidWorks listesini yükleyin, sürümleri karşılaştırıp onaylayın.</td>
 </tr>
 <tr>
+<td colspan="2"><img src="docs/screenshots/tree.png" alt="Ürün ağacı"><br><b>Ürün ağacı.</b> CAD listesi olmadan ürünü montaj montaj kurun, gönderince BOM sürümü olsun.</td>
+</tr>
+<tr>
 <td><img src="docs/screenshots/drawings.png" alt="Teknik resimler"><br><b>Teknik resimler.</b> PDF ve görselleri parçayla otomatik eşleştirir, revizyonu kontrol eder.</td>
 <td><img src="docs/screenshots/planning.png" alt="İhtiyaç ve maliyet"><br><b>İhtiyaç ve maliyet.</b> Eksik parçaları görün, sipariş ve iş emrine çevirin.</td>
 </tr>
@@ -74,7 +77,7 @@ sunucuda ve bilgisayarda yapılacakları adım adım gösterir. **Bağlantıyı 
 
 | Alan | Özellikler |
 |---|---|
-| **Mühendislik** | Proje ve BOM sürümleri, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
+| **Mühendislik** | Proje ve BOM sürümleri, ürün ağacı oluşturma, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
 | **Üretim** | İhtiyaç analizi, iş emirleri, stok kartları ve hareketleri, proje maliyeti |
 | **Ticari** | Satın alma, cari kartlar, teklif, satış siparişi, fatura, tahsilat ve ödeme |
 | **Ekip** | Personel kartları, zaman kaydı, sohbet, e-posta ile paylaşım |
@@ -416,6 +419,16 @@ Gerçek kullanımda demo projeleri arşivleyin veya bu komutu çalıştırmayın
 Parça takibinin yanında küçük bir üretim ERP'si bulunur. Akış: BOM yüklenir, ihtiyaç hesaplanır, eksikler
 stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projeye yazılır.
 
+- **Ürün ağacı** (proje menüsü): SolidWorks listesi olmayan ürünler için BOM'u elle kurar. Üst üründen
+  başlanır; montajların altına parça ve alt montaj eklenir, her satıra üst montajdaki adet, temin şekli,
+  malzeme, ağırlık ve kaplama yazılır. Toplam adet çarpılarak gösterilir. Daha önce kullanılan bir numara
+  seçilince bilgileri, montajsa alt kalemleri de gelir. Var olan bir BOM sürümünden de başlanabilir.
+  Taslak kendiliğinden kaydedilir. Gönderilen ağaç bekleyen BOM sürümü olur; karşılaştırma ve onay her
+  zamanki gibi BOM sürümleri ekranından yapılır.
+- **Gizle:** Parça listesi ve Bağlantı elemanları ekranlarında seçilen satırlar gizlenir. Satırlar listede
+  kalır, yalnızca soluk görünür; İhtiyaç & Maliyet ekranında da soluktur. Adet, durum ve ihtiyaç hesabı
+  değişmez. Ağaç görünümünde gizlenen montajın altındaki satırlar da soluklaşır. Aynı düğme
+  "Gizlemeyi kaldır" olarak geri alır.
 - **Parça Listesi filtresi:** "Göster" düğmeleriyle parça, montaj, satın alınan montaj ve bağlantı elemanı
   satırları ayrı ayrı gizlenip gösterilir. Ağaç görünümünde eşleşen satırların üst montajları korunur.
   Seçim her görünüm için ayrı hatırlanır.

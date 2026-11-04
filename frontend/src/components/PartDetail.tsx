@@ -21,7 +21,7 @@ export type PartRow = {
   in_purchased?: boolean; is_purchased_assembly?: boolean; nonstandard?: boolean; alias?: string | null;
   counted?: boolean; fastener?: boolean; fastener_desc?: string | null;
   progress: string; status?: string; status_color?: string; status_kind?: string | null;
-  note: string; t35_note: string; manufacturer: string; material_status: string; is_new: boolean;
+  note: string; t35_note: string; manufacturer: string; material_status: string; is_new: boolean; hidden?: boolean; fastener_key?: string | null;
   updated_at: string | null; updated_by: string;
   has_drawing?: boolean; drawing_ids?: number[]; drawing_rev?: string; drawing_rev_mismatch?: boolean;
   levels?: string[]; main_groups?: string[]; row_ids?: number[]; rows?: number;

@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Parts = lazy(() => import("./pages/Parts"));
 const Fasteners = lazy(() => import("./pages/Fasteners"));
 const BomVersions = lazy(() => import("./pages/BomVersions"));
+const BomTree = lazy(() => import("./pages/BomTree"));
 const Drawings = lazy(() => import("./pages/Drawings"));
 const Control = lazy(() => import("./pages/Control"));
 const Admin = lazy(() => import("./pages/Admin"));
@@ -51,6 +52,7 @@ export default function App() {
           <Route index element={<M m="projects"><Dashboard /></M>} />
           <Route path="parts" element={<M m="parts"><Parts /></M>} />
           <Route path="fasteners" element={<M m="fasteners"><Fasteners /></M>} />
+          <Route path="tree" element={<M m="projects"><BomTree /></M>} />
           <Route path="bom" element={<M m="projects"><BomVersions /></M>} />
           <Route path="drawings" element={<M m="drawings"><Drawings /></M>} />
           <Route path="control" element={<M m="control"><Control /></M>} />

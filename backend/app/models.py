@@ -59,6 +59,8 @@ class Project(Base):
         ForeignKey("bom_versions.id", use_alter=True, ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Ürün ağacı work in progress: {tree, rev, by, at}; sent trees become BOM versions
+    bom_draft: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class Part(Base):
@@ -147,6 +149,8 @@ class Tracking(Base):
     material_status: Mapped[str] = mapped_column(String(64), default="")
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Shown dimmed in the lists; quantities and statuses do not change
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     updated_by: Mapped[str] = mapped_column(String(64), default="")
 
@@ -206,6 +210,7 @@ class FastenerSetting(Base):
     unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     order_status: Mapped[str] = mapped_column(String(32), default="Sipariş Verilmedi")
     note: Mapped[str] = mapped_column(Text, default="")
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (UniqueConstraint("project_id", "key", name="uq_fastener_setting"),)
 

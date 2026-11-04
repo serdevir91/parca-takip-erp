@@ -144,6 +144,7 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 - Sağ üstteki **Liste / Tablo** düğmesi Excel benzeri tabloya geçer. Seçim cihazda hatırlanır.
 - **Ara** kutusu tüm sütunlarda arar. **Filtre** düğmesi sütun filtrelerini açar.
 - Kartta düzenlenebilir alanların altı kesik çizgilidir; dokunup değiştirin. ✎ düğmesi boş alanları da gösterir.
+- Parça listesi ve Bağlantı elemanları ekranında satırları seçip **Gizle** deyin: satır listede kalır, yalnızca soluk görünür. Hesaplar değişmez.
 
 ## Sorun giderme
 

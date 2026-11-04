@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api, download, upload } from "../api/client";
 import { useAuth } from "../api/auth";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
@@ -226,6 +227,7 @@ function UploadCard({ pid, onDone }: { pid: number; onDone: (v: BomVersion) => v
       </div>
       <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
         SolidWorks BOM dışa aktarımı (.csv, ayraç “;”). Yüklenen sürüm onaylanana kadar takip listesini değiştirmez.
+        Dosyanız yoksa <Link to={`/p/${pid}/tree`}>ürün ağacını elle oluşturun</Link>.
       </div>
       {pct !== null && (
         <div style={{ marginTop: 8 }}>

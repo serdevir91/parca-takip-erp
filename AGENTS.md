@@ -22,9 +22,11 @@ Read this file first. Do not re-scan the whole project.
 - `app/core/` holds pure logic with no DB access:
   - BOM parse (`bomparse`), compare (`compare`) and status rules (`status`, spec §5).
   - Fastener matcher (`fastener`), T-35 import (`t35`), drawing match (`drawmatch`) and control list (`control`).
+  - Product tree (`bomtree`): validates a nested tree and writes it as the SolidWorks CSV, so `bomimport.upload_bom` handles it like any upload. No separate row model.
 - `app/services/` holds the DB-backed logic:
   - `bomimport`: upload, approve and undo. These functions do not commit; the API layer commits.
   - `state.ProjectView`: the read model every screen uses.
+  - `Tracking.hidden` and `FastenerSetting.hidden` only dim rows (Parça listesi, Bağlantı elemanları, İhtiyaç). They never change quantities, status or requirements.
   - `settings`: admin-editable JSON settings.
   - `excel_export` / `excel_import`, `drawings` / `thumbs`, `backup` and `audit`.
   - `erp`: purchasing, stock, work orders, requirements (MRP) and project costs. Its API routers are
