@@ -143,7 +143,8 @@
       });
     }
     var q = new URLSearchParams(location.search);
-    if (q.get("error")) msg("Sunucu açılamadı: " + q.get("error") + ". Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.", "err");
+    if (q.get("cert")) msg("Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin.", "err");
+    else if (q.get("error")) msg("Sunucu açılamadı: " + q.get("error") + ". Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.", "err");
     else if (!cfg.server) scan();
   }
 </script>

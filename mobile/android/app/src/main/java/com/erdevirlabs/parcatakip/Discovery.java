@@ -86,7 +86,8 @@ final class Discovery {
                 try {
                     JSONObject r = new JSONObject(new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8));
                     int port = r.optInt("port", 8000);
-                    String url = "http://" + p.getAddress().getHostAddress() + (port == 80 ? "" : ":" + port);
+                    String scheme = "https".equals(r.optString("scheme")) ? "https" : "http";
+                    String url = scheme + "://" + p.getAddress().getHostAddress() + (port == 80 ? "" : ":" + port);
                     found.put(url, new JSONObject()
                             .put("url", url)
                             .put("name", r.optString("name", ""))
@@ -139,6 +140,7 @@ final class Discovery {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
+            Pin.apply(c, null);   // only asks whether a server is there; no token goes out on this connection
             c.setConnectTimeout(timeoutMs);
             c.setReadTimeout(Math.max(timeoutMs, 3000));
             c.setRequestProperty("Accept", "application/json");

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The ERP server runs on the local network over plain HTTP (no domain, no certificate). -->
+<!-- A server on the local network stays on plain HTTP until HTTPS is turned on in Yönetim. HTTPS servers use a
+     self-signed certificate, which the app pins itself (Pin.java), so no anchor is added here. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>

@@ -1,13 +1,16 @@
 package com.erdevirlabs.parcatakip;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -21,6 +24,8 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
+import android.webkit.PermissionRequest;
+import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -44,6 +49,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -60,6 +66,8 @@ public class MainActivity extends Activity {
     private static final String SETUP = "file:///android_asset/setup.html";
     private static final String RELEASES = "https://api.github.com/repos/serdevir91/parca-takip-erp/releases/latest";
     private static final int REQ_FILES = 1;
+    private static final int REQ_CAMERA = 2;
+    private static final int REQ_CHOOSER_CAMERA = 3;
 
     private WebView web;
     private FrameLayout root;
@@ -69,6 +77,9 @@ public class MainActivity extends Activity {
     private volatile String pageOrigin = "";
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
+    private PermissionRequest cameraRequest;
+    private WebChromeClient.FileChooserParams chooserParams;
+    private boolean cameraAsked;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -186,12 +197,22 @@ public class MainActivity extends Activity {
                 if (!req.isForMainFrame() || req.getUrl().toString().startsWith("file:")) return;
                 showSetup("error=" + enc(String.valueOf(err.getDescription())));
             }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError err) {
+                checkCertificate(handler, err);
+            }
         });
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
                 return openChooser(cb, params);
+            }
+
+            @Override
+            public void onPermissionRequest(PermissionRequest req) {
+                askCamera(req);
             }
         });
 
@@ -205,13 +226,100 @@ public class MainActivity extends Activity {
         web.loadUrl(SETUP + (query.isEmpty() ? "" : "?" + query));
     }
 
+    // ---- server certificate (see Pin) ---------------------------------------------------------
+
+    private void checkCertificate(SslErrorHandler handler, SslError err) {
+        String origin = originOf(err.getUrl());
+        String seen;
+        try {
+            seen = Pin.fingerprint(err.getCertificate());
+        } catch (Exception e) {
+            seen = "";
+        }
+        if (seen.isEmpty() || server().isEmpty() || !origin.equals(server())) {
+            handler.cancel();
+            return;
+        }
+        String pinned = prefs.getString("pin:" + origin, null);
+        if (seen.equals(pinned)) {
+            handler.proceed();
+            return;
+        }
+        if (pinned != null) {
+            handler.cancel();
+            showSetup("cert=changed");
+            return;
+        }
+        String fingerprint = seen;
+        new AlertDialog.Builder(this)
+                .setTitle("Sunucu sertifikası")
+                .setMessage("Bu sunucuya ilk kez güvenli bağlanılıyor. Parmak izi:\n\n" + Pin.pretty(fingerprint)
+                        + "\n\nSunucuda Yönetim > HTTPS ekranındaki parmak izi ile aynı mı?")
+                .setCancelable(false)
+                .setPositiveButton("Aynı, güven", (d, w) -> {
+                    prefs.edit().putString("pin:" + origin, fingerprint).apply();
+                    handler.proceed();
+                })
+                .setNegativeButton("Vazgeç", (d, w) -> {
+                    handler.cancel();
+                    showSetup("");
+                })
+                .show();
+    }
+
+    /** A remembered server keeps its pin; everything else goes by the system's trust store. */
+    private HttpURLConnection open(String url) throws Exception {
+        HttpURLConnection c = open(url);
+        String pin = prefs.getString("pin:" + originOf(url), null);
+        if (pin != null) Pin.apply(c, pin);
+        return c;
+    }
+
+    // ---- camera -------------------------------------------------------------------------------
+
+    private boolean hasCamera() {
+        return checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void askCamera(PermissionRequest req) {
+        boolean camera = Arrays.asList(req.getResources()).contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
+        if (!camera || server().isEmpty() || !originOf(req.getOrigin().toString()).equals(server())) {
+            req.deny();
+        } else if (hasCamera()) {
+            req.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+        } else {
+            if (cameraRequest != null) cameraRequest.deny();
+            cameraRequest = req;
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(req, permissions, results);
+        if (req == REQ_CAMERA && cameraRequest != null) {
+            if (hasCamera()) cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+            else cameraRequest.deny();
+            cameraRequest = null;
+        } else if (req == REQ_CHOOSER_CAMERA && chooserParams != null) {
+            WebChromeClient.FileChooserParams params = chooserParams;
+            ValueCallback<Uri[]> cb = fileCallback;
+            chooserParams = null;
+            if (!showChooser(params) && cb != null) cb.onReceiveValue(null);
+        }
+    }
+
     // ---- file chooser -------------------------------------------------------------------------
 
     private boolean openChooser(ValueCallback<Uri[]> cb, WebChromeClient.FileChooserParams params) {
         if (fileCallback != null) fileCallback.onReceiveValue(null);
         fileCallback = cb;
         cameraUri = null;
+        cameraAsked = false;
+        return showChooser(params);
+    }
 
+    private boolean showChooser(WebChromeClient.FileChooserParams params) {
         List<String> types = new ArrayList<>();
         boolean images = false;
         for (String t : params.getAcceptTypes()) {
@@ -234,7 +342,14 @@ public class MainActivity extends Activity {
         if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
 
         Intent chooser = Intent.createChooser(pick, "Dosya seç");
-        if (images || params.isCaptureEnabled()) {
+        if ((images || params.isCaptureEnabled()) && !hasCamera() && !cameraAsked) {
+            // With CAMERA in the manifest, the camera app refuses to start until the user has allowed it.
+            cameraAsked = true;
+            chooserParams = params;
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CHOOSER_CAMERA);
+            return true;
+        }
+        if ((images || params.isCaptureEnabled()) && hasCamera()) {
             try {
                 File dir = new File(getCacheDir(), "camera");
                 dir.mkdirs();
@@ -285,7 +400,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             HttpURLConnection c = null;
             try {
-                c = (HttpURLConnection) new URL(url).openConnection();
+                c = open(url);
                 c.setConnectTimeout(8000);
                 c.setReadTimeout(60000);
                 if (token != null && !token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
@@ -324,7 +439,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             HttpURLConnection c = null;
             try {
-                c = (HttpURLConnection) new URL(url).openConnection();
+                c = open(url);
                 c.setConnectTimeout(8000);
                 c.setReadTimeout(60000);
                 if (token != null && !token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
@@ -614,7 +729,11 @@ public class MainActivity extends Activity {
             String base = normalize(url);
             new Thread(() -> {
                 JSONObject r = base.isEmpty() ? null : Discovery.check(base, 4000);
-                callback(cb, r == null ? "null" : r.toString());
+                if (r == null && !base.isEmpty() && !url.trim().matches("(?i)^https?://.*")) {
+                    r = Discovery.check("https" + base.substring(4), 4000);
+                }
+                JSONObject found = r;
+                callback(cb, found == null ? "null" : found.toString());
             }).start();
         }
 
@@ -646,7 +765,8 @@ public class MainActivity extends Activity {
                 JSONArray old = new JSONArray(prefs.getString("recent", "[]"));
                 JSONArray recent = new JSONArray();
                 for (int i = 0; i < old.length(); i++) if (!old.optString(i).equals(url)) recent.put(old.optString(i));
-                prefs.edit().putString("recent", recent.toString()).apply();
+                prefs.edit().putString("recent", recent.toString()).remove("pin:" + url).apply();
+                ui.post(() -> web.clearSslPreferences());
             } catch (Exception ignored) {
             }
         }
