@@ -114,6 +114,7 @@ User=laberp
 Group=laberp
 WorkingDirectory=$APP/backend
 EnvironmentFile=$ENVF
+Environment=ERP_SUPERVISED=1
 ExecStart=$APP/venv/bin/python -m app.cli serve --host 0.0.0.0 --port $PORT
 Restart=always
 RestartSec=5

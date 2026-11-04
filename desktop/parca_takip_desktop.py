@@ -19,6 +19,8 @@ Background self-test (CI):        LabERP.exe --tray-test <result.json>  (server 
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import os
@@ -26,6 +28,7 @@ import re
 import secrets
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -58,6 +61,8 @@ from app.config import Settings  # noqa: E402  (no settings are read at import t
 APP_NAME = "LAB ERP"
 VERSION = Settings.model_fields["app_version"].default
 REPO = "serdevir91/parca-takip-erp"
+# Ed25519 key that signs released installers (desktop/sign_update.py); an update without its signature is refused
+UPDATE_PUBLIC_KEY = "LcnjITZ7xT9z9qLxa8JxOtudvS+AW/K0EGT68gvPdcw="
 DEFAULT_PORT = 8000
 IS_WIN = sys.platform == "win32"
 INSTANCE_PORT = 47812         # loopback only: a second start asks the running app to show its window
@@ -127,16 +132,43 @@ def normalize_url(u: str) -> str:
     return u
 
 
-def http_json(url: str, timeout: float = 5, **kw) -> dict:
+def http_json(url: str, timeout: float = 5, context: ssl.SSLContext | None = None, **kw) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": f"ParcaTakipERP/{VERSION}",
                                                **kw.pop("headers", {})}, **kw)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=context) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
+# ---------- HTTPS with the server's own certificate ----------
+# No certificate authority knows that certificate, so the app remembers it on first contact (the user compares
+# the fingerprint) and afterwards trusts only that one. WebView2 cannot be given a pin: it ignores certificate
+# errors, and _check_pin compares the certificate before every connect instead.
+def unverified_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def pinned_context(der: bytes) -> ssl.SSLContext:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False     # the address may change; the certificate itself is what is checked
+    ctx.load_verify_locations(cadata=der)
+    return ctx
+
+
+def peer_certificate(url: str, timeout: float = 6) -> bytes:
+    u = urllib.parse.urlsplit(url)
+    with socket.create_connection((u.hostname, u.port or 443), timeout=timeout) as raw:
+        with unverified_context().wrap_socket(raw, server_hostname=u.hostname) as s:
+            return s.getpeercert(True)
+
+
 def is_erp(base: str, timeout: float = 3) -> bool:
+    """Only "is something there": no credentials travel on this call, so the certificate does not matter yet."""
+    ctx = unverified_context() if base.startswith("https://") else None
     try:
-        return http_json(f"{base}/api/health", timeout).get("status") == "ok"
+        return http_json(f"{base}/api/health", timeout, ctx).get("status") == "ok"
     except (OSError, ValueError):
         return False
 
@@ -192,8 +224,14 @@ class EmbeddedServer:
         })
 
     @property
+    def scheme(self) -> str:
+        from app.services import tls
+
+        return "https" if tls.enabled(self.data_dir / "data") else "http"
+
+    @property
     def local_url(self) -> str:
-        return f"http://127.0.0.1:{self.port}"
+        return f"{self.scheme}://127.0.0.1:{self.port}"
 
     def start(self, timeout: float = 90) -> None:
         for sub in ("data", "yedek"):
@@ -203,16 +241,17 @@ class EmbeddedServer:
         from app import cli
         from app.config import get_settings
 
-        from app.services import discovery
+        from app.services import discovery, tls
 
         cli.migrate()
         threading.Thread(target=cli.backup_daemon, args=(get_settings().backup_time,), name="backup",
                          daemon=True).start()
-        discovery.start_responder(self.port, VERSION)
+        discovery.start_responder(self.port, VERSION, self.scheme, tls.fingerprint(self.data_dir / "data"))
         from app.main import app  # imported here (not by name) so the bundler sees it
 
         config = uvicorn.Config(app, host="0.0.0.0", port=self.port, workers=1, log_config=None,
-                                timeout_keep_alive=75, proxy_headers=True, forwarded_allow_ips="127.0.0.1")
+                                timeout_keep_alive=75, proxy_headers=True, forwarded_allow_ips="127.0.0.1",
+                                **tls.uvicorn_args(self.data_dir / "data"))
         self.server = uvicorn.Server(config)
         t = threading.Thread(target=self._run, name="uvicorn", daemon=True)
         t.start()
@@ -239,8 +278,25 @@ def version_tuple(v: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
 
 
+def verify_update(installer: Path, signature: bytes) -> bool:
+    """True when the installer carries the release key's signature (desktop/sign_update.py)."""
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    digest = hashlib.sha256()
+    with open(installer, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            digest.update(chunk)
+    try:
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(UPDATE_PUBLIC_KEY)).verify(signature, digest.digest())
+        return True
+    except InvalidSignature:
+        return False
+
+
 def latest_release() -> dict | None:
-    """{"version", "url" (release page), "asset" (installer URL or None), "notes"} or None if not newer."""
+    """{"version", "url" (release page), "asset" (installer URL or None), "signature", "notes"} or None if
+    not newer."""
     data = http_json(f"https://api.github.com/repos/{REPO}/releases/latest", timeout=8,
                      headers={"Accept": "application/vnd.github+json"})
     ver = str(data.get("tag_name", "")).lstrip("vV")
@@ -248,7 +304,10 @@ def latest_release() -> dict | None:
         return None
     asset = next((a["browser_download_url"] for a in data.get("assets", [])
                   if a.get("name", "").lower().endswith(".exe")), None)
-    return {"version": ver, "url": data.get("html_url"), "asset": asset, "notes": data.get("body") or ""}
+    signature = next((a["browser_download_url"] for a in data.get("assets", [])
+                      if a.get("name", "").lower().endswith(".exe.sig")), None)
+    return {"version": ver, "url": data.get("html_url"), "asset": asset, "signature": signature,
+            "notes": data.get("body") or ""}
 
 
 # ---------- files from the API (downloads, opening drawings) ----------
@@ -292,9 +351,33 @@ class DesktopApp:
         self._quitting = False   # False: the close button only hides the window while the tray is up
         self._hint_shown = False
         self._setup_html = (ASSETS / "setup.html").read_text(encoding="utf-8")
+        self._on_setup = True    # False while the window shows a page of the server
+
+    # The API object is open to whatever page the window shows, and that page comes from a server. So what
+    # setup.html needs works only while the window shows our own pages, and the rest only for the connected
+    # server. The checks are plain calls because pywebview reads each method's parameter names.
+    def _setup_only(self) -> None:
+        if not self._on_setup:
+            raise PermissionError("Bu işlem yalnızca ayarlar ekranından yapılabilir")
+
+    def _app_only(self) -> None:
+        url = None if self._on_setup else self._window.get_current_url()
+        if url and self._base and not (url == self._base or url.startswith(self._base + "/")):
+            raise PermissionError("Bu sayfa uygulama işlemlerini kullanamaz")
+
+    def _context(self) -> ssl.SSLContext | None:
+        """How to talk to the connected server with credentials: only the certificate seen and approved."""
+        if not self._base.startswith("https://"):
+            return None
+        if self._server is not None:
+            from app.services import tls
+
+            return pinned_context(ssl.PEM_cert_to_DER_cert(tls.files(self._server.data_dir / "data")[0].read_text()))
+        return pinned_context(base64.b64decode(self._cfg["server_cert"]))
 
     # --- state for setup.html ---
     def get_state(self) -> dict:
+        self._setup_only()
         c = self._cfg
         if UI_TEST is not None:
             title_bar = self._paint_title_bar({"dark": True, "caption": "#0f172a", "text": "#e6e9ee"})
@@ -310,36 +393,42 @@ class DesktopApp:
         }
 
     def pick_folder(self, current: str = "") -> str | None:
+        self._setup_only()
         import webview
 
         r = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=current or str(Path.home()))
         return r[0] if r else None
 
     def data_dir_has_db(self, folder: str) -> bool:
+        self._setup_only()
         return bool(folder) and (Path(folder) / "erp.db").is_file()
 
     def test_server(self, url: str) -> dict:
+        self._setup_only()
         u = normalize_url(url)
         if not u:
             return {"ok": False, "error": "Sunucu adresini yazın"}
-        return {"ok": True, "url": u} if is_erp(u, 5) else {
+        return {"ok": True, "url": u, "https": u.startswith("https://")} if is_erp(u, 5) else {
             "ok": False, "error": f"{u} adresinde LAB ERP sunucusu bulunamadı"}
 
     def discover(self) -> list[dict]:
+        self._setup_only()
         from app.services.discovery import discover
 
-        own = {f"http://{ip}:{self._server.port}" for ip in lan_addresses()} if self._server else set()
+        own = {f"{self._server.scheme}://{ip}:{self._server.port}" for ip in lan_addresses()} if self._server else set()
         return [s for s in discover() if s["url"] not in own]
 
     # ---- "Sunucuma kur": install the server on a Linux machine over SSH (remote_install.py) ----
 
     def pick_key_file(self) -> str | None:
+        self._setup_only()
         import webview
 
         r = self._window.create_file_dialog(webview.FileDialog.OPEN, directory=str(Path.home() / ".ssh"))
         return r[0] if r else None
 
     def remote_install(self, form: dict) -> dict:
+        self._setup_only()
         from remote_install import RemoteInstall, build_package
 
         if self._remote is not None and not self._remote.done:
@@ -360,6 +449,7 @@ class DesktopApp:
         return {"ok": True}
 
     def remote_check(self, form: dict) -> dict:
+        self._setup_only()
         """Read-only look at the server before installing; the guide on the setup page shows the answers."""
         from remote_install import RemoteInstall
 
@@ -370,11 +460,13 @@ class DesktopApp:
         return job.check()
 
     def remote_status(self) -> dict:
+        self._setup_only()
         return self._remote.status() if self._remote else {"done": True, "ok": False, "lines": [], "error": ""}
 
     def apply_settings(self, form: dict) -> dict:
         """Save the setup form and connect. A running embedded server cannot switch settings in-process,
         so in that case the app restarts itself."""
+        self._setup_only()
         mode = form.get("mode")
         cfg = dict(self._cfg)
         cfg.pop("_error", None)
@@ -400,6 +492,9 @@ class DesktopApp:
             if not t["ok"]:
                 return t
             cfg.update(mode="client", server_url=t["url"])
+            # Saving the form is how a user accepts a server with a new certificate: it is asked for again
+            cfg.pop("server_fingerprint", None)
+            cfg.pop("server_cert", None)
         else:
             return {"ok": False, "error": "Çalışma şeklini seçin"}
         self._cfg = cfg
@@ -415,6 +510,7 @@ class DesktopApp:
 
     def file_request(self, req: dict) -> dict:
         """Fetch /api<path> with the user's token, then save it (dialog) or open it with the default program."""
+        self._app_only()
         import webview
 
         path = str(req.get("path") or "")
@@ -430,7 +526,7 @@ class DesktopApp:
         r = urllib.request.Request(f"{self._base}/api{path}", data=data, headers=headers,
                                    method=str(req.get("method") or ("POST" if data else "GET")))
         try:
-            resp = urllib.request.urlopen(r, timeout=600)
+            resp = urllib.request.urlopen(r, timeout=600, context=self._context())
         except urllib.error.HTTPError as e:
             detail = ""
             try:
@@ -471,6 +567,7 @@ class DesktopApp:
         return self._setup_html.replace("<body>", '<body class="loading">', 1)
 
     def _show_html(self, html: str) -> None:
+        self._on_setup = True
         # While WebView2 is still starting (first run on a new PC takes seconds), pywebview drops
         # load_html and later shows window.html, the page the window was created with. Keep that in step,
         # or the window stays on the "açılıyor" screen for good.
@@ -489,6 +586,34 @@ class DesktopApp:
         elif '<body class="loading">' in (self._window.html or ""):
             self._show_html(self._setup_html)
         threading.Thread(target=self._check_update, args=(True,), daemon=True).start()
+
+    def _open_server(self, url: str) -> None:
+        self._on_setup = False
+        self._window.load_url(url)
+
+    def _check_pin(self, url: str) -> str | None:
+        """Why this https server must not be used, or None. The first contact asks the user."""
+        c = self._cfg
+        try:
+            der = peer_certificate(url)
+        except OSError as e:
+            return f"{url} ile güvenli bağlantı kurulamadı: {e}"
+        seen = hashlib.sha256(der).hexdigest()
+        pin = c.get("server_fingerprint")
+        if pin == seen:
+            return None
+        if pin:
+            log.warning("server certificate changed: %s", url)
+            return ("GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlanılmadı. Araya biri girmiş olabilir. "
+                    "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin.")
+        pretty = " ".join(seen[i:i + 4] for i in range(0, len(seen), 4))
+        if not self._window.create_confirmation_dialog(
+                "Güvenli bağlantı", f"{url} sunucusuna ilk kez güvenli bağlanılıyor.\n\nParmak izi:\n{pretty}\n\n"
+                                    "Sunucuda Yönetim > HTTPS ekranındaki parmak iziyle aynıysa onaylayın."):
+            return "Sunucunun parmak izi onaylanmadı, bağlanılmadı."
+        c.update(server_fingerprint=seen, server_cert=base64.b64encode(der).decode())
+        save_config({k: v for k, v in c.items() if not k.startswith("_")})
+        return None
 
     def _fail(self, msg: str) -> None:
         log.error("%s", msg)
@@ -512,13 +637,28 @@ class DesktopApp:
                     return self._fail(f"{url} adresindeki sunucuya bağlanılamadı. Sunucu bilgisayarın açık, "
                                       "uygulamanın çalışır ve iki cihazın aynı ağda olduğunu kontrol edin."
                                       + (" Ağda birden fazla sunucu var, birini seçin." if found else ""))
-                log.info("server moved: %s -> %s", url, found[0]["url"])
-                url = c["server_url"] = found[0]["url"]
+                # A discovery answer proves nothing, anyone on the LAN can send one. Without a matching pin
+                # (checked for real by _check_pin below) the user decides.
+                new = found[0]["url"]
+                known = c.get("server_fingerprint")
+                if not (known and found[0].get("fingerprint") == known) and not self._window.create_confirmation_dialog(
+                        "Sunucu adresi", f"{url} yanıt vermiyor. Ağda {new} adresinde bir sunucu bulundu.\n\n"
+                                         "Bu sizin sunucunuzsa ve adresi değiştiyse onaylayın."):
+                    return self._fail(f"{url} adresindeki sunucuya bağlanılamadı.")
+                log.info("server moved: %s -> %s", url, new)
+                url = c["server_url"] = new
                 save_config({k: v for k, v in c.items() if not k.startswith("_")})
+            if url.startswith("https://"):
+                refused = self._check_pin(url)
+                if refused:
+                    return self._fail(refused)
             self._base = url
         else:
             port = int(c.get("port", DEFAULT_PORT))
-            local = f"http://127.0.0.1:{port}"
+            from app.services import tls
+
+            scheme = "https" if tls.enabled(Path(c["data_dir"]) / "data") else "http"
+            local = f"{scheme}://127.0.0.1:{port}"
             # After a restart the old process may still hold the port for a moment
             for _ in range(50):
                 if port_free(port):
@@ -528,7 +668,7 @@ class DesktopApp:
                 if is_erp(local):
                     log.info("port %s already serves an ERP; connecting to it", port)
                     self._base = local
-                    self._window.load_url(local + "/")
+                    self._open_server(local + "/")
                     return None
                 return self._fail(f"{port} numaralı port başka bir program tarafından kullanılıyor. "
                                   "Ayarlardan başka bir port seçin.")
@@ -543,7 +683,7 @@ class DesktopApp:
             self._start_background()
         self._cfg.pop("_error", None)
         log.info("opening %s", self._base)
-        self._window.load_url(self._base + "/")
+        self._open_server(self._base + "/")
         return None
 
     # --- background mode: the server outlives the window until "Sunucuyu durdur ve çık" in the tray ---
@@ -705,18 +845,29 @@ class DesktopApp:
         msg = f"Yeni sürüm {rel['version']} hazır (kullandığınız sürüm {VERSION})."
         if IS_WIN and rel["asset"]:
             if self._window.create_confirmation_dialog("Güncelleme", msg + "\n\nŞimdi indirip kurulsun mu?"):
-                self._install_update(rel["asset"])
+                self._install_update(rel["asset"], rel["signature"])
         elif self._window.create_confirmation_dialog("Güncelleme", msg + "\n\nİndirme sayfası açılsın mı?"):
             webbrowser.open(rel["url"])
 
-    def _install_update(self, url: str) -> None:
+    def _install_update(self, url: str, signature_url: str | None) -> None:
+        if not signature_url:
+            self._alert("Bu güncellemenin imzası henüz yayımlanmamış. Birazdan yeniden deneyin.")
+            return
         target = Path(tempfile.gettempdir()) / safe_name(url.rsplit("/", 1)[-1], "LabERP-Setup.exe")
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": f"ParcaTakipERP/{VERSION}"})
+            headers = {"User-Agent": f"ParcaTakipERP/{VERSION}"}
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=600) as r, open(target, "wb") as f:
                 shutil.copyfileobj(r, f, 1024 * 1024)
+            with urllib.request.urlopen(urllib.request.Request(signature_url, headers=headers), timeout=30) as r:
+                signature = r.read(1024)
         except OSError as e:
             self._alert(f"Güncelleme indirilemedi.\n{e}")
+            return
+        if not verify_update(target, signature):
+            target.unlink(missing_ok=True)
+            log.error("update signature check failed: %s", url)
+            self._alert("Güncelleme dosyasının imzası doğrulanamadı, dosya silindi ve kurulmadı.")
             return
         # The installer closes this app, updates it and starts it again (postinstall entry in installer.iss)
         subprocess.Popen([str(target), "/SILENT", "/NORESTART"], close_fds=True)
@@ -726,22 +877,26 @@ class DesktopApp:
     # The native WinForms menu bar was white in every theme, so its actions now live in the themed web UI.
 
     def app_info(self) -> dict:
-        urls = [f"http://{ip}:{self._server.port}" for ip in lan_addresses()] if self._server else []
+        self._app_only()
+        urls = [f"{self._server.scheme}://{ip}:{self._server.port}" for ip in lan_addresses()] if self._server else []
         return {"version": VERSION, "mode": "server" if self._server else "client", "base": self._base or "",
                 "addresses": urls, "data_dir": str(self._server.data_dir) if self._server else "",
                 "background": self._tray is not None,
                 "config": str(CONFIG_FILE)}
 
     def app_action(self, name: str) -> dict:
+        self._app_only()
         if name == "reload":
             if self._base:
-                self._window.load_url(self._base + "/")
+                self._open_server(self._base + "/")
         elif name == "settings":
             self.show_settings()
         elif name == "open_data":
             if self._server is None:
                 return {"ok": False, "error": "Veri klasörü yalnızca sunucu modunda bu bilgisayardadır."}
             open_folder(self._server.data_dir)
+        elif name == "restart":
+            threading.Timer(0.2, self._restart).start()
         elif name == "update":
             threading.Thread(target=self._check_update, args=(False,), daemon=True).start()
         elif name == "quit":
@@ -800,6 +955,7 @@ class DesktopApp:
 
         webview.settings["ALLOW_DOWNLOADS"] = True
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+        webview.settings["IGNORE_SSL_ERRORS"] = True    # the server's own certificate; see _check_pin
         server_mode = self._cfg.get("mode") == "server"
         first = self._setup_html if self._cfg.get("mode") not in ("server", "client") else self._loading_html()
         self._window = webview.create_window(

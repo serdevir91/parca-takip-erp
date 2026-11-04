@@ -12,7 +12,7 @@ val appVersion: String = (findProperty("appVersion") as String?) ?: run {
 val parts = appVersion.split(".").map { it.toInt() }
 
 // Release signing: keystore.properties next to this file (local) or ERP_KEYSTORE_* env vars (CI).
-// Without either, the release build falls back to the debug key.
+// Without either the release build stops: the debug key is public, anyone could sign an update with it.
 val ks = Properties().apply {
     val f = rootDir.resolve("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -46,7 +46,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = if (storeFile != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            if (storeFile != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -72,4 +72,13 @@ android {
 
 dependencies {
     implementation("androidx.core:core:1.13.1")
+}
+
+// An unsigned release APK would install nowhere; say why instead of producing one
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        if (signing("storeFile", "ERP_KEYSTORE_FILE") == null) {
+            throw GradleException("Release signing key missing: add keystore.properties or ERP_KEYSTORE_* variables")
+        }
+    }
 }
