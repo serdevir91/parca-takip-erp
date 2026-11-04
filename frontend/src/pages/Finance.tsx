@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { api, download } from "../api/client";
 import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
@@ -8,10 +8,12 @@ import { Page, PageHeader } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
 import { Field, Loading, Modal } from "./admin/shared";
-import { FirmSelect, ProjectSelect, addDays, fmtDay, fmtMoney, numOrNull, today, trIncludes } from "./erp/common";
+import {
+  CurrencyRate, FirmSelect, ProjectSelect, addDays, fmtDay, fmtMoney, fmtRate, numOrNull, today, trIncludes, useRates,
+} from "./erp/common";
 import {
   INV_COLORS, LedgerModal, LinesEditor, LinesTable, PAY_COLORS, Stat, emptyLine, lineSum, linesBody,
-  useBalances, type DocLine, type Invoice, type Payment,
+  useBalances, type Balance, type DocLine, type Invoice, type Payment,
 } from "./erp/commerce";
 
 const TABS = [
@@ -19,6 +21,7 @@ const TABS = [
   { id: "purchase", label: "Alış faturaları" },
   { id: "payments", label: "Tahsilat ve ödemeler" },
   { id: "balances", label: "Cari bakiyeler" },
+  { id: "rates", label: "Kurlar" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -34,17 +37,19 @@ function useRefresh() {
 export default function Finance() {
   const [tab, setTab] = useState<Tab>("sales");
   const bal = useBalances();
-  const sum = (k: "receivable" | "payable" | "overdue_receivable" | "overdue_payable") =>
-    (bal.data ?? []).filter((b) => b.currency === sys.currency).reduce((s, b) => s + b[k], 0);
+  const sum = (k: "base_receivable" | "base_payable" | "base_overdue_receivable" | "base_overdue_payable") =>
+    (bal.data ?? []).reduce((s, b) => s + (b[k] ?? 0), 0);
+  const noRate = [...new Set((bal.data ?? []).filter((b) => b.base_balance == null).map((b) => b.currency))];
   return (
     <Page>
       <PageHeader icon={Wallet} title="Fatura ve ödeme" sub="Satış ve alış faturaları, tahsilat, ödeme ve cari hesap takibi" />
       <div className="grid stats">
-        <Stat label="Alacaklarımız" value={fmtMoney(sum("receivable"))} sub="Müşterilerin bize borcu" onClick={() => setTab("balances")} />
-        <Stat label="Vadesi geçen alacak" value={fmtMoney(sum("overdue_receivable"))} tone={sum("overdue_receivable") > 0 ? "error" : undefined} onClick={() => setTab("sales")} />
-        <Stat label="Borçlarımız" value={fmtMoney(sum("payable"))} sub="Tedarikçilere borcumuz" onClick={() => setTab("balances")} />
-        <Stat label="Vadesi geçen borç" value={fmtMoney(sum("overdue_payable"))} tone={sum("overdue_payable") > 0 ? "warn" : undefined} onClick={() => setTab("purchase")} />
+        <Stat label="Alacaklarımız" value={fmtMoney(sum("base_receivable"))} sub="Müşterilerin bize borcu, bugünkü kurla" onClick={() => setTab("balances")} />
+        <Stat label="Vadesi geçen alacak" value={fmtMoney(sum("base_overdue_receivable"))} tone={sum("base_overdue_receivable") > 0 ? "error" : undefined} onClick={() => setTab("sales")} />
+        <Stat label="Borçlarımız" value={fmtMoney(sum("base_payable"))} sub="Tedarikçilere borcumuz, bugünkü kurla" onClick={() => setTab("balances")} />
+        <Stat label="Vadesi geçen borç" value={fmtMoney(sum("base_overdue_payable"))} tone={sum("base_overdue_payable") > 0 ? "warn" : undefined} onClick={() => setTab("purchase")} />
       </div>
+      {noRate.length > 0 && <p><span className="badge warn">Kuru girilmemiş {noRate.join(", ")} bakiyeleri bu toplamlarda yok</span></p>}
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>{t.label}</button>
@@ -53,6 +58,7 @@ export default function Finance() {
       {(tab === "sales" || tab === "purchase") && <Invoices key={tab} kind={tab} />}
       {tab === "payments" && <Payments />}
       {tab === "balances" && <Balances />}
+      {tab === "rates" && <Rates />}
     </Page>
   );
 }
@@ -82,7 +88,8 @@ function Invoices({ kind }: { kind: "sales" | "purchase" }) {
           <option value="paid">Ödenmiş</option>
         </select>
         <input placeholder="Ara (no, firma)…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="muted">{rows.length.toLocaleString("tr-TR")} fatura · kalan {fmtMoney(rows.reduce((s, r) => s + r.remaining, 0))}</span>
+        <span className="muted">{rows.length.toLocaleString("tr-TR")} fatura · kalan {fmtMoney(rows.reduce((s, r) => s + (r.base_remaining ?? 0), 0))}</span>
+        {rows.some((r) => r.base_remaining == null) && <span className="badge warn" title="Kuru bilinmediği için toplama katılmadı">{rows.filter((r) => r.base_remaining == null).length} belgede kur yok</span>}
       </div>
       <Loading error={list.error} loading={list.isLoading} />
       {list.data && (
@@ -172,6 +179,9 @@ function InvoiceModal({ id, onClose }: { id: number; onClose: () => void }) {
             <div><span className="muted">Fatura tarihi</span>{fmtDay(inv.invoice_date)}</div>
             <div><span className="muted">Vade</span><span className={inv.pay_state === "overdue" ? "error" : undefined}>{fmtDay(inv.due_date) || "—"}</span></div>
             <div><span className="muted">Ödenen / kalan</span>{fmtMoney(inv.paid, inv.currency)} / <b>{fmtMoney(inv.remaining, inv.currency)}</b></div>
+            {inv.base_total !== inv.total && (
+              <div><span className="muted">Kur</span>{inv.rate == null ? <span className="badge warn">kur yok</span> : `${fmtRate(inv.rate)} · ${fmtMoney(inv.base_total)}`}</div>
+            )}
           </div>
           {inv.note && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{inv.note}</p>}
           <LinesTable lines={inv.lines ?? []} currency={inv.currency} subtotal={inv.subtotal} tax={inv.tax} taxRate={inv.tax_rate} total={inv.total} />
@@ -211,13 +221,15 @@ function InvoiceEditor({ kind, invoice, onClose, onSaved }: {
   const [due, setDue] = useState(invoice?.due_date ?? addDays(sys.payment_days));
   const [tax, setTax] = useState(String(invoice?.tax_rate ?? sys.vat));
   const [note, setNote] = useState(invoice?.note ?? "");
+  const [currency, setCurrency] = useState(invoice?.currency ?? sys.currency);
+  const [rate, setRate] = useState(invoice?.rate != null ? String(invoice.rate) : "");
   const [lines, setLines] = useState<DocLine[]>(() => invoice?.lines?.map((l) => ({ ...l })) ?? [emptyLine()]);
   const [prices, setPrices] = useState<string[]>(() => lines.map((l) => (l.unit_price == null ? "" : String(l.unit_price))));
   const total = lineSum(lines, prices) * (1 + (numOrNull(tax) ?? 0) / 100);
   const save = useMutation({
     mutationFn: () => {
       const body = { kind, no, firm_id: firmId, project_id: project, invoice_date: date || null, due_date: due || null,
-        tax_rate: numOrNull(tax) ?? 0, note, lines: linesBody(lines, prices).map((l) => ({ ...l, unit_price: l.unit_price ?? 0 })) };
+        currency, rate: numOrNull(rate), tax_rate: numOrNull(tax) ?? 0, note, lines: linesBody(lines, prices).map((l) => ({ ...l, unit_price: l.unit_price ?? 0 })) };
       return invoice ? api.put<Invoice>(`/invoices/${invoice.id}`, body) : api.post<Invoice>("/invoices", body);
     },
     onSuccess: (i) => { toast(invoice ? "Fatura kaydedildi" : `${i.no} oluşturuldu (taslak)`); refresh(); onSaved(i); },
@@ -227,7 +239,7 @@ function InvoiceEditor({ kind, invoice, onClose, onSaved }: {
   return (
     <Modal wide title={invoice ? `Faturayı düzenle: ${invoice.no}` : kind === "sales" ? "Yeni satış faturası" : "Yeni alış faturası"} onClose={onClose}
       footer={<>
-        <span className="muted" style={{ marginRight: "auto" }}>Genel toplam (KDV dahil): <b>{fmtMoney(total)}</b></span>
+        <span className="muted" style={{ marginRight: "auto" }}>Genel toplam (KDV dahil): <b>{fmtMoney(total, currency)}</b></span>
         <button className="btn" onClick={onClose}>Vazgeç</button>
         <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>Kaydet</button>
       </>}>
@@ -242,9 +254,11 @@ function InvoiceEditor({ kind, invoice, onClose, onSaved }: {
         <Field label="KDV %"><input style={{ width: 80 }} inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} /></Field>
         <Field label="Fatura tarihi"><input type="date" value={date ?? ""} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Vade"><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
+        <CurrencyRate currency={currency} setCurrency={setCurrency} rate={rate} setRate={setRate} day={date}
+          currencyLocked={!!(invoice?.sales_order_id || invoice?.purchase_order_id)} />
         <Field label="Not"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
-      <LinesEditor lines={lines} setLines={setLines} prices={prices} setPrices={setPrices} />
+      <LinesEditor lines={lines} setLines={setLines} prices={prices} setPrices={setPrices} currency={currency} />
     </Modal>
   );
 }
@@ -258,9 +272,11 @@ function PaymentEditor({ invoice, onClose }: { invoice?: Invoice; onClose: () =>
   const [date, setDate] = useState(today());
   const [method, setMethod] = useState(sys.pay_methods[0]);
   const [note, setNote] = useState("");
+  const [currency, setCurrency] = useState(invoice?.currency ?? sys.currency);
+  const [rate, setRate] = useState(invoice?.rate != null ? String(invoice.rate) : "");
   const save = useMutation({
     mutationFn: () => api.post<Payment>("/payments", { direction, firm_id: firmId, invoice_id: invoice?.id ?? null,
-      amount: numOrNull(amount), pay_date: date || null, method, note }),
+      amount: numOrNull(amount), currency, rate: numOrNull(rate), pay_date: date || null, method, note }),
     onSuccess: (p) => { toast(`${p.direction_label} kaydedildi: ${fmtMoney(p.amount, p.currency)}`); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
@@ -286,6 +302,7 @@ function PaymentEditor({ invoice, onClose }: { invoice?: Invoice; onClose: () =>
         {invoice && <p className="muted">Kalan borç: <b>{fmtMoney(invoice.remaining, invoice.currency)}</b></p>}
         <Field label="Tutar"><input inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
         <Field label="Tarih"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <CurrencyRate currency={currency} setCurrency={setCurrency} rate={rate} setRate={setRate} day={date} currencyLocked={!!invoice} />
         <Field label="Yöntem">
           <select value={method} onChange={(e) => setMethod(e.target.value)}>{sys.pay_methods.map((m) => <option key={m}>{m}</option>)}</select>
         </Field>
@@ -308,7 +325,7 @@ function Payments() {
     onError: (e) => toast(errText(e), true),
   });
   const rows = list.data ?? [];
-  const tot = (d: string) => rows.filter((r) => r.direction === d && r.currency === sys.currency).reduce((s, r) => s + r.amount, 0);
+  const tot = (d: string) => rows.filter((r) => r.direction === d).reduce((s, r) => s + (r.base_amount ?? 0), 0);
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
@@ -317,6 +334,7 @@ function Payments() {
           <option value="">Tümü</option><option value="in">Tahsilatlar</option><option value="out">Ödemeler</option>
         </select>
         <span className="muted">Giriş {fmtMoney(tot("in"))} · Çıkış {fmtMoney(tot("out"))}</span>
+        {rows.some((r) => r.base_amount == null) && <span className="badge warn" title="Kuru bilinmediği için toplama katılmadı">{rows.filter((r) => r.base_amount == null).length} kayıtta kur yok</span>}
       </div>
       <Loading error={list.error} loading={list.isLoading} />
       <div className="adm-scroll">
@@ -344,36 +362,128 @@ function Payments() {
 
 export function Balances() {
   const bal = useBalances();
+  const rates = useRates();
+  const base = rates.data?.base ?? sys.currency;
   const [ledger, setLedger] = useState<{ id: number; name: string } | null>(null);
   const [q, setQ] = useState("");
   const rows = (bal.data ?? []).filter((b) => !q.trim() || trIncludes(b.firm_name, q));
+  // One firm's currencies stay together, with a base total when there is more than one
+  const firms = useMemo(() => {
+    const by = new Map<string, Balance[]>();
+    for (const b of rows) by.set(`${b.firm_id}|${b.firm_name}`, [...(by.get(`${b.firm_id}|${b.firm_name}`) ?? []), b]);
+    return [...by.values()];
+  }, [rows]);
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
         <input placeholder="Firma ara…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="muted">Pozitif bakiye: firma bize borçlu. Negatif: biz firmaya borçluyuz.</span>
+        <span className="muted">Pozitif bakiye: firma bize borçlu. Negatif: biz firmaya borçluyuz. {base} karşılığı bugünkü kurladır.</span>
       </div>
       <Loading error={bal.error} loading={bal.isLoading} />
       <div className="adm-scroll">
         <table className="simple erp-table">
           <thead><tr><th>Firma</th><th className="num">Satış</th><th className="num">Tahsilat</th><th className="num">Alış</th><th className="num">Ödeme</th>
-            <th className="num">Bakiye</th><th className="num">Vadesi geçen</th><th></th></tr></thead>
+            <th className="num">Bakiye</th><th className="num">{base} karşılığı</th><th className="num">Vadesi geçen</th><th></th></tr></thead>
           <tbody>
-            {rows.map((b) => (
-              <tr key={`${b.firm_id}-${b.currency}`}>
-                <td><b>{b.firm_name}</b></td>
-                <td className="num">{fmtMoney(b.sales, b.currency)}</td><td className="num">{fmtMoney(b.collected, b.currency)}</td>
-                <td className="num">{fmtMoney(b.purchases, b.currency)}</td><td className="num">{fmtMoney(b.paid, b.currency)}</td>
-                <td className={`num ${b.balance > 0 ? "ok" : b.balance < 0 ? "warn" : ""}`}><b>{fmtMoney(b.balance, b.currency)}</b></td>
-                <td className="num error">{b.overdue_receivable || b.overdue_payable ? fmtMoney(b.overdue_receivable || b.overdue_payable, b.currency) : ""}</td>
-                <td>{b.firm_id && <button className="btn small" onClick={() => setLedger({ id: b.firm_id!, name: b.firm_name })}>Ekstre</button>}</td>
-              </tr>
+            {firms.map((group) => (
+              <Fragment key={`${group[0].firm_id}-${group[0].firm_name}`}>
+                {group.map((b, i) => (
+                  <tr key={b.currency}>
+                    <td>{i === 0 ? <b>{b.firm_name}</b> : <span className="muted">{b.currency}</span>}</td>
+                    <td className="num">{fmtMoney(b.sales, b.currency)}</td><td className="num">{fmtMoney(b.collected, b.currency)}</td>
+                    <td className="num">{fmtMoney(b.purchases, b.currency)}</td><td className="num">{fmtMoney(b.paid, b.currency)}</td>
+                    <td className={`num ${b.balance > 0 ? "ok" : b.balance < 0 ? "warn" : ""}`}><b>{fmtMoney(b.balance, b.currency)}</b></td>
+                    <td className="num">{b.base_balance == null ? <span className="badge warn">kur yok</span> : fmtMoney(b.base_balance, base)}</td>
+                    <td className="num error">{b.overdue_receivable || b.overdue_payable ? fmtMoney(b.overdue_receivable || b.overdue_payable, b.currency) : ""}</td>
+                    <td>{i === 0 && b.firm_id && <button className="btn small" onClick={() => setLedger({ id: b.firm_id!, name: b.firm_name })}>Ekstre</button>}</td>
+                  </tr>
+                ))}
+                {group.length > 1 && (
+                  <tr>
+                    <td colSpan={6} className="num muted">{group[0].firm_name} toplam</td>
+                    <td className="num"><b>{fmtMoney(group.reduce((s, b) => s + (b.base_balance ?? 0), 0), base)}</b></td>
+                    <td colSpan={2}></td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
-            {!rows.length && !bal.isLoading && <tr><td colSpan={8} className="muted empty">Kesilmiş fatura veya ödeme yok.</td></tr>}
+            {!rows.length && !bal.isLoading && <tr><td colSpan={9} className="muted empty">Kesilmiş fatura veya ödeme yok.</td></tr>}
           </tbody>
         </table>
       </div>
       {ledger && <LedgerModal firmId={ledger.id} firmName={ledger.name} onClose={() => setLedger(null)} />}
     </div>
+  );
+}
+
+function Rates() {
+  const canEdit = useAuth().can("finance", "edit");
+  const toast = useToast();
+  const qc = useQueryClient();
+  const list = useRates();
+  const [currency, setCurrency] = useState("");
+  const [rate, setRate] = useState("");
+  const [day, setDay] = useState(today());
+  const done = () => { for (const k of ["rates", "balances", "invoices", "payments", "ledger", "costs"]) void qc.invalidateQueries({ queryKey: [k] }); };
+  const fetchNow = useMutation({
+    mutationFn: () => api.post<{ rate_date: string; count: number }>("/rates/fetch"),
+    onSuccess: (r) => { toast(`${r.count} kur alındı (${fmtDay(r.rate_date)})`); done(); },
+    onError: (e) => toast(errText(e), true),
+  });
+  const add = useMutation({
+    mutationFn: () => api.post("/rates", { currency: currency.trim().toUpperCase(), rate: numOrNull(rate), rate_date: day || null }),
+    onSuccess: () => { toast("Kur kaydedildi"); setRate(""); done(); },
+    onError: (e) => toast(errText(e), true),
+  });
+  const base = list.data?.base ?? sys.currency;
+  return (
+    <>
+      <div className="card">
+        <div className="row" style={{ marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Güncel kurlar</h3>
+          {canEdit && <button className="btn primary" disabled={fetchNow.isPending} onClick={() => fetchNow.mutate()}>Merkez Bankası'ndan al</button>}
+          <span className="muted">Sunucu günde bir kez kendisi de dener. İnternet yoksa kuru elle girin. 1 birim yabancı para = kaç {base}.</span>
+        </div>
+        <Loading error={list.error} loading={list.isLoading} />
+        <div className="adm-scroll">
+          <table className="simple erp-table">
+            <thead><tr><th>Para birimi</th><th className="num">Kur ({base})</th><th>Tarih</th><th>Kaynak</th></tr></thead>
+            <tbody>
+              {(list.data?.latest ?? []).map((r) => (
+                <tr key={r.id}><td><b>{r.currency}</b></td><td className="num">{fmtRate(r.rate)}</td><td>{fmtDay(r.rate_date)}</td><td>{r.source_label}</td></tr>
+              ))}
+              {list.data && !list.data.latest.length && <tr><td colSpan={4} className="muted empty">Henüz kur yok.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {canEdit && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Elle kur gir</h3>
+          <div className="adm-form two">
+            <Field label="Para birimi"><input maxLength={3} placeholder="EUR" value={currency} onChange={(e) => setCurrency(e.target.value)} /></Field>
+            <Field label={`Kur (1 birim = ? ${base})`}><input inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
+            <Field label="Tarih"><input type="date" max={today()} value={day} onChange={(e) => setDay(e.target.value)} /></Field>
+            <div style={{ alignSelf: "end" }}>
+              <button className="btn primary" disabled={add.isPending || currency.trim().length !== 3 || !((numOrNull(rate) ?? 0) > 0)} onClick={() => add.mutate()}>Kaydet</button>
+            </div>
+          </div>
+          <p className="muted" style={{ marginBottom: 0 }}>Elle girilen kur, aynı günün Merkez Bankası kurunun üstüne yazılmaz; geçerli kalır.</p>
+        </div>
+      )}
+      <div className="card" style={{ marginTop: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Geçmiş</h3>
+        <div className="adm-scroll">
+          <table className="simple erp-table">
+            <thead><tr><th>Tarih</th><th>Para birimi</th><th className="num">Kur</th><th>Kaynak</th></tr></thead>
+            <tbody>
+              {(list.data?.rows ?? []).map((r) => (
+                <tr key={r.id}><td>{fmtDay(r.rate_date)}</td><td>{r.currency}</td><td className="num">{fmtRate(r.rate)}</td><td>{r.source_label}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }

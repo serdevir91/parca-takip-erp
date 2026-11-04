@@ -36,6 +36,9 @@ def upgrade() -> None:
     for table, col in NEW_COLUMNS:
         if col.name not in {c["name"] for c in sa.inspect(bind).get_columns(table)}:
             op.add_column(table, col)
+            if col.name == "delivered_qty":     # orders already marked delivered shipped everything
+                op.execute("UPDATE sales_order_lines SET delivered_qty = qty WHERE so_id IN "
+                           "(SELECT id FROM sales_orders WHERE status = 'delivered')")
     for model in NEW_TABLES:
         model.__table__.create(bind, checkfirst=True)
 

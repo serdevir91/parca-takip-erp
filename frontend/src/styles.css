@@ -298,6 +298,8 @@ label.dw-qrow { cursor: pointer; }
 .erp-head { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin-bottom: 12px; }
 .erp-head > div { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 .erp-head .muted { font-size: 12px; }
+/* The quantity stays in reach when a narrow screen scrolls the rest of the line */
+.erp-qty-cell { position: sticky; right: 0; background: var(--surface); }
 .erp-kpis { padding: 12px; }
 .erp-kpis .kpi .value { font-size: 20px; }
 .erp-cost-tables { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }

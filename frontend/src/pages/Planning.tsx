@@ -25,6 +25,7 @@ type NeedResp = { rows: Need[]; summary: { items: number; shortage: number; from
 type CostRow = { name: string; committed: number; actual: number };
 type Costs = {
   currency: string; committed: number; actual: number; missing_price: number; fastener_estimate: number;
+  unconverted: { currency: string; committed: number; actual: number; documents: string[] }[];
   by_source: CostRow[]; by_firm: CostRow[]; by_group: CostRow[];
 };
 
@@ -240,6 +241,17 @@ function CostTab() {
             <Kpi label="Bağlantı elemanı tahmini" value={fmtMoney(c.fastener_estimate)} sub="Bağlantı Elemanları ekranındaki fiyatlarla" />
             <Kpi label="Fiyatsız kalem" value={fmtQty(c.missing_price)} sub="Maliyete dahil edilemedi" tone={c.missing_price ? "warn" : undefined} />
           </div>
+          {c.unconverted.length > 0 && (
+            <div className="card" style={{ marginTop: 12 }} role="alert">
+              <span className="badge warn">Kuru bilinmeyen tutarlar toplamda yok</span>
+              {c.unconverted.map((u) => (
+                <p key={u.currency} style={{ margin: "6px 0 0" }}>
+                  Taahhüt {fmtMoney(u.committed, u.currency)}, gerçekleşen {fmtMoney(u.actual, u.currency)}: {u.documents.join(", ")}
+                </p>
+              ))}
+              <p className="muted" style={{ marginBottom: 0 }}>Kuru Fatura ve ödeme &gt; Kurlar sekmesinden girin.</p>
+            </div>
+          )}
           {chart.length > 0 && (
             <div className="card" style={{ marginTop: 12 }}>
               <h3 style={{ marginTop: 0 }}>Ana gruplara göre maliyet</h3>

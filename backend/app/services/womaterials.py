@@ -140,8 +140,8 @@ def give_back(db: Session, user: User, w: WorkOrder, m: WorkOrderMaterial, qty: 
     if item is None:
         raise HTTPException(400, f"{m.code}: stok kartı yok")
     cost = m.issued_value / m.issued_qty if m.issued_value > 0 else None
-    erp.move(db, user, item, "issue", qty, project_id=w.project_id, ref=_ref(w), note=note or f"{w.no} malzeme iadesi",
-             unit_cost=cost, reverse=True)
+    erp.move(db, user, item, "issue_return", qty, project_id=w.project_id, ref=_ref(w), note=note or f"{w.no} malzeme iadesi",
+             unit_cost=cost)
     m.issued_qty = erp._num(m.issued_qty - qty)
     m.issued_value = max(0.0, round(m.issued_value - qty * (cost or 0.0), 4)) if m.issued_qty > erp.EPS else 0.0
     audit.record(db, user, "work_order", w.no, f"malzeme iade {m.code}", None, qty, w.project_id)

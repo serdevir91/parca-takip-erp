@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
-from ..services import audit, commerce, erp, system, xlsafe
+from ..services import audit, commerce, erp, fx, suppliers, system, xlsafe
 from ..permissions import can, require
 from .deps import any_user, get_db, project_or_404
 
@@ -59,6 +59,7 @@ class PoIn(BaseModel):
     due_date: date | None = None
     order_date: date | None = None
     currency: str = Field(default="", max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     note: str = ""
     lines: list[LineIn] = []
 
@@ -69,6 +70,7 @@ class PoUpdate(BaseModel):
     due_date: date | None = None
     order_date: date | None = None
     currency: str | None = Field(default=None, max_length=8)
+    rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)    # null = take it from the table again
     note: str | None = None
     lines: list[LineIn] | None = None
 
@@ -79,12 +81,16 @@ class StatusIn(BaseModel):
 
 class ReceiveLine(BaseModel):
     line_id: int
-    qty: float = Field(ge=0)
+    qty: float = Field(ge=0, allow_inf_nan=False)
 
 
 class ReceiveIn(BaseModel):
     lines: list[ReceiveLine]
-    note: str = ""
+    note: str = Field(default="", max_length=300)
+
+
+class CloseIn(BaseModel):
+    note: str = Field(default="", max_length=300)
 
 
 def _po_or_404(db: Session, po_id: int) -> PurchaseOrder:
@@ -109,7 +115,9 @@ def _project_names(db: Session) -> dict[int, str]:
 
 def _out(db: Session, po: PurchaseOrder, with_lines: bool = True) -> dict[str, Any]:
     p = db.get(Project, po.project_id) if po.project_id else None
-    return erp.po_out(po, with_lines, p.name if p else None)
+    out = erp.po_out(po, with_lines, p.name if p else None, fx.Book(db))
+    out["receipts"] = suppliers.receipt_rows(db, po)
+    return commerce.with_billing(db, po, out)
 
 
 @router.get("/purchase-orders")
@@ -125,8 +133,9 @@ def list_orders(project_id: int | None = None, status: str | None = None, firm_i
     if firm_id is not None:
         q = q.where(PurchaseOrder.firm_id == firm_id)
     names = _project_names(db)
-    rows = [erp.po_out(po, False, names.get(po.project_id or 0)) for po in db.scalars(q)]
-    return {"rows": rows, "statuses": erp.PO_STATUS}
+    book = fx.Book(db)
+    rows = [erp.po_out(po, False, names.get(po.project_id or 0), book) for po in db.scalars(q)]
+    return {"rows": rows, "statuses": erp.PO_STATUS, "base": book.base}
 
 
 @router.post("/purchase-orders", status_code=201)
@@ -134,10 +143,11 @@ def create_order(body: PoIn, me: User = Depends(purchasing_edit), db: Session = 
     firm = _firm(db, body.firm_id)
     if body.project_id is not None:
         project_or_404(db, body.project_id)
+    currency = fx.clean_currency(body.currency or system.system(db)["commerce"]["currency"])
     po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firm.id if firm else None,
                        firm_name=firm.name if firm else "", project_id=body.project_id, status="draft",
-                       due_date=body.due_date, order_date=body.order_date,
-                       currency=body.currency or system.system(db)["commerce"]["currency"],
+                       due_date=body.due_date, order_date=body.order_date, currency=currency,
+                       rate=body.rate if body.rate is not None else fx.rate_on(db, currency, body.order_date),
                        note=body.note, created_by=me.username)
     erp.set_lines(po, [l.model_dump() for l in body.lines])
     db.add(po)
@@ -156,7 +166,7 @@ def get_order(po_id: int, _: User = Depends(purchasing_view), db: Session = Depe
 def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
-    if po.status in ("received", "cancelled"):
+    if po.status in ("received", "closed", "cancelled"):
         raise HTTPException(400, f"{erp.PO_STATUS[po.status]} durumundaki sipariş düzenlenemez")
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
@@ -172,6 +182,14 @@ def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit)
     for k in ("due_date", "order_date", "currency", "note"):
         if k in sent and (getattr(body, k) is not None or k in ("due_date", "order_date")):
             changes[k] = getattr(body, k)
+    if "currency" in changes:
+        changes["currency"] = fx.clean_currency(changes["currency"])
+    if "rate" in sent or changes.get("currency", po.currency) != po.currency:
+        changes["rate"] = body.rate if body.rate is not None else fx.rate_on(
+            db, changes.get("currency", po.currency), fx.first_day(changes.get("order_date"), po.order_date, po.created_at))
+    if (changes.get("currency", po.currency) != po.currency or changes.get("rate", po.rate) != po.rate) \
+            and any(l.received_qty > erp.EPS for l in po.lines):
+        raise HTTPException(400, "Mal kabulü yapılmış siparişin para birimi ve kuru değiştirilemez")
     audit.record_changes(db, me, po, changes, "purchase_order", po.no, po.project_id)
     if body.lines is not None:
         if po.status != "draft":
@@ -191,20 +209,43 @@ def order_status(po_id: int, body: StatusIn, me: User = Depends(purchasing_edit)
     return _out(db, po)
 
 
-@router.post("/purchase-orders/{po_id}/receive")
-def receive(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
-    po = _po_or_404(db, po_id)
+def _picked(po: PurchaseOrder, rows: list[ReceiveLine]) -> list[tuple[PurchaseOrderLine, float]]:
     by_id = {l.id: l for l in po.lines}
     items: list[tuple[PurchaseOrderLine, float]] = []
-    for r in body.lines:
+    for r in rows:
         line = by_id.get(r.line_id)
         if line is None:
             raise HTTPException(400, f"Satır bu siparişe ait değil: {r.line_id}")
         if r.qty > 0:
             items.append((line, r.qty))
     if not items:
-        raise HTTPException(400, "Teslim alınan miktar girin")
-    erp.receive(db, me, po, items, body.note)
+        raise HTTPException(400, "Miktar girin")
+    return items
+
+
+@router.post("/purchase-orders/{po_id}/receive")
+def receive(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    po = _po_or_404(db, po_id)
+    erp.receive(db, me, po, _picked(po, body.lines), body.note)
+    db.commit()
+    return _out(db, po)
+
+
+@router.post("/purchase-orders/{po_id}/reverse")
+def reverse(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Mal kabul geri alma, also the return of goods to the supplier."""
+    po = _po_or_404(db, po_id)
+    erp.reverse_receipt(db, me, po, _picked(po, body.lines), body.note)
+    db.commit()
+    return _out(db, po)
+
+
+@router.post("/purchase-orders/{po_id}/close")
+def close(po_id: int, body: CloseIn | None = None, me: User = Depends(purchasing_edit),
+          db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Siparişi eksik kapat: keep what was received and free the rest."""
+    po = _po_or_404(db, po_id)
+    erp.close_po(db, me, po, body.note if body else "")
     db.commit()
     return _out(db, po)
 
@@ -314,7 +355,7 @@ def need_to_order(pid: int, body: FromNeedIn, me: User = Depends(purchasing_edit
         raise HTTPException(400, "Seçilen kalemlerde eksik yok")
     po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firm.id if firm else None,
                        firm_name=firm.name if firm else "", project_id=project.id, status="draft",
-                       due_date=body.due_date, currency=system.system(db)["commerce"]["currency"],
+                       due_date=body.due_date, currency=fx.base_currency(db), rate=1.0,
                        created_by=me.username, note="İhtiyaç analizinden oluşturuldu")
     erp.set_lines(po, lines)
     db.add(po)
@@ -354,3 +395,16 @@ def costs(pid: int, me: User = Depends(planning_view), db: Session = Depends(get
     if not (can(me, "finance") or can(me, "purchasing")):
         raise HTTPException(403, "Maliyetleri görmek için satın alma veya finans yetkisi gerekli")
     return erp.project_costs(db, project_or_404(db, pid), show_people=can(me, "hr"))
+
+
+# ---------- supplier performance ----------
+@router.get("/suppliers/performance")
+def performance(_: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return suppliers.performance(db)
+
+
+@router.get("/suppliers/price-history")
+def price_history(code: str, _: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+    if not code.strip():
+        raise HTTPException(400, "Kod girin")
+    return suppliers.price_history(db, code.strip())
