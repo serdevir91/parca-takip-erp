@@ -10,6 +10,7 @@ import FastenerRulesTab from "./admin/FastenerRules";
 import T35ConfigTab from "./admin/T35Config";
 import AuditLogTab from "./admin/AuditLog";
 import BackupsTab from "./admin/Backups";
+import HttpsTab from "./admin/Https";
 import SystemSettingsTab from "./admin/SystemSettings";
 import MailSettingsTab from "./admin/MailSettings";
 
@@ -22,6 +23,7 @@ const TABS: { id: string; label: string; C: ComponentType }[] = [
   { id: "t35", label: "Durum Listesi Kuralları", C: T35ConfigTab },
   { id: "audit", label: "Denetim Kaydı", C: AuditLogTab },
   { id: "backups", label: "Yedekler", C: BackupsTab },
+  { id: "https", label: "HTTPS", C: HttpsTab },
 ];
 const TAB_KEY = "admin.tab";
 

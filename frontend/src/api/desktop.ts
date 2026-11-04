@@ -19,7 +19,7 @@ export function desktop(): DesktopApi | null {
 }
 
 export type DesktopInfo = { version: string; mode: "server" | "client"; base: string; addresses: string[]; data_dir: string; config: string; background?: boolean };
-export type DesktopAction = "reload" | "settings" | "open_data" | "update" | "quit";
+export type DesktopAction = "reload" | "settings" | "open_data" | "update" | "quit" | "restart";
 type DesktopShell = {
   app_info(): Promise<DesktopInfo>;
   app_action(name: DesktopAction): Promise<{ ok: boolean; error?: string }>;
