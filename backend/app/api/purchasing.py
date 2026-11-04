@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
-from ..services import audit, erp, xlsafe
+from ..services import audit, commerce, erp, system, xlsafe
 from ..permissions import can, require
 from .deps import any_user, get_db, project_or_404
 
@@ -49,7 +49,7 @@ class PoIn(BaseModel):
     project_id: int | None = None
     due_date: date | None = None
     order_date: date | None = None
-    currency: str = Field(default="TRY", max_length=8)
+    currency: str = Field(default="", max_length=8)
     note: str = ""
     lines: list[LineIn] = []
 
@@ -125,9 +125,10 @@ def create_order(body: PoIn, me: User = Depends(purchasing_edit), db: Session = 
     firm = _firm(db, body.firm_id)
     if body.project_id is not None:
         project_or_404(db, body.project_id)
-    po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder, "SA"), firm_id=firm.id if firm else None,
+    po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firm.id if firm else None,
                        firm_name=firm.name if firm else "", project_id=body.project_id, status="draft",
-                       due_date=body.due_date, order_date=body.order_date, currency=body.currency or "TRY",
+                       due_date=body.due_date, order_date=body.order_date,
+                       currency=body.currency or system.system(db)["commerce"]["currency"],
                        note=body.note, created_by=me.username)
     erp.set_lines(po, [l.model_dump() for l in body.lines])
     db.add(po)
@@ -227,6 +228,7 @@ def order_xlsx(po_id: int, _: User = Depends(purchasing_view), db: Session = Dep
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
     ws["A1"] = "SATIN ALMA SİPARİŞİ"
     ws["A1"].font = Font(bold=True, size=14)
+    commerce.company_header(ws, system.system(db)["company"])
     info = [("Sipariş no", po.no), ("Sipariş tarihi", po.order_date.strftime("%d.%m.%Y") if po.order_date else ""),
             ("Termin", po.due_date.strftime("%d.%m.%Y") if po.due_date else ""),
             ("Firma", po.firm_name), ("İletişim", " / ".join(x for x in (
@@ -300,9 +302,10 @@ def need_to_order(pid: int, body: FromNeedIn, me: User = Depends(purchasing_edit
                       "qty": r["shortage"], "unit_price": price})
     if not lines:
         raise HTTPException(400, "Seçilen kalemlerde eksik yok")
-    po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder, "SA"), firm_id=firm.id if firm else None,
+    po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firm.id if firm else None,
                        firm_name=firm.name if firm else "", project_id=project.id, status="draft",
-                       due_date=body.due_date, created_by=me.username, note="İhtiyaç analizinden oluşturuldu")
+                       due_date=body.due_date, currency=system.system(db)["commerce"]["currency"],
+                       created_by=me.username, note="İhtiyaç analizinden oluşturuldu")
     erp.set_lines(po, lines)
     db.add(po)
     db.flush()

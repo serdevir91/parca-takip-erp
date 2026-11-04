@@ -43,7 +43,7 @@ SHEET_LISTS = "Listeler"
 H_LEVEL, H_PNO, H_TYPE, H_GROUP, H_PARENT = "Seviye", "Parça No", "Tip", "Ana Grup", "Üst Montaj"
 H_QTY, H_TOTAL, H_MAT, H_WEIGHT, H_TEMIN = "Adet", "Toplam Adet", "Malzeme", "Birim Ağırlık (g)", "Temin Şekli"
 H_COAT, H_REV, H_PROG, H_STATUS = "Kaplama", "Rev", "İlerleme (seç)", "Durum (otomatik)"
-H_MANUF, H_MATST, H_T35, H_NOTE, H_KEY = "Üretici", "Malzeme Durumu", "T-35 Notu", "Not", "Anahtar"
+H_MANUF, H_MATST, H_T35, H_NOTE, H_KEY = "Üretici", "Malzeme Durumu", "Durum Notu", "Not", "Anahtar"
 
 PART_COLS: list[tuple[str, float]] = [
     (H_LEVEL, 9), (H_PNO, 30), (H_TYPE, 11), (H_GROUP, 16), (H_PARENT, 16), (H_QTY, 6), (H_TOTAL, 8),

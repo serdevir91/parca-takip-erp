@@ -316,7 +316,7 @@ export default function Parts() {
         id: "manufacturer", accessorKey: "manufacturer", header: "Üretici", size: w("manufacturer", 120),
         edit: mans.length ? { type: "select", options: ["", ...mans], canEdit: can } : { type: "text", canEdit: can },
       },
-      { id: "t35_note", accessorKey: "t35_note", header: "T-35 Notu", size: w("t35_note", 210), edit: { type: "text", canEdit: can } },
+      { id: "t35_note", accessorKey: "t35_note", header: "Durum Notu", size: w("t35_note", 210), edit: { type: "text", canEdit: can } },
       { id: "note", accessorKey: "note", header: "Not", size: w("note", 210), edit: { type: "text", canEdit: can } },
       {
         id: "drawing", header: "Teknik Resim", size: w("drawing", 140), accessorFn: drawingText,
@@ -470,7 +470,7 @@ export default function Parts() {
             {menu === "import" && (
               <div className="dg-menu card" role="menu">
                 <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>Excel'den içe aktar</button>
-                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>T-35 listesi içe aktar</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>Durum listesi içe aktar</button>
               </div>
             )}
           </div>

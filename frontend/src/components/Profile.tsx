@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { api, setToken } from "../api/client";
+import { sys } from "../api/system";
 import { useAuth, type User } from "../api/auth";
 import { Field, Modal, roleLabel } from "../pages/admin/shared";
 import { errText, useToast } from "./Toast";
 
-const MIN_PASSWORD = 8;
 
 /** Own profile: display name, e-mail and password. User name, role and permissions stay with the admin. */
 export default function Profile({ onClose }: { onClose: () => void }) {
@@ -21,7 +21,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
   const pwWanted = !!(oldPw || newPw || again);
   const pwProblem = !pwWanted ? ""
     : !oldPw ? "Mevcut şifrenizi yazın."
-    : newPw.length < MIN_PASSWORD ? `Yeni şifre en az ${MIN_PASSWORD} karakter olmalı.`
+    : newPw.length < sys.password_min ? `Yeni şifre en az ${sys.password_min} karakter olmalı.`
     : newPw !== again ? "Yeni şifreler aynı değil."
     : "";
   const nameChanged = name.trim() !== (user?.full_name ?? "") || email.trim() !== (user?.email ?? "");
@@ -63,7 +63,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
         <Field label="Mevcut şifre">
           <input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoComplete="current-password" />
         </Field>
-        <Field label="Yeni şifre" hint={`En az ${MIN_PASSWORD} karakter`}>
+        <Field label="Yeni şifre" hint={`En az ${sys.password_min} karakter`}>
           <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" />
         </Field>
         <Field label="Yeni şifre (tekrar)">

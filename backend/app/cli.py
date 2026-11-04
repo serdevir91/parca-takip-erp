@@ -1,6 +1,6 @@
 """Command line tools: python -m app.cli <command>
 
-  seed          demo database from the sample files (T-35 main assembly + T01_0004 sub-assembly)
+  seed          demo database from the sample files (main assembly + T01_0004 sub-assembly)
   backup        take a backup now (--daemon: every day at --at HH:MM, used by the compose service)
   restore FILE  restore a backup tar (overwrites database and data directory)
   create-admin  create an admin user or reset an existing user to admin with a new password
@@ -25,14 +25,14 @@ from .auth import hash_password
 from .config import get_settings
 from .db import SessionLocal, engine
 from .models import ROLE_ADMIN, Part, Project, Tracking, User
-from .services import audit, backup as backup_svc
+from .services import audit, backup as backup_svc, system
 from .services.bootstrap import seed_defaults
 
 log = logging.getLogger("erp.cli")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_SEED_DIR = BACKEND_DIR / "tests" / "data"
-MAIN_PROJECT = "T-35 (Demo)"
+MAIN_PROJECT = "Örnek Makine (Demo)"
 SUB_PROJECT = "T01_0004 Alt Montaj (Demo)"
 PURCHASED_DEMO = ["TSDacikboy"]
 
@@ -107,7 +107,7 @@ def _seed_erp(db, project: Project, user: User | None) -> None:
     buy = [r for r in need if r["action"] == "purchase"][:4]
     make = [r for r in need if r["action"] == "work_order"][:2]
     if buy:
-        po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder, "SA"), firm_id=firms["supplier"].id,
+        po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firms["supplier"].id,
                            firm_name=firms["supplier"].name, project_id=project.id, status="draft",
                            due_date=date.today() + timedelta(days=10), created_by=user.username if user else "",
                            note="Örnek sipariş")
@@ -118,7 +118,7 @@ def _seed_erp(db, project: Project, user: User | None) -> None:
         erp.set_po_status(db, user, po, "sent")
         erp.receive(db, user, po, [(po.lines[0], po.lines[0].qty)], "Demo irsaliye")
     for i, r in enumerate(make):
-        w = WorkOrder(no=erp.next_no(db, WorkOrder, "IE"), project_id=project.id, part_no=r["code"],
+        w = WorkOrder(no=erp.next_no(db, WorkOrder), project_id=project.id, part_no=r["code"],
                       description=r["description"], qty=r["shortage"], done_qty=0.0,
                       firm_name=firms["manufacturer"].name if i else "", status="planned", unit_cost=150.0,
                       due_date=date.today() + timedelta(days=7 + i), created_by=user.username if user else "")
@@ -154,7 +154,7 @@ def _seed_commerce(db, project: Project, user: User | None, po, made: list) -> N
              {"description": "Montaj ve devreye alma", "unit": "Gün", "qty": 5, "unit_price": 12000.0}]
     orders = []
     for status, disc, days in (("confirmed", 5.0, 30), ("quoted", 0.0, 15)):
-        so = SalesOrder(no=commerce.next_no(db, SalesOrder, "SS"), firm_id=cust.id, firm_name=cust.name,
+        so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=cust.id, firm_name=cust.name,
                         project_id=project.id, status="draft", order_date=today - timedelta(days=12),
                         valid_until=today + timedelta(days=days), due_date=today + timedelta(days=45),
                         discount_pct=disc, created_by=user.username, note="Örnek veri")
@@ -291,14 +291,32 @@ def _next_run(at: str, now: datetime) -> datetime:
     return nxt if nxt > now else nxt + timedelta(days=1)
 
 
+def _saved_backup_time(at: str) -> str:
+    """Time from Sistem Ayarları if one was saved, else `at`. Also refreshes the keep days of this process."""
+    try:
+        with SessionLocal() as db:
+            system.apply_runtime(db)
+            return (system.saved(db).get("files") or {}).get("backup_time") or at
+    except Exception as e:  # noqa: BLE001
+        print(f"Ayarlar okunamadı: {e}", file=sys.stderr, flush=True)
+        return at
+
+
 def backup_daemon(at: str) -> None:
-    """Sleep until `at` (local time, TZ env) every day and take a backup; never exits on errors."""
+    """Sleep until the backup time (local time, TZ env) every day and take a backup; never exits on errors."""
+    start = at
+    at = _saved_backup_time(start)
     print(f"Günlük yedekleme saati {at}, saklama {get_settings().backup_keep_days} gün", flush=True)
     while True:
         nxt = _next_run(at, datetime.now())
         print(f"Sonraki yedek: {nxt:%Y-%m-%d %H:%M}", flush=True)
         while (left := (nxt - datetime.now()).total_seconds()) > 0:
             time.sleep(min(left, 300))
+            if (new := _saved_backup_time(start)) != at:
+                at = new
+                nxt = _next_run(at, datetime.now())
+                print(f"Yedek saati değişti, sonraki yedek: {nxt:%Y-%m-%d %H:%M}", flush=True)
+        _saved_backup_time(start)
         try:
             backup_once()
         except Exception as e:  # noqa: BLE001

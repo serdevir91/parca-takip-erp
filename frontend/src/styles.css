@@ -261,6 +261,7 @@ label.dw-qrow { cursor: pointer; }
 .adm-body { min-width: 0; }
 .adm-version { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; max-width: 520px; }
 .adm-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.adm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .adm-field > span { font-weight: 600; font-size: 13px; }
 .adm-field input:not([type="checkbox"]), .adm-field select, .adm-field textarea { width: 100%; box-sizing: border-box; }
 .adm-form { display: flex; flex-direction: column; gap: 10px; }

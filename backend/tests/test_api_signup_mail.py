@@ -31,7 +31,7 @@ def _reset_guard():
 
 
 def test_signup_waits_for_approval_then_logs_in(client, admin_headers):
-    assert client.get("/api/auth/options").json() == {"signup": True}
+    assert client.get("/api/auth/options").json()["signup"] is True
     body, r = _signup(client)
     assert r.status_code == 201, r.text
     # Right password, but not approved yet: a clear message instead of "hatalı"

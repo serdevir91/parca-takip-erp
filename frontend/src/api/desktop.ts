@@ -18,7 +18,7 @@ export function desktop(): DesktopApi | null {
   return api && typeof api.file_request === "function" ? (api as DesktopApi) : null;
 }
 
-export type DesktopInfo = { version: string; mode: "server" | "client"; base: string; addresses: string[]; data_dir: string; config: string };
+export type DesktopInfo = { version: string; mode: "server" | "client"; base: string; addresses: string[]; data_dir: string; config: string; background?: boolean };
 export type DesktopAction = "reload" | "settings" | "open_data" | "update" | "quit";
 type DesktopShell = {
   app_info(): Promise<DesktopInfo>;

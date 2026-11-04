@@ -200,7 +200,6 @@ def test_delete_rejected_version(client, admin_headers, data_file):
 def test_purge_project(client, admin_headers, data_file):
     h = admin_headers
     pid = _project(client, h, "Silinecek")
-    name = client.get(f"/api/projects/{pid}", headers=h).json()["name"]
     v = _upload(client, h, pid, data_file("BOM_T01_0004_0000_v1.csv")).json()
     client.post(f"/api/projects/{pid}/bom/versions/{v['id']}/approve", headers=h)
     from app.config import get_settings
@@ -215,9 +214,7 @@ def test_purge_project(client, admin_headers, data_file):
     assert imp["deleted"]["bom_versions"] == 1 and imp["deleted"]["work_orders"] == 1
     assert imp["deleted"]["tracked_parts"] > 0 and imp["unlinked"]["purchase_orders"] == 1
 
-    assert client.post(f"/api/projects/{pid}/purge", headers=h, json={"name": "yanlış"}).status_code == 400
-    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200
-    r = client.post(f"/api/projects/{pid}/purge", headers=h, json={"name": name})
+    r = client.post(f"/api/projects/{pid}/purge", headers=h, json={})
     assert r.status_code == 200, r.text
     assert client.get(f"/api/projects/{pid}", headers=h).status_code == 404
     assert not (get_settings().bom_dir / str(pid)).exists()

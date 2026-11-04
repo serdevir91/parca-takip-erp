@@ -10,14 +10,16 @@ import FastenerRulesTab from "./admin/FastenerRules";
 import T35ConfigTab from "./admin/T35Config";
 import AuditLogTab from "./admin/AuditLog";
 import BackupsTab from "./admin/Backups";
+import SystemSettingsTab from "./admin/SystemSettings";
 import MailSettingsTab from "./admin/MailSettings";
 
 const TABS: { id: string; label: string; C: ComponentType }[] = [
   { id: "users", label: "Kullanıcılar", C: UsersTab },
-  { id: "settings", label: "Ayarlar", C: SettingsTab },
+  { id: "system", label: "Sistem Ayarları", C: SystemSettingsTab },
+  { id: "settings", label: "BOM ve Parça", C: SettingsTab },
   { id: "mail", label: "E-posta", C: MailSettingsTab },
   { id: "fasteners", label: "Bağlantı Elemanı Kuralları", C: FastenerRulesTab },
-  { id: "t35", label: "T-35 Ayarları", C: T35ConfigTab },
+  { id: "t35", label: "Durum Listesi Kuralları", C: T35ConfigTab },
   { id: "audit", label: "Denetim Kaydı", C: AuditLogTab },
   { id: "backups", label: "Yedekler", C: BackupsTab },
 ];

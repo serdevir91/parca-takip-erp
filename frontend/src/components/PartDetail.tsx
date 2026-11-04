@@ -37,7 +37,7 @@ export type PartChoices = {
 
 /** Editable tracking fields (backend TrackingPatch) with Turkish labels. */
 export const FIELD_LABELS: Record<string, string> = {
-  procurement_override: "Temin Şekli", progress: "İlerleme", note: "Not", t35_note: "T-35 Notu",
+  procurement_override: "Temin Şekli", progress: "İlerleme", note: "Not", t35_note: "Durum Notu",
   manufacturer: "Üretici", material_status: "Malzeme Durumu", is_new: "Yeni etiketi",
   qty: "Adet", reason: "Neden", part_no: "Parça No",
 };
@@ -106,7 +106,7 @@ export default function PartDetail({ pid, partNo, onClose }: { pid: number; part
                   ["Ağırlık", fmtNum(p.weight)], ["Kaplama", p.coating], ["Rev", p.rev],
                   ["Temin şekli", p.procurement ?? p.procurement_override],
                   ["Temin (BOM)", p.procurement_csv], ["İlerleme", p.progress], ["Üretici", p.manufacturer],
-                  ["Malzeme durumu", p.material_status], ["T-35 notu", p.t35_note], ["Not", p.note],
+                  ["Malzeme durumu", p.material_status], ["Durum notu", p.t35_note], ["Not", p.note],
                   ["Diğer adlar (alias)", d.aliases.join(", ")],
                   ["Son güncelleme", p.updated_at ? `${fmtDate(p.updated_at)} · ${p.updated_by || ""}` : ""],
                 ] as [string, unknown][]).map(([k, v]) => (

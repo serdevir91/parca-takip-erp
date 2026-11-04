@@ -1,19 +1,20 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { DesktopMenu } from "../components/DesktopMenu";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../api/auth";
 import { api } from "../api/client";
 import { mobileApp } from "../api/mobile";
 import BrandMark from "../components/BrandMark";
-
-const MIN_PASSWORD = 8;
+import { useBrand } from "../api/system";
 
 /** Login, plus "Hesap oluştur": the request waits until an admin approves it in Yönetim > Kullanıcılar. */
 export default function Login() {
   const { user, login } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [signupOn, setSignupOn] = useState(false);
+  const brand = useBrand();
+  const signupOn = brand.options?.signup ?? false;
+  const minPw = brand.options?.password_min ?? 8;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -22,10 +23,6 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api.get<{ signup: boolean }>("/auth/options").then((o) => setSignupOn(o.signup)).catch(() => setSignupOn(false));
-  }, []);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -41,7 +38,7 @@ export default function Login() {
     e.preventDefault();
     setErr("");
     if (mode === "signup") {
-      if (password.length < MIN_PASSWORD) return setErr(`Şifre en az ${MIN_PASSWORD} karakter olmalı.`);
+      if (password.length < minPw) return setErr(`Şifre en az ${minPw} karakter olmalı.`);
       if (password !== again) return setErr("Şifreler aynı değil.");
     }
     setBusy(true);
@@ -68,7 +65,7 @@ export default function Login() {
     <div className="login">
       <div className="login-desk"><DesktopMenu /></div>
       <form className="card" onSubmit={submit}>
-        <h1 className="login-brand"><span className="brand-logo"><BrandMark size={22} /></span>LAB ERP</h1>
+        <h1 className="login-brand"><span className="brand-logo"><BrandMark size={22} logo={brand.logo} /></span>{brand.name}</h1>
         {signup && <div className="muted">Hesabınız yönetici onayından sonra açılır.</div>}
         <label>
           Kullanıcı adı
@@ -82,7 +79,7 @@ export default function Login() {
           </>
         )}
         <label>
-          Şifre{signup && <span className="muted"> (en az {MIN_PASSWORD} karakter)</span>}
+          Şifre{signup && <span className="muted"> (en az {minPw} karakter)</span>}
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             autoComplete={signup ? "new-password" : "current-password"} style={{ width: "100%" }} />
         </label>

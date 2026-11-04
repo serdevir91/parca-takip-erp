@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, User
 from ..permissions import can
-from ..services import audit, mailer
+from ..services import audit, mailer, system
 from .deps import admin, any_user, get_db
 
 router = APIRouter(prefix="/mail", tags=["mail"])
@@ -80,7 +80,7 @@ async def send(to: str = Form(...), subject: str = Form(...), body: str = Form("
         raise HTTPException(400, "En az bir alıcı yazın")
     if len(to_list) + len(cc_list) > MAX_RECIPIENTS:
         raise HTTPException(400, f"En fazla {MAX_RECIPIENTS} alıcı")
-    subject = subject.strip()[:200] or "LAB ERP"
+    subject = subject.strip()[:200] or system.app_name(db)
     atts: list[mailer.Attachment] = []
     total = 0
     for f in files:
@@ -92,7 +92,7 @@ async def send(to: str = Form(...), subject: str = Form(...), body: str = Form("
     if not _rate_ok(user.id):
         raise HTTPException(429, "Saatte en fazla 60 e-posta gönderilebilir")
     sender = user.full_name or user.username
-    text = (body.strip() + "\n\n" if body.strip() else "") + f"-- \n{sender} tarafından LAB ERP ile gönderildi."
+    text = (body.strip() + "\n\n" if body.strip() else "") + f"-- \n{sender} tarafından {system.app_name(db)} ile gönderildi."
     try:
         mailer.send(cfg, to_list, subject, text, atts, reply_to=user.email or "", cc=cc_list)
     except RuntimeError as e:
@@ -147,7 +147,7 @@ def test_smtp(body: TestIn, me: User = Depends(admin), db: Session = Depends(get
     if not to:
         raise HTTPException(400, "Test için bir alıcı adresi yazın (veya Profilim'e e-posta ekleyin)")
     try:
-        mailer.send(mailer.config(db), to, "LAB ERP test e-postası",
+        mailer.send(mailer.config(db), to, f"{system.app_name(db)} test e-postası",
                     "Bu bir test e-postasıdır. E-posta ayarlarınız çalışıyor.")
     except RuntimeError as e:
         raise HTTPException(502, str(e)) from e

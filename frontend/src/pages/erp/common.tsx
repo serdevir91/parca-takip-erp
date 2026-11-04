@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { curSign, sys } from "../../api/system";
 import type { Project } from "../../types";
 
 // ---------- types (backend/app/services/erp.py) ----------
@@ -48,8 +49,8 @@ export const WO_COLORS: Record<string, string> = {
 
 export const fmtQty = (n: number | null | undefined) =>
   n == null ? "" : n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
-export const fmtMoney = (n: number | null | undefined, cur = "TRY") =>
-  n == null ? "" : `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur === "TRY" ? "₺" : cur}`;
+export const fmtMoney = (n: number | null | undefined, cur = sys.currency) =>
+  n == null ? "" : `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curSign(cur)}`;
 export const fmtDay = (s: string | null | undefined) => {
   if (!s) return "";
   const d = new Date(`${s.slice(0, 10)}T00:00:00`);

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { sys } from "../../api/system";
 import { Loading, Modal } from "../admin/shared";
 import { fmtDay, fmtMoney, fmtQty, numOrNull } from "./common";
 
@@ -56,7 +57,6 @@ export const SO_ACTIONS: Record<string, string> = {
   quoted: "Teklif olarak gönder", confirmed: "Sipariş onaylandı", delivered: "Teslim edildi", lost: "Kaybedildi",
   cancelled: "İptal et", draft: "Taslağa al",
 };
-export const PAY_METHODS = ["Havale/EFT", "Nakit", "Kredi kartı", "Çek", "Senet", "Mahsup"];
 
 export function useBalances(enabled = true) {
   return useQuery({ queryKey: ["balances"], queryFn: () => api.get<Balance[]>("/balances"), enabled });
@@ -66,7 +66,7 @@ export const lineSum = (lines: DocLine[], prices: string[]) =>
   lines.reduce((s, l, i) => s + (numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0), 0);
 
 /** Editable document lines (sales order, invoice). Prices are kept as text so "12,5" can be typed. */
-export function LinesEditor({ lines, setLines, prices, setPrices, currency = "TRY" }: {
+export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys.currency }: {
   lines: DocLine[]; setLines: (f: (l: DocLine[]) => DocLine[]) => void;
   prices: string[]; setPrices: (f: (p: string[]) => string[]) => void; currency?: string;
 }) {
@@ -103,11 +103,11 @@ export function LinesEditor({ lines, setLines, prices, setPrices, currency = "TR
   );
 }
 
-export const emptyLine = (): DocLine => ({ code: "", description: "", unit: "Adet", qty: 1, unit_price: null });
+export const emptyLine = (): DocLine => ({ code: "", description: "", unit: sys.unit, qty: 1, unit_price: null });
 
 export const linesBody = (lines: DocLine[], prices: string[]) =>
   lines
-    .map((l, i) => ({ code: l.code.trim(), description: l.description.trim(), unit: l.unit || "Adet", qty: l.qty,
+    .map((l, i) => ({ code: l.code.trim(), description: l.description.trim(), unit: l.unit || sys.unit, qty: l.qty,
       unit_price: numOrNull(prices[i] ?? "") }))
     .filter((l) => l.code || l.description);
 

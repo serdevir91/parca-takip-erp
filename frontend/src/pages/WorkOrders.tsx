@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api } from "../api/client";
+import { curSign } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
@@ -163,7 +164,7 @@ function WoForm({ wo, projectId, onClose }: { wo?: WorkOrder; projectId: number 
           <Field label="Başlangıç"><input type="date" value={start ?? ""} onChange={(e) => setStart(e.target.value)} /></Field>
           <Field label="Termin"><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
         </div>
-        <Field label="Birim maliyet (₺)" hint="Fason fiyatı veya iç üretim maliyeti; proje maliyetine eklenir.">
+        <Field label={`Birim maliyet (${curSign()})`} hint="Fason fiyatı veya iç üretim maliyeti; proje maliyetine eklenir.">
           <input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
         </Field>
         <Field label="Not"><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field>

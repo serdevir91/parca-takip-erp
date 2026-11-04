@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, download } from "../api/client";
+import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
@@ -124,7 +125,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
     onError: (e) => toast(errText(e), true),
   });
   const invoice = useMutation({
-    mutationFn: (no: string) => api.post<{ no: string }>(`/purchase-orders/${id}/invoice`, { no, tax_rate: 20 }),
+    mutationFn: (no: string) => api.post<{ no: string }>(`/purchase-orders/${id}/invoice`, { no }),
     onSuccess: (r) => { toast(`Alış faturası ${r.no} taslak olarak oluşturuldu (Fatura ve ödeme)`); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
@@ -202,7 +203,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
   );
 }
 
-const emptyLine = (): PoLine => ({ code: "", kind: "part", description: "", unit: "Adet", qty: 1, unit_price: null });
+const emptyLine = (): PoLine => ({ code: "", kind: "part", description: "", unit: sys.unit, qty: 1, unit_price: null });
 
 function OrderEditor({ order, projectId, onClose, onSaved }: {
   order?: PurchaseOrder; projectId: number | null; onClose: () => void; onSaved: (po: PurchaseOrder) => void;

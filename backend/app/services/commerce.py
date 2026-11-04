@@ -168,7 +168,7 @@ def new_invoice(db: Session, user: User, kind: str, *, firm: Firm | None, no: st
     if kind not in INV_KINDS:
         raise HTTPException(400, "Fatura türü satış veya alış olmalı")
     if kind == "sales":
-        no = next_no(db, Invoice, "FT")
+        no = next_no(db, Invoice)
     elif not no.strip():
         raise HTTPException(400, "Alış faturasında tedarikçinin fatura numarasını girin")
     inv = Invoice(kind=kind, no=no.strip(), firm_id=firm.id if firm else None, firm_name=firm.name if firm else "",
@@ -292,8 +292,19 @@ def ledger(db: Session, firm_id: int) -> dict[str, Any]:
 
 
 # ---------- printable form ----------
+def company_header(ws: Any, c: dict[str, Any]) -> None:
+    """Our own name and address, top right of a printed form (empty until set in Sistem Ayarları)."""
+    from openpyxl.styles import Font
+
+    rows = [c["name"], c["address"], " / ".join(x for x in (c["phone"], c["email"], c["web"]) if x),
+            f'{c["tax_office"]} {c["tax_no"]}'.strip()]
+    for i, text in enumerate((x for x in rows if x), 1):
+        ws.cell(i, 5, text).font = Font(bold=i == 1 and bool(c["name"]))
+
+
 def form_xlsx(title: str, info: list[tuple[str, Any]], currency: str, lines: list[Any],
-              t: dict[str, float], tax_rate: float, discount_pct: float = 0.0) -> bytes:
+              t: dict[str, float], tax_rate: float, discount_pct: float = 0.0,
+              company: dict[str, Any] | None = None) -> bytes:
     """Teklif / sipariş / fatura form as an Excel file (same layout as the purchase order form)."""
     import io
 
@@ -308,6 +319,8 @@ def form_xlsx(title: str, info: list[tuple[str, Any]], currency: str, lines: lis
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
     ws["A1"] = title.replace("i", "İ").replace("ı", "I").upper()  # Turkish dotted/dotless i
     ws["A1"].font = Font(bold=True, size=14)
+    if company:
+        company_header(ws, company)
     for i, (k, v) in enumerate(info, 3):
         ws.cell(i, 1, k).font = bold
         ws.cell(i, 2, v).alignment = Alignment(wrap_text=True, vertical="top")

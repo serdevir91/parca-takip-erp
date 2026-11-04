@@ -55,10 +55,6 @@ class ProjectIn(BaseModel):
     description: str = ""
 
 
-class ProjectPurge(BaseModel):
-    name: str
-
-
 class ProjectPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     root_part_no: str | None = None
@@ -145,12 +141,9 @@ def delete_impact(pid: int, db: Session = Depends(get_db), _: User = Depends(adm
 
 
 @router.post("/{pid}/purge")
-def purge_project(pid: int, body: ProjectPurge, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
-    """Delete a project for good. The caller repeats the project name; a backup is taken first, so the
-    data can still be restored from it."""
+def purge_project(pid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
+    """Delete a project for good. A backup is taken first, so the data can still be restored from it."""
     p = project_or_404(db, pid)
-    if body.name.strip() != p.name:
-        raise HTTPException(400, "Proje adı eşleşmiyor")
     backup_name = ""
     try:
         backup_name = backup_svc.create_backup().name

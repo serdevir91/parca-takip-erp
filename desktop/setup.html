@@ -51,6 +51,28 @@
   summary { cursor: pointer; color: var(--muted); }
   .found { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
   .found button { font-size: 12px; padding: 5px 10px; }
+  .guide { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .gtabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); background: #0b1324; }
+  .gtabs button { flex: 1; min-width: 150px; padding: 10px 8px; border: 0; border-bottom: 2px solid transparent; background: none;
+                  color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  .gtabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .gtabs small { font-weight: 400; color: var(--muted); }
+  .gsteps { list-style: none; margin: 0; padding: 6px 14px 12px; }
+  .gstep { display: grid; grid-template-columns: 22px 1fr; gap: 0 10px; padding: 8px 0; border-bottom: 1px solid rgba(36, 50, 79, .6); }
+  .gstep:last-child { border-bottom: 0; }
+  .gmark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+           border: 1px solid var(--line); color: var(--muted); }
+  .gstep.done .gmark { background: var(--ok); border-color: var(--ok); color: #06281c; }
+  .gstep.bad .gmark { background: var(--error); border-color: var(--error); color: #3b0a0a; }
+  .gstep.warn .gmark { background: #fbbf24; border-color: #fbbf24; color: #3b2a02; }
+  .gstep b { display: block; }
+  .gstep p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .gstep.bad p.gnote { color: var(--error); }
+  .gcmd { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .gcmd code { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 6px; background: #0b1324; border: 1px solid var(--line);
+               font: 12px/1.4 Consolas, ui-monospace, monospace; overflow-wrap: anywhere; }
+  .gcmd button { padding: 5px 9px; font-size: 12px; }
+  .gcheck { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
   [hidden] { display: none !important; }
   .loader { display: none; text-align: center; }
   body.loading .wrap { display: none; }
@@ -116,6 +138,14 @@
     </div>
 
     <div id="remote" hidden>
+      <div class="guide">
+        <div class="gtabs" role="tablist">
+          <button type="button" data-tab="server" role="tab">Sunucuda <small id="g_c_server"></small></button>
+          <button type="button" data-tab="here" role="tab">Bu bilgisayarda <small id="g_c_here"></small></button>
+          <button type="button" data-tab="after" role="tab">Kurulumdan sonra</button>
+        </div>
+        <ol class="gsteps" id="g_steps"></ol>
+      </div>
       <div class="two">
         <div>
           <label for="r_host">Sunucu adresi</label>
@@ -152,6 +182,10 @@
       </details>
       <div class="hint" style="margin-top:12px">Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir). Kurulum birkaç dakika sürer.
         Uygulama <b>/opt/laberp</b>, veriler <b>/var/lib/laberp</b> klasörüne kurulur; <b>laberp</b> hizmeti açılışta kendiliğinden başlar.</div>
+      <div class="gcheck">
+        <button class="btn" id="r_check" type="button">Bağlantıyı dene</button>
+        <span class="muted" id="r_checkmsg">Hiçbir şey kurulmaz; sunucuya girilip hazır mı diye bakılır.</span>
+      </div>
       <div class="step" id="r_step" hidden><div class="spin"></div><span id="r_steptext"></span></div>
       <pre class="log" id="r_log" hidden></pre>
     </div>
@@ -175,13 +209,146 @@
     $("go").textContent = m === "remote" ? "Kur ve bağlan" : "Başlat";
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---- "Sunucuma kur" guide: rebuilt from the form and from the last "Bağlantıyı dene" answer ----
+  let guideTab = "server";
+  let check = null;   // remote_check() answer for the current form; any edit drops it
+  const form = () => ({
+    host: $("r_host").value.trim(), sshPort: $("r_ssh_port").value.trim() || "22", user: $("r_user").value.trim() || "root",
+    port: $("r_port").value.trim() || "8000", pass: $("r_password").value, admin: $("r_admin").value,
+    key: $("r_key").value.trim(), fw: $("r_fw").checked,
+  });
+  function addressKind(h) {
+    if (!h) return "";
+    const local = /^(10\.|127\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || !h.includes(".") || h.endsWith(".local") || h.endsWith(".lan");
+    return local ? "local" : "public";
+  }
+  function guideSteps(f, c) {
+    const ok = c && c.ok, p = c && !c.ok ? c.problem : "";
+    const target = (f.host || "SUNUCU") + ":" + f.port;
+    const url = "http://" + target;
+    const sshArg = f.sshPort === "22" ? "" : " -p " + f.sshPort;
+    const kind = addressKind(f.host);
+    const root = f.user === "root";
+    const server = [];
+    server.push(ok
+      ? { state: c.systemd ? "done" : "bad", title: "Linux sunucu", text: [c.os, c.arch, c.free_mb != null ? c.free_mb + " MB boş disk" : ""].filter(Boolean).join(" · "),
+          note: !c.systemd ? "Bu sunucuda systemd yok, kurulum yapılamaz." : c.free_mb != null && c.free_mb < 1024 ? "Boş disk 1 GB'ın altında, kurulum yarıda kalabilir." : "" }
+      : { title: "Linux sunucu hazır olsun", text: "Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir." });
+    server.push({ state: ok ? "done" : p === "refused" || p === "timeout" ? "bad" : "", title: `SSH hizmeti ${f.sshPort} portunda açık olsun`,
+      text: ok ? "SSH bağlantısı kuruldu." : "Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):",
+      cmds: ok ? [] : ["sudo apt install -y openssh-server && sudo systemctl enable --now ssh"],
+      note: p === "refused" ? "Bağlantı reddedildi: SSH çalışmıyor ya da başka portta." : p === "timeout" ? "Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor." : "",
+      more: ok ? "" : "Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd" });
+    server.push(root
+      ? { state: ok ? "done" : p === "auth" ? "bad" : "", title: "root ile giriş izni olsun", text: ok ? "root ile girildi." : "Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın.",
+          note: p === "auth" ? "Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin." : "" }
+      : { state: ok ? (c.root || c.sudo ? "done" : "bad") : p === "auth" ? "bad" : "", title: `${f.user} kullanıcısının sudo yetkisi olsun`,
+          text: ok && (c.root || c.sudo) ? "sudo yetkisi doğrulandı." : "Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):",
+          cmds: ok && (c.root || c.sudo) ? [] : [`usermod -aG sudo ${f.user}`],
+          note: ok && !c.sudo ? "Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış." : p === "auth" ? "Kullanıcı adı veya şifre kabul edilmedi." : "" });
+    const cloud = kind === "public" ? `Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP ${f.sshPort} ve TCP ${f.port} girişini siz açın; bunu kurulum yapamaz.` : "";
+    const fwAuto = f.fw ? (ok && !c.firewall ? "Sunucuda ufw veya firewalld yok, ek ayar gerekmez." : `Sunucunun güvenlik duvarında (${ok && c.firewall ? c.firewall : "ufw / firewalld"}) port kurulum sırasında açılır.`) : "Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:";
+    server.push({ state: ok && c.port_busy && !c.installed ? "bad" : kind === "public" ? "warn" : ok ? "done" : "", title: `LAB ERP portu ${f.port} erişilebilir olsun`,
+      text: [fwAuto, cloud].filter(Boolean).join(" "),
+      cmds: f.fw ? [] : (ok && c.firewall === "firewalld" ? [`sudo firewall-cmd --permanent --add-port=${f.port}/tcp && sudo firewall-cmd --reload`] : [`sudo ufw allow ${f.port}/tcp`]),
+      note: ok && c.port_busy && !c.installed ? `${f.port} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.` : "" });
+    if (kind === "public") server.push({ state: "warn", title: "İnternete açıkken dikkat", text: "LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın." });
+    server.push({ state: ok ? (c.internet ? "done" : "bad") : "", title: "Sunucu internete çıkabilsin", text: ok && c.internet ? "İnternet erişimi var." : "Kurulum sırasında Python paketleri indirilir.",
+      note: ok && !c.internet ? "Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin." : "" });
+
+    const here = [];
+    here.push({ state: p === "dns" ? "bad" : f.host ? "done" : "", title: "Sunucu adresini yazın",
+      text: !f.host ? "Adresi sunucuda bu komutla öğrenebilirsiniz:" : kind === "local" ? `${f.host} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.` : `${f.host} internet adresi olarak görünüyor.`,
+      cmds: f.host ? [] : ["hostname -I"], note: p === "dns" ? "Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın." : "" });
+    here.push(f.key
+      ? { state: p === "auth" ? "bad" : "done", title: "SSH anahtarı sunucuda tanımlı olsun", text: `Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.${root ? "" : " Şifre alanına sudo şifresini yazın."}`,
+          cmds: [`ssh-copy-id -i "${f.key}.pub"${sshArg} ${f.user}@${f.host || "SUNUCU"}`], note: p === "auth" ? "Anahtar kabul edilmedi." : "" }
+      : { state: p === "auth" ? "bad" : f.pass ? "done" : "", title: "SSH şifresini yazın", text: `${f.user} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.`,
+          note: p === "auth" ? "Şifre kabul edilmedi." : "" });
+    here.push(ok && c.installed
+      ? { state: "done", title: "Yönetici şifresi", text: "LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez." }
+      : { state: f.admin.length >= 8 ? "done" : f.admin ? "bad" : "", title: "Yönetici (admin) şifresi belirleyin", text: "LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu.", note: f.admin && f.admin.length < 8 ? "En az 8 karakter olmalı." : "" });
+    here.push({ state: ok ? "done" : c ? "bad" : "", title: "Bağlantıyı deneyin", text: ok ? "Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi." : "Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz.", note: c && !ok ? c.error : "" });
+    here.push({ title: "Kur ve bağlan", text: "Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır." });
+
+    const after = [
+      { title: "Diğer bilgisayarlar", text: `LAB ERP'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:`, cmds: [url] },
+      { title: "Telefonlar", text: "Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı." },
+      { title: "İlk giriş", text: "Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin." },
+      { title: "Sunucu kendiliğinden çalışır", text: "laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:", cmds: ["sudo systemctl status laberp", "sudo journalctl -u laberp -n 50"] },
+      { title: "Veriler ve güncelleme", text: "Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur." },
+    ];
+    return { server, here, after };
+  }
+  function copyText(text, btn) {
+    const done = () => { btn.textContent = "Kopyalandı"; setTimeout(() => { btn.textContent = "Kopyala"; }, 1200); };
+    const t = document.createElement("textarea");
+    t.value = text; document.body.appendChild(t); t.select();
+    try { document.execCommand("copy"); done(); } finally { t.remove(); }
+  }
+  function renderGuide() {
+    const all = guideSteps(form(), check);
+    for (const k of ["server", "here"]) {
+      const finished = all[k].filter((s) => s.state === "done").length;
+      $("g_c_" + k).textContent = finished + "/" + all[k].length;
+    }
+    document.querySelectorAll(".gtabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === guideTab));
+    const list = $("g_steps");
+    list.textContent = "";
+    all[guideTab].forEach((s, i) => {
+      const li = document.createElement("li");
+      li.className = "gstep " + (s.state || "");
+      const mark = document.createElement("span");
+      mark.className = "gmark";
+      mark.textContent = s.state === "done" ? "✓" : s.state === "bad" || s.state === "warn" ? "!" : String(i + 1);
+      const body = document.createElement("div");
+      const title = document.createElement("b");
+      title.textContent = s.title;
+      body.appendChild(title);
+      const para = (text, cls) => {
+        if (!text) return;
+        const p = document.createElement("p");
+        p.textContent = text;
+        if (cls) p.className = cls;
+        body.appendChild(p);
+      };
+      para(s.text);
+      for (const cmd of s.cmds || []) {
+        const row = document.createElement("div");
+        row.className = "gcmd";
+        const code = document.createElement("code");
+        code.textContent = cmd;
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "btn"; btn.textContent = "Kopyala";
+        btn.onclick = () => copyText(cmd, btn);
+        row.append(code, btn);
+        body.appendChild(row);
+      }
+      para(s.more);
+      para(s.note, "gnote");
+      li.append(mark, body);
+      list.appendChild(li);
+    });
+  }
+  const remoteForm = () => ({
+    host: $("r_host").value, ssh_port: $("r_ssh_port").value, user: $("r_user").value,
+    password: $("r_password").value, key_file: $("r_key").value, port: $("r_port").value,
+    admin_password: $("r_admin").value, firewall: $("r_fw").checked,
+  });
+  async function remoteCheck() {
+    $("r_check").disabled = true;
+    $("r_checkmsg").textContent = "Sunucuya bağlanılıyor…";
+    const r = await window.pywebview.api.remote_check(remoteForm()).catch((e) => ({ ok: false, error: String(e), problem: "other" }));
+    $("r_check").disabled = false;
+    check = r;
+    $("r_checkmsg").textContent = r.ok ? "Bağlantı başarılı. " + (r.installed ? "LAB ERP zaten kurulu, bu işlem güncelleme olur." : "Sunucu kuruluma hazır görünüyor.") : r.error;
+    guideTab = r.ok || r.problem === "refused" || r.problem === "timeout" ? "server" : "here";
+    renderGuide();
+  }
   async function remoteInstall() {
     const api = window.pywebview.api;
-    const r = await api.remote_install({
-      host: $("r_host").value, ssh_port: $("r_ssh_port").value, user: $("r_user").value,
-      password: $("r_password").value, key_file: $("r_key").value, port: $("r_port").value,
-      admin_password: $("r_admin").value, firewall: $("r_fw").checked,
-    });
+    const r = await api.remote_install(remoteForm());
     if (!r.ok) return r;
     $("r_step").hidden = false; $("r_log").hidden = false;
     document.querySelectorAll(".mode").forEach((b) => b.disabled = true);
@@ -242,8 +409,19 @@
     };
     $("r_pick").onclick = async () => {
       const f = await window.pywebview.api.pick_key_file();
-      if (f) $("r_key").value = f;
+      if (f) { $("r_key").value = f; dropCheck(); }
     };
+    const dropCheck = () => {
+      if (check) $("r_checkmsg").textContent = "Bilgiler değişti, yeniden deneyin.";
+      check = null;
+      renderGuide();
+    };
+    for (const id of ["r_host", "r_ssh_port", "r_user", "r_port", "r_password", "r_key"]) $(id).addEventListener("input", dropCheck);
+    $("r_admin").addEventListener("input", renderGuide);
+    $("r_fw").addEventListener("change", renderGuide);
+    document.querySelectorAll(".gtabs button").forEach((b) => b.onclick = () => { guideTab = b.dataset.tab; renderGuide(); });
+    $("r_check").onclick = remoteCheck;
+    renderGuide();
     $("go").onclick = async () => {
       $("go").disabled = true; show("", "");
       if (mode === "remote") {

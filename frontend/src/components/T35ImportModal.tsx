@@ -14,7 +14,7 @@ const APPLY_PATH = (pid: number) => `/projects/${pid}/t35/apply`;
 type Field = "progress" | "manufacturer" | "material_status" | "t35_note";
 const FIELDS: Field[] = ["progress", "manufacturer", "material_status", "t35_note"];
 const FIELD_LABEL: Record<Field, string> = {
-  progress: "İlerleme", manufacturer: "Üretici", material_status: "Malzeme Durumu", t35_note: "T-35 Notu",
+  progress: "İlerleme", manufacturer: "Üretici", material_status: "Malzeme Durumu", t35_note: "Durum Notu",
 };
 
 type Update = {
@@ -137,7 +137,7 @@ function Inner({ pid, onClose }: Props) {
     { id: "label", header: "Alan", size: 120, accessorKey: "label" },
     { id: "old", header: "Mevcut", size: 170, accessorKey: "old", cell: ({ row }) => <span className="muted" title={row.original.old}>{row.original.old || "(Boş)"}</span> },
     { id: "new", header: "Yeni", size: 190, accessorKey: "new", cellStyle: () => statusStyle("C6EFCE"), cell: ({ row }) => <b title={row.original.new}>{row.original.new || "(Boş)"}</b> },
-    { id: "text", header: "T-35 Durum Metni", size: 260, accessorKey: "text", cell: ({ row }) => <span title={row.original.text}>{row.original.text}</span> },
+    { id: "text", header: "Listedeki Durum Metni", size: 260, accessorKey: "text", cell: ({ row }) => <span title={row.original.text}>{row.original.text}</span> },
     { id: "row", header: "Satır", size: 60, accessorKey: "row" },
     { id: "match", header: "Eşleşme", size: 80, accessorKey: "match" },
   ], []);
@@ -149,7 +149,7 @@ function Inner({ pid, onClose }: Props) {
     <div className="modal-back" onClick={() => !busy && onClose()}>
       <div className="modal imp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>T-35 Güncel Durum listesini içe aktar</h3>
+          <h3 style={{ margin: 0 }}>Durum listesini içe aktar</h3>
           <button className="btn small" onClick={onClose} disabled={busy} aria-label="Kapat">✕</button>
         </div>
         {!canEdit ? (
@@ -203,11 +203,11 @@ function Inner({ pid, onClose }: Props) {
                     />
                   )}
                   {tab === "only_in_list" && (
-                    <SimpleList empty="Listedeki tüm parçalar BOM ile eşleşti." note="Bu parçalar T-35 listesinde var ama güncel BOM'da (veya alias tablosunda) bulunamadı; uygulanmaz."
+                    <SimpleList empty="Listedeki tüm parçalar BOM ile eşleşti." note="Bu parçalar durum listesinde var ama güncel BOM'da (veya alias tablosunda) bulunamadı; uygulanmaz."
                       head={["Parça No"]} rows={preview.only_in_list.map((x) => [x])} />
                   )}
                   {tab === "only_in_bom" && (
-                    <SimpleList empty="BOM'daki tüm parçalar listede var." note="Bu BOM parçaları T-35 listesinde yok."
+                    <SimpleList empty="BOM'daki tüm parçalar listede var." note="Bu BOM parçaları durum listesinde yok."
                       head={["Parça No", "Tip", "Durum"]} rows={preview.only_in_bom.map((x) => [x.part_no, x.is_assembly ? "Montaj" : "Parça", x.status])} />
                   )}
                   {tab === "rev" && (

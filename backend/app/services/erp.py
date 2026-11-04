@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..core.status import KIND_IMALAT, PROG_DONE, PROG_RUN, PROG_WAIT
 from ..models import (Employee, FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove,
                       TimeEntry, Tracking, User, WorkOrder)
-from . import audit
+from . import audit, system
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import apply_changes, tracking_of
 
@@ -43,19 +43,19 @@ def _num(v: float) -> float:
     return round(v + 0.0, 6)
 
 
-def next_no(db: Session, model: Any, prefix: str) -> str:
-    """SA-2026-0001 style numbers, counting per year (model: any table with a `no` column)."""
-    base = f"{prefix}-{date.today().year}-"
+def next_no(db: Session, model: Any) -> str:
+    """SA-2026-0001 style numbers, counting per year; the prefix comes from Sistem Ayarları."""
+    base = f"{system.prefix(db, model)}-{date.today().year}-"
     used = [n[len(base):] for n in db.scalars(select(model.no).where(model.no.like(f"{base}%")))]
     last = max((int(n) for n in used if n.isdigit()), default=0)
     return f"{base}{last + 1:04d}"
 
 
 # ---------- stock ----------
-def stock_item(db: Session, code: str, name: str = "", kind: str = "part", unit: str = "Adet") -> StockItem:
+def stock_item(db: Session, code: str, name: str = "", kind: str = "part", unit: str = "") -> StockItem:
     item = db.scalar(select(StockItem).where(StockItem.code == code))
     if item is None:
-        item = StockItem(code=code, name=name, kind=kind if kind in ITEM_KINDS else "other", unit=unit or "Adet",
+        item = StockItem(code=code, name=name, kind=kind if kind in ITEM_KINDS else "other", unit=unit or system.system(db)["production"]["unit"],
                          qty=0.0, min_qty=0.0)
         db.add(item)
         db.flush()
@@ -121,7 +121,8 @@ def _tracking(db: Session, project_id: int, part_no: str) -> Tracking:
 def _fastener_setting(db: Session, project_id: int, key: str) -> FastenerSetting:
     fs = db.scalar(select(FastenerSetting).where(FastenerSetting.project_id == project_id, FastenerSetting.key == key))
     if fs is None:
-        fs = FastenerSetting(project_id=project_id, key=key, spare_pct=10.0, supplier="", unit="Adet",
+        prod = system.system(db)["production"]
+        fs = FastenerSetting(project_id=project_id, key=key, spare_pct=prod["spare_pct"], supplier="", unit=prod["unit"],
                              order_status=FASTENER_ORDER_STATUSES[0], note="")
         db.add(fs)
         db.flush()
@@ -336,11 +337,12 @@ def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str =
 def _bom_items(pv: ProjectView) -> dict[str, dict[str, Any]]:
     """What the current BOM needs: purchased/manufactured parts and fasteners (assemblies are built in-house)."""
     items: dict[str, dict[str, Any]] = {}
+    unit = pv.fastener_defaults["unit"]
     for p in pv.parts(include_in_purchased=False):
         if not p["counted"] or (p["is_assembly"] and not p["is_purchased_assembly"]):
             continue
         items[p["part_no"]] = {
-            "code": p["part_no"], "kind": "part", "description": p["file_name"], "unit": "Adet",
+            "code": p["part_no"], "kind": "part", "description": p["file_name"], "unit": unit,
             "required": float(p["total_qty"]), "procurement": p["procurement"], "status": p["status"],
             "status_color": p["status_color"], "progress": p["progress"],
             "main_group": (p["main_groups"] or [""])[0], "material": p["material"],
@@ -463,7 +465,7 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
                       key=lambda x: -x["committed"])
 
     estimate = sum(f["total_price"] for f in pv.fasteners() if f["total_price"] is not None)
-    return {"currency": "TRY", "committed": round(sum(r["committed"] for r in rows), 2),
+    return {"currency": system.system(db)["commerce"]["currency"], "committed": round(sum(r["committed"] for r in rows), 2),
             "actual": round(sum(r["actual"] for r in rows), 2), "missing_price": missing_price,
             "fastener_estimate": round(estimate, 2),
             "by_source": roll("source"), "by_firm": roll("firm"), "by_group": roll("group")}

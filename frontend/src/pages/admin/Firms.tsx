@@ -123,7 +123,7 @@ export default function FirmsTab() {
         </div>
       )}
       <p className="muted" style={{ marginTop: 10 }}>
-        Üretici firmalar T-35 listesindeki metinden üretici tespiti için de kullanılır. Müşteriler satış ve faturada seçilir.
+        Üretici firmalar durum listesindeki metinden üretici tespiti için de kullanılır. Müşteriler satış ve faturada seçilir.
       </p>
       {ledger && <LedgerModal firmId={ledger.id} firmName={ledger.name} onClose={() => setLedger(null)} />}
       {editing && <FirmForm firm={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={refresh} />}

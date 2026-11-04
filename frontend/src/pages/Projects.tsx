@@ -107,17 +107,16 @@ function impactList(counts: Record<string, number>) {
   ));
 }
 
-/** Permanent delete: shows what goes and what stays, and asks for the project name. */
+/** Permanent delete: shows what goes and what stays, then asks for a yes. */
 function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [name, setName] = useState("");
   const impact = useQuery({
     queryKey: ["project-delete-impact", project.id],
     queryFn: () => api.get<Impact>(`/projects/${project.id}/delete-impact`),
     gcTime: 0,
   });
   const purge = useMutation({
-    mutationFn: () => api.post<{ backup: string }>(`/projects/${project.id}/purge`, { name }),
+    mutationFn: () => api.post<{ backup: string }>(`/projects/${project.id}/purge`, {}),
     onSuccess: (r) => { toast(r.backup ? `Proje silindi. Silmeden önceki yedek: ${r.backup}` : "Proje silindi."); onDone(); },
     onError: (e) => toast(errText(e), true),
   });
@@ -125,8 +124,7 @@ function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: 
   const unlinked = impact.data ? impactList(impact.data.unlinked) : [];
   return (
     <div className="modal-back" onClick={onClose}>
-      <form className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => { e.preventDefault(); if (name.trim() === project.name) purge.mutate(); }}>
+      <div className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>“{project.name}” kalıcı olarak silinsin mi?</h3>
         {impact.error && <div className="error">{errText(impact.error)}</div>}
         {impact.isLoading && <p className="muted">Kayıtlar sayılıyor…</p>}
@@ -137,16 +135,14 @@ function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: 
             {unlinked.length > 0 && <><b>Silinmez, proje bağlantısı kalkar:</b><ul>{unlinked}</ul></>}
           </>
         )}
-        <label>Onaylamak için proje adını yazın: <b>{project.name}</b>
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
-        </label>
+        <p><b>Onaylıyor musunuz?</b></p>
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-          <button type="button" className="btn" onClick={onClose} disabled={purge.isPending}>Vazgeç</button>
-          <button className="btn danger" disabled={name.trim() !== project.name || purge.isPending || !impact.data}>
-            {purge.isPending ? "Yedek alınıp siliniyor…" : "Kalıcı olarak sil"}
+          <button className="btn" onClick={onClose} disabled={purge.isPending}>Vazgeç</button>
+          <button className="btn danger" onClick={() => purge.mutate()} disabled={purge.isPending || !impact.data}>
+            {purge.isPending ? "Yedek alınıp siliniyor…" : "Evet, kalıcı olarak sil"}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

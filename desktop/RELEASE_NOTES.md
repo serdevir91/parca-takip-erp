@@ -1,6 +1,15 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.4 yenilikleri
+
+- **Arka planda çalışma:** Sunucu olan bilgisayarda pencereyi kapatınca sistem artık durmaz. Uygulama gizli simgelere iner, diğer cihazlar çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Sunucuyu durdur ve çık" seçin.
+- **Sistem Ayarları:** Yönetim'de yeni sekme. Uygulama adı, logo, şirket bilgileri, para birimi, KDV, vade, ödeme yöntemleri, belge numarası önekleri, varsayılan birim, şifre ve giriş kuralları, oturum süresi, yükleme sınırı, yedek saati ve açık modüller buradan değişir.
+- **Her şirkete uygun:** T-35'e özel adlar ve kurallar kaldırıldı. Eski "T-35 Ayarları" artık isteğe bağlı "Durum Listesi Kuralları" oldu. Mevcut kurulumların ayarları korunur.
+- **Sunucuma kur kılavuzu:** Sunucuda ve bilgisayarda yapılacaklar adım adım gösterilir. "Bağlantıyı dene" hangi adımın hazır olduğunu işaretler.
+- **Proje silme:** Proje adını yazmak yerine onay penceresi çıkar.
+- **Satın alma, satış ve fatura belgeleri:** Şirket bilgileri belgelere yazdırılır.
+
 ## 1.5.3 yenilikleri
 
 - **Proje silme:** Yönetici, Projeler sayfasındaki "Sil" düğmesiyle projeyi kalıcı olarak silebilir. Pencere neyin silineceğini ve neyin kalacağını sayılarıyla gösterir, proje adının yazılmasını ister ve silmeden önce otomatik yedek alır. "Arşivle" aynen duruyor.

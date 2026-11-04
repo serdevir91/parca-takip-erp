@@ -19,6 +19,23 @@ log = logging.getLogger("laberp.remote")
 
 SKIP = {"__pycache__", ".pytest_cache", ".DS_Store"}
 
+# Read-only look at the server for the guide on the setup page. $1 = LAB ERP port. One key=value per line.
+PROBE = r"""
+. /etc/os-release 2>/dev/null
+echo "os=${PRETTY_NAME:-$(uname -s)}"
+echo "arch=$(uname -m)"
+echo "root=$([ "$(id -u)" = 0 ] && echo 1 || echo 0)"
+echo "systemd=$(command -v systemctl >/dev/null && echo 1 || echo 0)"
+echo "installed=$([ -f /etc/systemd/system/laberp.service ] && echo 1 || echo 0)"
+echo "free_mb=$(df -Pm /var 2>/dev/null | awk 'NR==2{print $4}')"
+echo "internet=$(timeout 6 bash -c '</dev/tcp/pypi.org/443' 2>/dev/null && echo 1 || echo 0)"
+fw=""
+command -v ufw >/dev/null && fw=ufw
+command -v firewall-cmd >/dev/null && fw=firewalld
+echo "firewall=$fw"
+echo "port_busy=$(timeout 2 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null && echo 1 || echo 0)"
+"""
+
 
 def build_package(backend: Path, spa: Path) -> bytes:
     """tar.gz with backend/{app,alembic,alembic.ini,requirements.txt} and frontend/dist, the repo layout the
@@ -114,7 +131,7 @@ class RemoteInstall:
             log.exception("remote install failed")
             self._finish(False, _explain(e))
 
-    def _install(self) -> None:
+    def _connect(self):
         import paramiko
 
         client = paramiko.SSHClient()
@@ -122,7 +139,6 @@ class RemoteInstall:
         if self._known_hosts.is_file():
             client.load_host_keys(str(self._known_hosts))
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self._add(f"## {self.user}@{self.host}:{self.ssh_port} adresine bağlanılıyor")
         client.connect(self.host, port=self.ssh_port, username=self.user, password=self.password or None,
                        key_filename=self.key_file or None, passphrase=self.password or None,
                        timeout=15, banner_timeout=30, auth_timeout=30, look_for_keys=not self.password,
@@ -132,10 +148,45 @@ class RemoteInstall:
             client.save_host_keys(str(self._known_hosts))
         except OSError:
             log.warning("could not save known hosts")
+        return client
+
+    def _install(self) -> None:
+        self._add(f"## {self.user}@{self.host}:{self.ssh_port} adresine bağlanılıyor")
+        client = self._connect()
         key = client.get_transport().get_remote_server_key()
         self._add(f"Bağlandı. Sunucu anahtarı {key.get_name()} {key.fingerprint}")
         try:
             self._upload_and_run(client)
+        finally:
+            client.close()
+
+    def check(self) -> dict:
+        """Log in and look around without changing anything. ok False carries `problem` so the guide can point
+        at the step to fix: form, auth, refused, timeout, dns, hostkey or other."""
+        err = self.validate()
+        if err:
+            return {"ok": False, "error": err, "problem": "form"}
+        try:
+            client = self._connect()
+        except Exception as e:  # noqa: BLE001  (every failure ends up on the setup page)
+            log.info("remote check failed: %s", e)
+            return {"ok": False, "error": _explain(e), "problem": _problem(e)}
+        try:
+            out = _run(client, f"bash -s -- {self.port}", PROBE)[1]
+            facts = dict(ln.split("=", 1) for ln in out.splitlines() if "=" in ln)
+            root = facts.get("root") == "1"
+            sudo = root
+            if not root:
+                # The password goes through stdin, never the command line; -k so sudo always reads it
+                sudo = _run(client, "sudo -S -k -p '' true", self.password + "\n")[0] == 0
+            free = facts.get("free_mb", "")
+            return {"ok": True, "os": facts.get("os", ""), "arch": facts.get("arch", ""), "root": root, "sudo": sudo,
+                    "systemd": facts.get("systemd") == "1", "installed": facts.get("installed") == "1",
+                    "internet": facts.get("internet") == "1", "firewall": facts.get("firewall", ""),
+                    "port_busy": facts.get("port_busy") == "1", "free_mb": int(free) if free.isdigit() else None}
+        except Exception as e:  # noqa: BLE001
+            log.exception("remote check failed")
+            return {"ok": False, "error": _explain(e), "problem": "other"}
         finally:
             client.close()
 
@@ -196,6 +247,36 @@ class RemoteInstall:
         self._finish(False, last or f"Kurulum betiği hata verdi (çıkış kodu {code}); ayrıntılar yukarıda")
 
 
+def _run(client, command: str, stdin: str) -> tuple[int, str]:
+    chan = client.get_transport().open_session()
+    chan.settimeout(30)
+    chan.exec_command(command)
+    chan.sendall(stdin.encode())
+    chan.shutdown_write()
+    out = b""
+    while chunk := chan.recv(65536):
+        out += chunk
+    return chan.recv_exit_status(), out.decode("utf-8", "replace")
+
+
+def _problem(e: Exception) -> str:
+    import socket
+
+    import paramiko
+
+    if isinstance(e, paramiko.AuthenticationException):
+        return "auth"
+    if isinstance(e, paramiko.BadHostKeyException):
+        return "hostkey"
+    if isinstance(e, (socket.timeout, TimeoutError)):
+        return "timeout"
+    if isinstance(e, (ConnectionRefusedError, paramiko.ssh_exception.NoValidConnectionsError)):
+        return "refused"
+    if isinstance(e, socket.gaierror):
+        return "dns"
+    return "other"
+
+
 def _explain(e: Exception) -> str:
     import socket
 
@@ -209,7 +290,7 @@ def _explain(e: Exception) -> str:
     if isinstance(e, (socket.timeout, TimeoutError)):
         return "Sunucuya ulaşılamadı (zaman aşımı). Adresi, SSH portunu ve ağ bağlantısını kontrol edin."
     if isinstance(e, (ConnectionRefusedError, paramiko.ssh_exception.NoValidConnectionsError)):
-        return "SSH bağlantısı reddedildi. Sunucuda SSH (port 22) açık mı?"
+        return "SSH bağlantısı reddedildi. Sunucuda SSH hizmeti çalışıyor ve bu portta dinliyor mu?"
     if isinstance(e, socket.gaierror):
         return "Sunucu adı çözülemedi. Adresi kontrol edin."
     if isinstance(e, FileNotFoundError):

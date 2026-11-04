@@ -1,16 +1,17 @@
-from app.core.t35 import build_preview, map_text, read_t35
+from app.core.t35 import T35Config, build_preview, map_text, read_t35
 from conftest import DATA
+
+FIRMS = T35Config(manufacturers=["ROBOLEGO", "İHMA", "HAS-MAK"])
 
 
 def test_mapping_rules():
-    m = map_text("ROBOLEGO İMALATA ALINACAK")
+    m = map_text("ROBOLEGO İMALATA ALINACAK", FIRMS)
     assert (m.progress, m.manufacturer) == ("Bekliyor", "ROBOLEGO")
     assert map_text("İHMA ÜRETİMDE").progress == "Devam ediyor"
-    assert map_text("İHMA ÜRETİMDE").manufacturer == "İHMA"
+    assert map_text("İHMA ÜRETİMDE", FIRMS).manufacturer == "İHMA"
     m = map_text("ÜRETİM TAMAMLANDI")
     assert m.progress == "Tamamlandı" and m.note is None
-    assert map_text("İHMA HAZIR").progress == "Tamamlandı"
-    assert map_text("HAS-MAK İMALATTA").manufacturer == "HAS-MAK"
+    assert map_text("HAS-MAK İMALATTA", FIRMS).manufacturer == "HAS-MAK"
     assert map_text("SİPARİŞ VERİLMEMİŞ, STOKTAN").material_status == "Stoktan"
     assert map_text("TEKRAR MALZEME SİPARİŞİ").material_status == "Tekrar sipariş edildi"
     assert map_text("MALZEME DAHA ÖNCE SÖYLENDİ").material_status == "Sipariş verildi"

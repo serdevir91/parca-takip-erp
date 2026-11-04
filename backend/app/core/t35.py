@@ -19,7 +19,6 @@ from .xlsxguard import check_xlsx
 
 DEFAULT_RULES: list[dict[str, Any]] = [
     {"field": "progress", "all": ["TAMAMLANDI"], "value": PROG_DONE, "priority": 10},
-    {"field": "progress", "all": ["İHMA HAZIR"], "value": PROG_DONE, "priority": 20},
     {"field": "progress", "all": ["ÜRETİMDE"], "value": PROG_RUN, "priority": 30},
     {"field": "progress", "all": ["İMALATTA"], "value": PROG_RUN, "priority": 40},
     {"field": "material_status", "all": ["SİPARİŞ VERİLMEMİŞ", "STOK"], "value": "Stoktan", "priority": 10},
@@ -28,9 +27,9 @@ DEFAULT_RULES: list[dict[str, Any]] = [
     {"field": "material_status", "all": ["MALZEME SÖYLENECEK"], "value": "Malzeme söylenecek", "priority": 40},
 ]
 DEFAULT_PROGRESS = PROG_WAIT
-# Texts that are not copied into the T-35 note on their own
+# Texts that are not copied into the status note on their own
 DEFAULT_SKIP_NOTE = ["ÜRETİM TAMAMLANDI"]
-DEFAULT_MANUFACTURERS = ["ROBOLEGO", "İHMA", "HAS-MAK"]
+DEFAULT_MANUFACTURERS: list[str] = []        # firms come from Cari kartlar
 # Solid fills treated as "marked" (red / orange / amber)
 MARK_FILLS = {"FFFF0000", "FFFFC000", "FFFF9900", "FFFF6600", "FFC00000", "FFED7D31", "FFFFA500"}
 MARK_NOTE = "dış listede kırmızı işaretli"

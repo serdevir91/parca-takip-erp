@@ -1,10 +1,11 @@
 """Per-module permissions. A role gives the defaults; an admin can override any module per user
 (User.permissions = {"purchasing": "edit", "stock": "none", ...}). The admin role always has everything,
-so the system can never be locked out."""
+so the system can never be locked out (the admin module itself cannot be switched off)."""
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status
 
+from .config import get_settings
 from .models import ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER, ROLE_VIEWER, User
 
 NONE, VIEW, EDIT = "none", "view", "edit"
@@ -18,7 +19,7 @@ MODULES: list[tuple[str, str, str]] = [
     ("parts", "Parça listesi", "Mühendislik"),
     ("fasteners", "Bağlantı elemanları", "Mühendislik"),
     ("drawings", "Teknik resimler", "Mühendislik"),
-    ("control", "Kontrol listesi ve T-35", "Mühendislik"),
+    ("control", "Kontrol listesi ve durum listesi", "Mühendislik"),
     ("planning", "İhtiyaç ve maliyet", "Planlama"),
     ("purchasing", "Satın alma", "Planlama"),
     ("workorders", "İş emirleri", "Üretim"),
@@ -60,9 +61,12 @@ def clean_overrides(raw: object) -> dict[str, str]:
 
 def effective(user: User) -> dict[str, str]:
     if user.role == ROLE_ADMIN:
-        return dict(ROLE_DEFAULTS[ROLE_ADMIN])
-    base = dict(ROLE_DEFAULTS.get(user.role, ROLE_DEFAULTS[ROLE_VIEWER]))
-    base.update(clean_overrides(user.permissions))
+        base = dict(ROLE_DEFAULTS[ROLE_ADMIN])
+    else:
+        base = dict(ROLE_DEFAULTS.get(user.role, ROLE_DEFAULTS[ROLE_VIEWER]))
+        base.update(clean_overrides(user.permissions))
+    for k in get_settings().disabled_modules:      # switched off for everyone in Sistem Ayarları
+        base[k] = NONE
     return base
 
 

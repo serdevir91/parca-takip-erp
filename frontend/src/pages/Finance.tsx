@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, download } from "../api/client";
+import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, PageHeader } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
@@ -9,7 +10,7 @@ import { statusStyle } from "../theme/theme";
 import { Field, Loading, Modal } from "./admin/shared";
 import { FirmSelect, ProjectSelect, addDays, fmtDay, fmtMoney, numOrNull, today, trIncludes } from "./erp/common";
 import {
-  INV_COLORS, LedgerModal, LinesEditor, LinesTable, PAY_COLORS, PAY_METHODS, Stat, emptyLine, lineSum, linesBody,
+  INV_COLORS, LedgerModal, LinesEditor, LinesTable, PAY_COLORS, Stat, emptyLine, lineSum, linesBody,
   useBalances, type DocLine, type Invoice, type Payment,
 } from "./erp/commerce";
 
@@ -34,7 +35,7 @@ export default function Finance() {
   const [tab, setTab] = useState<Tab>("sales");
   const bal = useBalances();
   const sum = (k: "receivable" | "payable" | "overdue_receivable" | "overdue_payable") =>
-    (bal.data ?? []).filter((b) => b.currency === "TRY").reduce((s, b) => s + b[k], 0);
+    (bal.data ?? []).filter((b) => b.currency === sys.currency).reduce((s, b) => s + b[k], 0);
   return (
     <Page>
       <PageHeader icon={Wallet} title="Fatura ve ödeme" sub="Satış ve alış faturaları, tahsilat, ödeme ve cari hesap takibi" />
@@ -207,8 +208,8 @@ function InvoiceEditor({ kind, invoice, onClose, onSaved }: {
   const [firmId, setFirmId] = useState<number | null>(invoice?.firm_id ?? null);
   const [project, setProject] = useState<number | null>(invoice?.project_id ?? null);
   const [date, setDate] = useState(invoice?.invoice_date ?? today());
-  const [due, setDue] = useState(invoice?.due_date ?? addDays(30));
-  const [tax, setTax] = useState(String(invoice?.tax_rate ?? 20));
+  const [due, setDue] = useState(invoice?.due_date ?? addDays(sys.payment_days));
+  const [tax, setTax] = useState(String(invoice?.tax_rate ?? sys.vat));
   const [note, setNote] = useState(invoice?.note ?? "");
   const [lines, setLines] = useState<DocLine[]>(() => invoice?.lines?.map((l) => ({ ...l })) ?? [emptyLine()]);
   const [prices, setPrices] = useState<string[]>(() => lines.map((l) => (l.unit_price == null ? "" : String(l.unit_price))));
@@ -255,7 +256,7 @@ function PaymentEditor({ invoice, onClose }: { invoice?: Invoice; onClose: () =>
   const [firmId, setFirmId] = useState<number | null>(invoice?.firm_id ?? null);
   const [amount, setAmount] = useState(invoice ? String(invoice.remaining) : "");
   const [date, setDate] = useState(today());
-  const [method, setMethod] = useState(PAY_METHODS[0]);
+  const [method, setMethod] = useState(sys.pay_methods[0]);
   const [note, setNote] = useState("");
   const save = useMutation({
     mutationFn: () => api.post<Payment>("/payments", { direction, firm_id: firmId, invoice_id: invoice?.id ?? null,
@@ -286,7 +287,7 @@ function PaymentEditor({ invoice, onClose }: { invoice?: Invoice; onClose: () =>
         <Field label="Tutar"><input inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
         <Field label="Tarih"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Yöntem">
-          <select value={method} onChange={(e) => setMethod(e.target.value)}>{PAY_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
+          <select value={method} onChange={(e) => setMethod(e.target.value)}>{sys.pay_methods.map((m) => <option key={m}>{m}</option>)}</select>
         </Field>
         <Field label="Not (dekont no vb.)"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
@@ -307,7 +308,7 @@ function Payments() {
     onError: (e) => toast(errText(e), true),
   });
   const rows = list.data ?? [];
-  const tot = (d: string) => rows.filter((r) => r.direction === d && r.currency === "TRY").reduce((s, r) => s + r.amount, 0);
+  const tot = (d: string) => rows.filter((r) => r.direction === d && r.currency === sys.currency).reduce((s, r) => s + r.amount, 0);
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
+import { curSign, sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, PageHeader } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
@@ -129,7 +130,7 @@ function TimeForm({ employees, onClose }: { employees: Employee[]; onClose: () =
   const refresh = useRefresh();
   const [emp, setEmp] = useState<number>(employees[0]?.id ?? 0);
   const [date, setDate] = useState(today());
-  const [hours, setHours] = useState("8");
+  const [hours, setHours] = useState(String(sys.work_hours));
   const [project, setProject] = useState<number | null>(null);
   const [wo, setWo] = useState<number | null>(null);
   const [note, setNote] = useState("");
@@ -255,7 +256,7 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
           <Field label="Bölüm"><input value={f.department} onChange={set("department")} /></Field>
           <Field label="Telefon"><input value={f.phone} onChange={set("phone")} /></Field>
           <Field label="E-posta"><input type="email" value={f.email} onChange={set("email")} /></Field>
-          <Field label="Saat ücreti (₺, işveren maliyeti)"><input inputMode="decimal" value={f.rate} onChange={set("rate")} /></Field>
+          <Field label={`Saat ücreti (${curSign()}, işveren maliyeti)`}><input inputMode="decimal" value={f.rate} onChange={set("rate")} /></Field>
           <Field label="İşe giriş"><input type="date" value={f.start} onChange={set("start")} /></Field>
         </div>
         <Field label="Kullanıcı hesabı (kendi kartını ve saatlerini görür)">

@@ -17,6 +17,7 @@ import type { Project } from "../types";
 import type { ChatState } from "../pages/Chat";
 import { useToast } from "./Toast";
 import BrandMark from "./BrandMark";
+import { sys, useBrand } from "../api/system";
 
 export function useProject() {
   const { pid } = useParams();
@@ -175,7 +176,11 @@ export default function Layout() {
       return !c;
     });
   };
-  const visible = (i: Item) => (!i.module || can(i.module)) && !(i.unless && can(i.unless));
+  const visible = (i: Item) => (!i.module || can(i.module)) && !(i.unless && (can(i.unless) || sys.modules_off.includes(i.unless)));
+  const brand = useBrand();
+  const brandWords = brand.name.split(" ");
+  const brandTail = brandWords.pop();
+  const brandHead = brandWords.join(" ");
   const link = (i: Item, to = i.to) => (
     <NavLink key={to} to={to} end={i.end} title={collapsed ? i.label : undefined}>
       <i.icon size={17} strokeWidth={1.9} aria-hidden />
@@ -197,8 +202,8 @@ export default function Layout() {
           <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label="Menüyü kapat">
             <X size={18} />
           </button>
-          <span className="brand-logo"><BrandMark /></span>
-          <span className="nav-label brand-name">LAB <b>ERP</b></span>
+          <span className="brand-logo"><BrandMark logo={brand.logo} /></span>
+          <span className="nav-label brand-name">{brandHead} <b>{brandTail}</b></span>
         </div>
         <nav>
           {GROUPS.map((g) => {

@@ -8,7 +8,7 @@ import zipfile
 
 from openpyxl import Workbook, load_workbook
 
-from app.config import Settings, ensure_jwt_secret
+from app.config import Settings, ensure_jwt_secret, get_settings
 from app.core.xlsxguard import check_xlsx
 from app.services import loginguard, xlsafe
 from app.services.drawings import iter_zip
@@ -55,7 +55,7 @@ def test_security_headers_and_docs_off(client):
 def test_login_throttle(client, admin_headers):
     loginguard.reset()
     _, name, _ = _user(client, admin_headers)
-    for _ in range(loginguard.USER_LIMIT):
+    for _ in range(get_settings().login_attempts):
         assert client.post("/api/auth/login", data={"username": name, "password": "wrong-pass"}).status_code == 401
     r = client.post("/api/auth/login", data={"username": name, "password": "pass1234"})
     assert r.status_code == 429 and "Retry-After" in r.headers

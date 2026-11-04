@@ -69,7 +69,7 @@ def _out(db: Session, w: WorkOrder) -> dict[str, Any]:
 
 
 def _new(db: Session, me: User, **kw: Any) -> WorkOrder:
-    w = WorkOrder(no=erp.next_no(db, WorkOrder, "IE"), status="planned", done_qty=0.0, created_by=me.username, **kw)
+    w = WorkOrder(no=erp.next_no(db, WorkOrder), status="planned", done_qty=0.0, created_by=me.username, **kw)
     db.add(w)
     db.flush()
     audit.record(db, me, "work_order", w.no, "no", None, w.no, w.project_id, action="create")

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { sys } from "../../api/system";
 import { useAuth, type Level } from "../../api/auth";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal, fmtDate, roleLabel } from "./shared";
@@ -18,7 +19,6 @@ type Catalog = {
 };
 type RoleOpt = { value: string; label: string };
 
-const MIN_PASSWORD = 8;
 const FALLBACK_ROLES = ["admin", "designer", "planner", "viewer"];
 
 export default function UsersTab() {
@@ -176,7 +176,7 @@ function UserForm({ user, roles, self, approve, onClose, onSaved }: {
     onError: (e) => toast(errText(e), true),
   });
 
-  const pwErr = !user && (password.length < MIN_PASSWORD ? `Şifre en az ${MIN_PASSWORD} karakter olmalı` : password !== password2 ? "Şifreler aynı değil" : null);
+  const pwErr = !user && (password.length < sys.password_min ? `Şifre en az ${sys.password_min} karakter olmalı` : password !== password2 ? "Şifreler aynı değil" : null);
   const invalid = (!user && !username.trim()) || !!pwErr;
   return (
     <Modal wide title={approve ? `Hesap isteğini onayla: ${user?.username}` : user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
@@ -233,7 +233,7 @@ function PasswordForm({ user, onClose }: { user: AdminUser; onClose: () => void 
     },
     onError: (e) => toast(errText(e), true),
   });
-  const err = pw.length < MIN_PASSWORD ? `Şifre en az ${MIN_PASSWORD} karakter olmalı` : pw !== pw2 ? "Şifreler aynı değil" : null;
+  const err = pw.length < sys.password_min ? `Şifre en az ${sys.password_min} karakter olmalı` : pw !== pw2 ? "Şifreler aynı değil" : null;
   return (
     <Modal title={`Şifre sıfırla: ${user.username}`} onClose={onClose}
       footer={<>

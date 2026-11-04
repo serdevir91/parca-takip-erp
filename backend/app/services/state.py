@@ -18,6 +18,7 @@ from ..core.fastener import FastenerMatch
 from ..core.normalize import tr_sort_key
 from ..core.status import (COLORS, KIND_HAZIR, KIND_IMALAT, KIND_MONTAJ, PROG_DONE, PROG_WAIT,
                            STATUS_MAP, STATUS_NO_TEMIN, derive_status, effective_procurement, status_kind)
+from .system import system
 from ..models import (BomRow, BomVersion, Drawing, FastenerSetting, MissingRow, PartAlias, Project,
                       Tracking)
 
@@ -53,6 +54,7 @@ class ProjectView:
     drawings: dict[str, list[Drawing]] = field(default_factory=dict)
     missing: list[MissingRow] = field(default_factory=list)
     fastener_settings: dict[str, FastenerSetting] = field(default_factory=dict)
+    fastener_defaults: dict[str, Any] = field(default_factory=dict)  # spare_pct and unit for fasteners without a row
 
     # ---------- loading ----------
     @classmethod
@@ -72,7 +74,7 @@ class ProjectView:
         missing = list(db.scalars(select(MissingRow).where(MissingRow.project_id == project.id)
                                   .order_by(MissingRow.id)))
         fs = {f.key: f for f in db.scalars(select(FastenerSetting).where(FastenerSetting.project_id == project.id))}
-        return cls(project, version, rows, tracking, aliases, dict(drawings), missing, fs)
+        return cls(project, version, rows, tracking, aliases, dict(drawings), missing, fs, system(db)["production"])
 
     # ---------- conversions ----------
     def to_parsed(self) -> ParsedBom:
@@ -227,8 +229,8 @@ class ProjectView:
                     "key": r.fastener_key, "type": r.fastener_type, "desc": r.fastener_desc,
                     "std": r.fastener_std, "size": r.fastener_size, "total_qty": 0, "rows": 0,
                     "groups": [], "names": [],
-                    "spare_pct": fs.spare_pct if fs else 10.0, "supplier": fs.supplier if fs else "",
-                    "unit": fs.unit if fs else "Adet", "unit_price": fs.unit_price if fs else None,
+                    "spare_pct": fs.spare_pct if fs else self.fastener_defaults["spare_pct"], "supplier": fs.supplier if fs else "",
+                    "unit": fs.unit if fs else self.fastener_defaults["unit"], "unit_price": fs.unit_price if fs else None,
                     "order_status": fs.order_status if fs else FASTENER_ORDER_STATUSES[0],
                     "note": fs.note if fs else "",
                 }

@@ -6,12 +6,16 @@ Two modes, chosen on the first start and changeable from the "Uygulama" menu:
 - client ("Ağdaki sunucuya bağlan"): connects to a running server (Docker, Docker-free or another
   desktop app in server mode).
 
+In server mode on Windows the close button only hides the window: the server keeps running and a tray icon
+(hidden icons, next to the clock) reopens the window or really quits. A second start shows the running window.
+
 Settings live in desktop.json under %APPDATA%\\LabERP (%APPDATA%\\ParcaTakipERP on PCs set up before 1.4.1). Updates come from the GitHub releases of
 the project (silent check at startup and "Güncellemeleri denetle" in the menu).
 
 Dev run on macOS/Linux/Windows:  python desktop/parca_takip_desktop.py   (needs frontend/dist)
 Bundle smoke test (CI):           LabERP.exe --smoke <empty folder>
 Window self-test (CI):            LabERP.exe --ui-test <result.json>   (fresh profile: setup page + JS bridge)
+Background self-test (CI):        LabERP.exe --tray-test <result.json>  (server profile: close hides, reopen, quit)
 """
 from __future__ import annotations
 
@@ -56,7 +60,10 @@ VERSION = Settings.model_fields["app_version"].default
 REPO = "serdevir91/parca-takip-erp"
 DEFAULT_PORT = 8000
 IS_WIN = sys.platform == "win32"
+INSTANCE_PORT = 47812         # loopback only: a second start asks the running app to show its window
+INSTANCE_HELLO = b"LABERP-SHOW\n"
 UI_TEST: Path | None = None   # --ui-test <result.json>: exit once the setup page talks to Python
+TRAY_TEST: Path | None = None  # --tray-test <result.json>: exercise the background mode, then quit
 
 
 def config_dir() -> Path:
@@ -150,6 +157,21 @@ def lan_addresses() -> list[str]:
 
 
 # ---------- embedded server ----------
+def wake_running_app() -> bool:
+    """True when an app is already running here; it brings its window to the front."""
+    if IS_WIN:
+        import ctypes
+
+        ctypes.windll.user32.AllowSetForegroundWindow(ctypes.c_ulong(0xFFFFFFFF))  # ASFW_ANY
+    try:
+        with socket.create_connection(("127.0.0.1", INSTANCE_PORT), timeout=1) as s:
+            s.settimeout(3)
+            s.sendall(INSTANCE_HELLO)
+            return s.recv(2) == b"OK"
+    except OSError:
+        return False
+
+
 class EmbeddedServer:
     """Runs migrate + uvicorn + the daily backup thread in this process (like `app.cli serve`)."""
 
@@ -265,6 +287,10 @@ class DesktopApp:
         self._server: EmbeddedServer | None = None
         self._remote = None      # RemoteInstall of "Sunucuma kur"
         self._base = ""          # URL the window shows: the server root
+        self._tray = None        # pystray icon: set while the server runs in the background (Windows)
+        self._listener: socket.socket | None = None   # wake_running_app() connects here
+        self._quitting = False   # False: the close button only hides the window while the tray is up
+        self._hint_shown = False
         self._setup_html = (ASSETS / "setup.html").read_text(encoding="utf-8")
 
     # --- state for setup.html ---
@@ -332,6 +358,16 @@ class DesktopApp:
         self._remote = job
         job.start()
         return {"ok": True}
+
+    def remote_check(self, form: dict) -> dict:
+        """Read-only look at the server before installing; the guide on the setup page shows the answers."""
+        from remote_install import RemoteInstall
+
+        try:
+            job = RemoteInstall(form, ASSETS / "server_install.sh", config_dir() / "known_hosts")
+        except ValueError:
+            return {"ok": False, "error": "Port bir sayı olmalı", "problem": "form"}
+        return job.check()
 
     def remote_status(self) -> dict:
         return self._remote.status() if self._remote else {"done": True, "ok": False, "lines": [], "error": ""}
@@ -504,17 +540,149 @@ class DesktopApp:
                 return self._fail(f"Sunucu başlatılamadı: {e}")
             self._server = srv
             self._base = srv.local_url
+            self._start_background()
         self._cfg.pop("_error", None)
         log.info("opening %s", self._base)
         self._window.load_url(self._base + "/")
         return None
 
-    def _restart(self) -> None:
-        args = [sys.executable] if FROZEN else [sys.executable, str(Path(__file__).resolve())]
-        subprocess.Popen(args, close_fds=True)
+    # --- background mode: the server outlives the window until "Sunucuyu durdur ve çık" in the tray ---
+    def _start_background(self) -> None:
+        if not IS_WIN or self._tray is not None:
+            return
+        try:
+            import pystray
+            from PIL import Image
+
+            addresses = ", ".join(f"{ip}:{self._server.port}" for ip in lan_addresses()) or "ağ bağlantısı yok"
+            self._tray = pystray.Icon("LabERP", Image.open(ASSETS / "icon.ico"), f"{APP_NAME} sunucusu çalışıyor",
+                                      pystray.Menu(
+                pystray.MenuItem(f"{APP_NAME} penceresini aç", lambda icon, item: self._show_window(), default=True),
+                pystray.MenuItem(f"Adres: {addresses}", None, enabled=False),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Sunucuyu durdur ve çık", lambda icon, item: self._tray_quit())))
+            self._tray.run_detached()
+            self._window.native.FormClosing += self._on_form_closing
+        except Exception:  # noqa: BLE001 - the app still works, only without the background mode
+            log.exception("tray start failed")
+            self._tray = None
+            return
+        self._listen_for_wake()
+
+    def _on_form_closing(self, _sender, args) -> None:
+        """Runs on the UI thread. Only the user's close is turned into hide: Windows shutdown, log off and
+        Task Manager must go through, or the hidden window would block them."""
+        try:
+            from System.Windows.Forms import CloseReason
+
+            if self._quitting or self._tray is None or args.CloseReason != CloseReason.UserClosing:
+                return
+            args.Cancel = True
+            self._hide_window()
+        except Exception:  # noqa: BLE001 - an exception must not cross into .NET
+            log.exception("close to tray failed")
+
+    def _hide_window(self) -> None:
+        self._window.hide()
+        if not self._hint_shown:
+            self._hint_shown = True
+            self._tray.notify("Sunucu arka planda çalışmaya devam ediyor. Kapatmak için saatin yanındaki gizli "
+                              f"simgelerden {APP_NAME} simgesine sağ tıklayın.", APP_NAME)
+
+    def _show_window(self) -> None:
+        self._window.show()
+        if str(self._window.native.WindowState) == "Minimized":
+            self._window.restore()
+
+    def _tray_quit(self) -> None:
+        import ctypes
+
+        text = "Sunucu durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. Kapatılsın mı?"
+        # OK/Cancel, warning icon, always on top: the window may be hidden, so it cannot own this dialog
+        if ctypes.windll.user32.MessageBoxW(None, text, APP_NAME, 0x1 | 0x30 | 0x40000 | 0x10000) == 1:
+            self._leave()
+
+    def _listen_for_wake(self) -> None:
+        try:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.bind(("127.0.0.1", INSTANCE_PORT))
+            srv.listen(4)
+        except OSError:
+            log.exception("instance port busy")
+            return
+        self._listener = srv
+
+        def serve() -> None:
+            while True:
+                try:
+                    conn, _ = srv.accept()
+                except OSError:
+                    return
+                try:
+                    with conn:
+                        conn.settimeout(2)
+                        if conn.recv(32) == INSTANCE_HELLO:
+                            conn.sendall(b"OK")
+                            self._show_window()
+                except Exception:  # noqa: BLE001 - keep listening
+                    log.exception("wake failed")
+
+        threading.Thread(target=serve, name="instance", daemon=True).start()
+
+    def _stop_listener(self) -> None:
+        if self._listener is not None:
+            self._listener.close()
+            self._listener = None
+
+    def _leave(self) -> None:
+        """Really end the app."""
+        self._quitting = True
+        self._stop_listener()
+        if self._tray is not None:
+            self._tray.stop()
         if self._server:
             self._server.stop()
         self._window.destroy()
+
+    def _tray_self_test(self) -> None:
+        import ctypes
+
+        def until(cond, timeout: float = 20) -> bool:
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                if cond():
+                    return True
+                time.sleep(0.2)
+            return False
+
+        result: dict = {"version": VERSION}
+        try:
+            result["tray"] = until(lambda: self._tray is not None and self._tray.visible, 90)
+            hwnd = ctypes.c_void_p(int(self._window.native.Handle.ToInt64()))
+            user32 = ctypes.windll.user32
+            user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
+            user32.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+            visible = lambda: bool(user32.IsWindowVisible(hwnd))  # noqa: E731
+            result["shown"] = until(visible)
+            user32.PostMessageW(hwnd, 0x0010, None, None)  # WM_CLOSE: what the title bar X sends
+            result["hidden"] = until(lambda: not visible())
+            result["server_alive"] = is_erp(self._server.local_url)
+            second = subprocess.run([sys.executable], timeout=60, check=False)
+            result["second_start_exit"] = second.returncode
+            result["reopened"] = until(visible)
+            result["ok"] = all(result[k] for k in ("tray", "shown", "hidden", "server_alive", "reopened")) \
+                and second.returncode == 0
+        except Exception as e:  # noqa: BLE001
+            log.exception("tray test failed")
+            result["error"] = repr(e)
+        TRAY_TEST.write_text(json.dumps(result), encoding="utf-8")
+        self._leave()
+
+    def _restart(self) -> None:
+        self._stop_listener()   # or the new process would only wake this one and exit
+        args = [sys.executable] if FROZEN else [sys.executable, str(Path(__file__).resolve())]
+        subprocess.Popen(args, close_fds=True)
+        self._leave()
 
     def _alert(self, text: str) -> None:
         self._window.evaluate_js(f"alert({json.dumps(text)})")
@@ -551,9 +719,7 @@ class DesktopApp:
             return
         # The installer closes this app, updates it and starts it again (postinstall entry in installer.iss)
         subprocess.Popen([str(target), "/SILENT", "/NORESTART"], close_fds=True)
-        if self._server:
-            self._server.stop()
-        self._window.destroy()
+        self._leave()
 
     # ---- in-app "Uygulama" menu (frontend/src/components/DesktopMenu.tsx) ----
     # The native WinForms menu bar was white in every theme, so its actions now live in the themed web UI.
@@ -562,6 +728,7 @@ class DesktopApp:
         urls = [f"http://{ip}:{self._server.port}" for ip in lan_addresses()] if self._server else []
         return {"version": VERSION, "mode": "server" if self._server else "client", "base": self._base or "",
                 "addresses": urls, "data_dir": str(self._server.data_dir) if self._server else "",
+                "background": self._tray is not None,
                 "config": str(CONFIG_FILE)}
 
     def app_action(self, name: str) -> dict:
@@ -577,7 +744,10 @@ class DesktopApp:
         elif name == "update":
             threading.Thread(target=self._check_update, args=(False,), daemon=True).start()
         elif name == "quit":
-            threading.Timer(0.1, self._window.destroy).start()
+            if self._tray is not None:
+                self._hide_window()
+            else:
+                threading.Timer(0.1, self._window.destroy).start()
         else:
             return {"ok": False, "error": f"Bilinmeyen işlem: {name}"}
         return {"ok": True}
@@ -634,12 +804,14 @@ class DesktopApp:
         self._window = webview.create_window(
             APP_NAME, html=first, js_api=self,
             width=1440, height=900, min_size=(960, 600), maximized=True, text_select=True,
-            confirm_close=server_mode, background_color="#0f172a",
+            confirm_close=server_mode and not IS_WIN, background_color="#0f172a",
             localization={"global.quitConfirmation":
                           "Uygulama kapanınca sunucu da durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. "
-                          "Kapatılsın mı?"} if server_mode else None)
+                          "Kapatılsın mı?"} if server_mode and not IS_WIN else None)
         self._window.events.closed += lambda: self._server and self._server.stop()
         icon = ASSETS / "icon.ico"
+        if TRAY_TEST is not None:
+            threading.Thread(target=self._tray_self_test, name="tray-test", daemon=True).start()
         webview.start(self._on_start, private_mode=False, storage_path=str(config_dir() / "webview"),
                       icon=str(icon) if icon.is_file() else None)
 
@@ -683,7 +855,7 @@ def smoke(folder: Path) -> int:
 
 
 def main() -> None:
-    global UI_TEST
+    global UI_TEST, TRAY_TEST
     setup_logging()
     log.info("start %s frozen=%s", VERSION, FROZEN)
     if len(sys.argv) >= 3 and sys.argv[1] == "--smoke":
@@ -695,9 +867,18 @@ def main() -> None:
         UI_TEST.unlink(missing_ok=True)
         # The setup page must call get_state within 120 s, or the window is stuck
         threading.Timer(120, lambda: (log.error("ui-test: no setup page"), os._exit(1))).start()
+    if len(sys.argv) >= 3 and sys.argv[1] == "--tray-test":
+        TRAY_TEST = Path(sys.argv[2])
+        TRAY_TEST.unlink(missing_ok=True)
+        threading.Timer(240, lambda: (log.error("tray-test: timed out"), os._exit(1))).start()
+    if IS_WIN and UI_TEST is None and TRAY_TEST is None and load_config().get("mode") == "server" and wake_running_app():
+        log.info("already running; its window was brought to the front")
+        logging.shutdown()
+        os._exit(0)
     DesktopApp().run()
-    if UI_TEST is not None:
-        ok = UI_TEST.is_file() and json.loads(UI_TEST.read_text(encoding="utf-8")).get("ok")
+    result = UI_TEST or TRAY_TEST
+    if result is not None:
+        ok = result.is_file() and json.loads(result.read_text(encoding="utf-8")).get("ok")
         logging.shutdown()
         os._exit(0 if ok else 1)
     os._exit(0)

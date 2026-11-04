@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, SalesOrder, User
 from ..permissions import require
-from ..services import audit, commerce
+from ..services import audit, commerce, system
 from .deps import get_db, project_or_404
 
 sales_view, sales_edit = require("sales", "view"), require("sales", "edit")
@@ -36,8 +36,8 @@ class SoIn(BaseModel):
     order_date: date | None = None
     valid_until: date | None = None
     due_date: date | None = None
-    currency: str = Field(default="TRY", max_length=8)
-    tax_rate: float = Field(default=20.0, ge=0, le=100)
+    currency: str = Field(default="", max_length=8)
+    tax_rate: float | None = Field(default=None, ge=0, le=100)
     discount_pct: float = Field(default=0.0, ge=0, le=100)
     note: str = ""
     lines: list[LineIn] = []
@@ -98,10 +98,12 @@ def create_order(body: SoIn, me: User = Depends(sales_edit), db: Session = Depen
         project_or_404(db, body.project_id)
     if not firm and not body.firm_name.strip():
         raise HTTPException(400, "Müşteri seçin")
-    so = SalesOrder(no=commerce.next_no(db, SalesOrder, "SS"), firm_id=firm.id if firm else None,
+    sets = system.system(db)["commerce"]
+    so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=firm.id if firm else None,
                     firm_name=firm.name if firm else body.firm_name.strip(), project_id=body.project_id,
                     status="draft", order_date=body.order_date or date.today(), valid_until=body.valid_until,
-                    due_date=body.due_date, currency=body.currency or "TRY", tax_rate=body.tax_rate,
+                    due_date=body.due_date, currency=body.currency or sets["currency"],
+                    tax_rate=sets["vat"] if body.tax_rate is None else body.tax_rate,
                     discount_pct=body.discount_pct, note=body.note, created_by=me.username)
     commerce.set_so_lines(so, [l.model_dump() for l in body.lines])
     db.add(so)
@@ -170,7 +172,7 @@ def make_invoice(so_id: int, me: User = Depends(finance_edit), db: Session = Dep
 def copy_order(so_id: int, me: User = Depends(sales_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     """New draft with the same customer and lines (revised quote, repeat order)."""
     src = _so_or_404(db, so_id)
-    so = SalesOrder(no=commerce.next_no(db, SalesOrder, "SS"), firm_id=src.firm_id, firm_name=src.firm_name,
+    so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=src.firm_id, firm_name=src.firm_name,
                     project_id=src.project_id, status="draft", order_date=date.today(), currency=src.currency,
                     tax_rate=src.tax_rate, discount_pct=src.discount_pct, note=src.note, created_by=me.username)
     commerce.set_so_lines(so, [commerce.line_out(l) for l in src.lines])
@@ -208,7 +210,8 @@ def order_xlsx(so_id: int, _: User = Depends(sales_view), db: Session = Depends(
             ("Vergi dairesi / no", f"{firm.tax_office} {firm.tax_no}".strip() if firm else ""),
             ("Proje", project.name if project else ""), ("Not", so.note)]
     body = commerce.form_xlsx("Fiyat teklifi" if quote_doc else "Sipariş onayı", info, so.currency, so.lines,
-                              commerce.totals(so.lines, so.tax_rate, so.discount_pct), so.tax_rate, so.discount_pct)
+                              commerce.totals(so.lines, so.tax_rate, so.discount_pct), so.tax_rate, so.discount_pct,
+                              company=system.system(db)["company"])
     name = f"{so.no}.xlsx"
     return Response(body, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})

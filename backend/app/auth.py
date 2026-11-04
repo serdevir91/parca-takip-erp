@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import get_db
 from .models import ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER, User
+from .services.system import apply_runtime
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -57,6 +58,7 @@ def _decode(token: str) -> tuple[int, int]:
 def user_from_token(token: str | None, db: Session) -> User:
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Giriş yapılmadı")
+    apply_runtime(db)
     uid, tv = _decode(token)
     user = db.get(User, uid)
     if user is None or not user.active:

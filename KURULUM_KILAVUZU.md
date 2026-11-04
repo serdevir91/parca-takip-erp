@@ -30,6 +30,8 @@ En kolay yol, bir Windows bilgisayarı sunucu yapmaktır. Docker, Python veya ba
 5. Yönetici (`admin`) şifresini belirleyin. Bu şifreyi unutmayın.
 6. Windows Güvenlik Duvarı izin sorarsa **Özel ağlar** kutusunu işaretleyip **İzin ver** deyin.
 7. Ekranda sunucunun adresi yazar (örnek `http://192.168.1.20:8000`). Bu adresi not edin.
+8. Pencereyi kapattığınızda sunucu durmaz; uygulama saatin yanındaki gizli simgelere iner. Sunucuyu tamamen
+   kapatmak için simgeye sağ tıklayıp **Sunucuyu durdur ve çık** seçin.
 
 Notlar:
 

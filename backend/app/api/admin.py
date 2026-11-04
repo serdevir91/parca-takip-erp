@@ -13,9 +13,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import hash_password
-from ..permissions import catalog, clean_overrides, effective, require
+from ..permissions import MODULES, catalog, clean_overrides, effective, require
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
-from ..services import audit, backup as backup_svc
+from ..services import audit, backup as backup_svc, system
+from ..services.tracking import material_status_choices
 from ..services.settings import (get_setting, part_no_patterns, purchased_assemblies, set_setting,
                                  signup_enabled)
 from .auth import check_email, check_password_rules
@@ -28,7 +29,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 FIRM_KINDS = ("manufacturer", "supplier", "both", "customer")
 FIRM_KIND_LABELS = {"manufacturer": "Üretici", "supplier": "Tedarikçi", "both": "Üretici + Tedarikçi",
                     "customer": "Müşteri"}
-SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules", "signup")
+SETTING_KEYS = ("part_no_patterns", "purchased_assemblies", "status_rules", "signup", "material_status_choices",
+                "system")
 
 
 
@@ -332,7 +334,10 @@ def _settings_out(db: Session) -> dict[str, Any]:
     return {"part_no_patterns": part_no_patterns(db),
             "purchased_assemblies": sorted(purchased_assemblies(db)),
             "status_rules": get_setting(db, "status_rules") or {"big_drop_ratio": 0.10},
-            "signup": {"enabled": signup_enabled(db)}}
+            "signup": {"enabled": signup_enabled(db)},
+            "material_status_choices": material_status_choices(db),
+            "system": system.system(db),
+            "modules": [{"key": k, "label": label, "locked": k in system.ALWAYS_ON} for k, label, _ in MODULES]}
 
 
 class SettingIn(BaseModel):
@@ -362,6 +367,13 @@ def _validate_setting(key: str, value: Any) -> Any:
         return pats
     if key == "purchased_assemblies":
         return sorted(_clean_str_list(value, "Satın alınan montaj listesi"))
+    if key == "system":
+        return system.clean(value)
+    if key == "material_status_choices":
+        choices = _clean_str_list(value, "Malzeme durumları")
+        if not choices:
+            raise HTTPException(400, "En az bir malzeme durumu gerekli")
+        return choices
     if key == "signup":
         if not isinstance(value, dict):
             raise HTTPException(400, "Hesap oluşturma ayarı bir nesne olmalı")
@@ -396,6 +408,13 @@ def _mirror_purchased(db: Session, wanted: list[str]) -> None:
             p.is_purchased_assembly = True
 
 
+def _for_audit(value: Any) -> str:
+    """The logo is a long data URL; the log only needs to show that it changed."""
+    if isinstance(value, dict) and (value.get("company") or {}).get("logo"):
+        value = {**value, "company": {**value["company"], "logo": "(logo)"}}
+    return json.dumps(value, ensure_ascii=False)
+
+
 @router.get("/settings")
 def get_settings_view(_: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
     return _settings_out(db)
@@ -407,14 +426,14 @@ def put_setting(key: str, body: SettingIn, me: User = Depends(admin),
     if key not in SETTING_KEYS:
         raise HTTPException(404, f"Bilinmeyen ayar: {key}")
     value = _validate_setting(key, body.value)
-    old = _settings_out(db)[key]
+    old = system.saved(db) if key == "system" else _settings_out(db)[key]
     if key == "purchased_assemblies":
         _mirror_purchased(db, value)
     set_setting(db, key, value)
     if old != value:
-        audit.record(db, me, "setting", key, key, json.dumps(old, ensure_ascii=False),
-                     json.dumps(value, ensure_ascii=False))
+        audit.record(db, me, "setting", key, key, _for_audit(old), _for_audit(value))
     db.commit()
+    system.apply_runtime(db)
     return _settings_out(db)
 
 

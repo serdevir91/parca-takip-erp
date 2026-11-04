@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from . import system
 from .settings import get_setting, set_setting
 
 log = logging.getLogger("erp.mail")
@@ -69,7 +70,7 @@ def save(db: Session, body: dict[str, Any]) -> SmtpConfig:
                    username=str(body.get("username") or "").strip(),
                    password=str(body.get("password") or "") or old.password,
                    from_addr=str(body.get("from_addr") or "").strip(),
-                   from_name=str(body.get("from_name") or "").strip() or "LAB ERP")
+                   from_name=str(body.get("from_name") or "").strip() or system.app_name(db))
     if body.get("clear_password"):
         c.password = ""
     if c.security not in SECURITY:

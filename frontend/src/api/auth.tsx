@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { setSys, type SystemDefaults } from "./system";
 import { api, getToken, setToken, setUnauthorizedHandler } from "./client";
 
 export type Role = "admin" | "designer" | "planner" | "viewer" | string;
@@ -17,6 +18,7 @@ export interface User {
   role: Role;
   role_label: string;
   active: boolean;
+  system?: SystemDefaults;
   /** Effective level per module: role defaults plus the admin's per-user overrides. */
   permissions?: Partial<Record<Module, Level>>;
 }
@@ -41,6 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
+  const receive = useCallback((u: User) => {
+    setSys(u.system);
+    setUser(u);
+  }, []);
+
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -54,26 +61,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<User>("/auth/me")
-      .then(setUser)
+      .then(receive)
       .catch(() => setToken(null))
       .finally(() => setReady(true));
-  }, [logout]);
+  }, [logout, receive]);
 
   const reloadUser = useCallback(() => {
-    if (getToken()) api.get<User>("/auth/me").then(setUser).catch(() => undefined);
-  }, []);
+    if (getToken()) api.get<User>("/auth/me").then(receive).catch(() => undefined);
+  }, [receive]);
 
   const login = useCallback(async (username: string, password: string) => {
     const form = new URLSearchParams({ username, password });
     const r = await api.post<{ access_token: string; user: User }>("/auth/login", form);
     setToken(r.access_token);
-    setUser(r.user);
-  }, []);
+    receive(r.user);
+  }, [receive]);
 
   const value = useMemo<AuthState>(() => {
     const role = user?.role;
     const can = (module: Module, level: Level = "view") =>
-      role === "admin" || RANK[user?.permissions?.[module] ?? "none"] >= RANK[level];
+      RANK[user?.permissions?.[module] ?? "none"] >= RANK[level];
     return {
       user,
       ready,

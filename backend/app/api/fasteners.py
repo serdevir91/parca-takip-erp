@@ -144,7 +144,8 @@ def put_settings(pid: int, body: SettingsIn, db: Session = Depends(get_db),
     for key in dict.fromkeys(body.keys):
         s = view.fastener_settings.get(key)
         if s is None:
-            s = FastenerSetting(project_id=pid, key=key, spare_pct=10.0, supplier="", unit="Adet",
+            s = FastenerSetting(project_id=pid, key=key, spare_pct=view.fastener_defaults["spare_pct"], supplier="",
+                                unit=view.fastener_defaults["unit"],
                                 unit_price=None, order_status=FASTENER_ORDER_STATUSES[0], note="")
             db.add(s)
             db.flush()

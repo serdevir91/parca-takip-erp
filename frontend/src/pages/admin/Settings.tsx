@@ -5,7 +5,9 @@ import { errText, useToast } from "../../components/Toast";
 import { Field, ListEditor, Loading } from "./shared";
 
 type StatusRules = { big_drop_ratio: number; [k: string]: unknown };
-type Settings = { part_no_patterns: string[]; purchased_assemblies: string[]; status_rules: StatusRules };
+type Settings = {
+  part_no_patterns: string[]; purchased_assemblies: string[]; status_rules: StatusRules; material_status_choices: string[];
+};
 type Key = keyof Settings;
 
 /** JS RegExp is close enough to Python re for a first check; the server validates for real. */
@@ -37,10 +39,12 @@ function SettingsForm({ data }: { data: Settings }) {
   const [purchased, setPurchased] = useState(data.purchased_assemblies);
   const [pct, setPct] = useState(String(Math.round((data.status_rules?.big_drop_ratio ?? 0.1) * 1000) / 10));
   const [testNo, setTestNo] = useState("");
+  const [materials, setMaterials] = useState(data.material_status_choices);
 
   // Server state changed (saved or refetched): reset drafts of that key.
   useEffect(() => setPatterns(data.part_no_patterns), [data.part_no_patterns]);
   useEffect(() => setPurchased(data.purchased_assemblies), [data.purchased_assemblies]);
+  useEffect(() => setMaterials(data.material_status_choices), [data.material_status_choices]);
   useEffect(() => setPct(String(Math.round((data.status_rules?.big_drop_ratio ?? 0.1) * 1000) / 10)), [data.status_rules]);
 
   const save = useMutation({
@@ -85,6 +89,18 @@ function SettingsForm({ data }: { data: Settings }) {
         <ListEditor value={purchased} onChange={setPurchased} placeholder="Montaj parça numarası" mono />
         <SaveRow dirty={!same(purchased, data.purchased_assemblies)} pending={save.isPending}
           onReset={() => setPurchased(data.purchased_assemblies)} onSave={() => save.mutate({ key: "purchased_assemblies", value: purchased })} />
+      </div>
+
+      <div className="card">
+        <h3>Malzeme durumları</h3>
+        <p className="muted">
+          Parça listesindeki Malzeme Durumu seçenekleri. Bir değeri silerseniz o değerdeki parçalar değişmez; durum listesi kuralları
+          silinen değeri kullanıyorsa önce kuralı düzeltin.
+        </p>
+        <ListEditor value={materials} onChange={setMaterials} placeholder="Malzeme durumu" />
+        <SaveRow dirty={!same(materials, data.material_status_choices)} disabled={!materials.length} pending={save.isPending}
+          onReset={() => setMaterials(data.material_status_choices)}
+          onSave={() => save.mutate({ key: "material_status_choices", value: materials })} />
       </div>
 
       <div className="card">

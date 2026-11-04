@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Invoice, Payment, Project, PurchaseOrder, User
 from ..permissions import require
-from ..services import audit, commerce
+from ..services import audit, commerce, system
 from .deps import get_db, project_or_404
 
 finance_view, finance_edit = require("finance", "view"), require("finance", "edit")
@@ -36,8 +36,8 @@ class InvoiceIn(BaseModel):
     project_id: int | None = None
     invoice_date: date | None = None
     due_date: date | None = None
-    currency: str = Field(default="TRY", max_length=8)
-    tax_rate: float = Field(default=20.0, ge=0, le=100)
+    currency: str = Field(default="", max_length=8)
+    tax_rate: float | None = Field(default=None, ge=0, le=100)
     note: str = ""
     lines: list[LineIn] = []
 
@@ -56,7 +56,7 @@ class InvoiceUpdate(BaseModel):
 
 class FromPoIn(BaseModel):
     no: str = Field(max_length=40)
-    tax_rate: float = Field(default=20.0, ge=0, le=100)
+    tax_rate: float | None = Field(default=None, ge=0, le=100)
 
 
 class StatusIn(BaseModel):
@@ -69,7 +69,7 @@ class PaymentIn(BaseModel):
     invoice_id: int | None = None
     pay_date: date | None = None
     amount: float = Field(gt=0)
-    currency: str = Field(default="TRY", max_length=8)
+    currency: str = Field(default="", max_length=8)
     method: str = Field(default="Havale/EFT", max_length=30)
     note: str = ""
 
@@ -126,9 +126,11 @@ def create_invoice(body: InvoiceIn, me: User = Depends(finance_edit), db: Sessio
         raise HTTPException(400, "Firma seçin")
     if body.project_id is not None:
         project_or_404(db, body.project_id)
+    sets = system.system(db)["commerce"]
     inv = commerce.new_invoice(db, me, body.kind, firm=firm, no=body.no, project_id=body.project_id,
                                invoice_date=body.invoice_date, due_date=body.due_date,
-                               currency=body.currency or "TRY", tax_rate=body.tax_rate, note=body.note)
+                               currency=body.currency or sets["currency"],
+                               tax_rate=sets["vat"] if body.tax_rate is None else body.tax_rate, note=body.note)
     if not firm:
         inv.firm_name = body.firm_name.strip()
     commerce.set_inv_lines(inv, [l.model_dump() for l in body.lines])
@@ -144,7 +146,8 @@ def invoice_from_po(po_id: int, body: FromPoIn, me: User = Depends(finance_edit)
     po = db.get(PurchaseOrder, po_id)
     if po is None:
         raise HTTPException(404, "Sipariş bulunamadı")
-    inv = commerce.invoice_from_po(db, me, po, body.no, body.tax_rate)
+    inv = commerce.invoice_from_po(db, me, po, body.no,
+                                 system.system(db)["commerce"]["vat"] if body.tax_rate is None else body.tax_rate)
     db.commit()
     return _out(db, inv)
 
@@ -222,7 +225,8 @@ def invoice_xlsx(inv_id: int, _: User = Depends(finance_view), db: Session = Dep
             ("Firma", inv.firm_name), ("Adres", firm.address if firm else ""),
             ("Vergi dairesi / no", f"{firm.tax_office} {firm.tax_no}".strip() if firm else ""), ("Not", inv.note)]
     body = commerce.form_xlsx(commerce.INV_KINDS[inv.kind], info, inv.currency, inv.lines,
-                              commerce.totals(inv.lines, inv.tax_rate), inv.tax_rate)
+                              commerce.totals(inv.lines, inv.tax_rate), inv.tax_rate,
+                              company=system.system(db)["company"])
     return Response(body, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(inv.no or 'fatura')}.xlsx"})
 
@@ -262,7 +266,7 @@ def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Sessio
     p = Payment(direction=body.direction, firm_id=firm.id if firm else None,
                 firm_name=firm.name if firm else (inv.firm_name if inv else ""), invoice_id=inv.id if inv else None,
                 pay_date=body.pay_date or date.today(), amount=body.amount,
-                currency=inv.currency if inv else body.currency, method=body.method, note=body.note,
+                currency=inv.currency if inv else body.currency or system.system(db)["commerce"]["currency"], method=body.method, note=body.note,
                 created_by=me.username)
     db.add(p)
     db.flush()

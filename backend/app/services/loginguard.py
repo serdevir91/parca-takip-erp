@@ -1,7 +1,7 @@
 """Login brute-force guard: failed attempts per user name and per client IP, kept in memory.
 
-After USER_LIMIT failures for one user name (or IP_LIMIT from one address) within WINDOW seconds,
-further attempts are refused until the oldest failure leaves the window. A successful login clears
+After `login_attempts` failures for one user name (or IP_LIMIT from one address) within
+`login_lock_minutes`, further attempts are refused until the oldest failure leaves the window. A successful login clears
 the user name's failures. One process serves the whole LAN, so memory is enough; a restart resets it.
 """
 from __future__ import annotations
@@ -10,16 +10,20 @@ import threading
 import time
 from collections import defaultdict, deque
 
-WINDOW = 15 * 60
-USER_LIMIT = 5
+from ..config import get_settings
+
 IP_LIMIT = 30
 
 _lock = threading.Lock()
 _fails: dict[str, deque[float]] = defaultdict(deque)
 
 
+def _window() -> int:
+    return get_settings().login_lock_minutes * 60
+
+
 def _trim(q: deque[float], now: float) -> None:
-    while q and q[0] <= now - WINDOW:
+    while q and q[0] <= now - _window():
         q.popleft()
 
 
@@ -28,13 +32,13 @@ def blocked_for(username: str, ip: str) -> int:
     now = time.monotonic()
     wait = 0.0
     with _lock:
-        for key, limit in ((f"u:{username.lower()}", USER_LIMIT), (f"i:{ip}", IP_LIMIT)):
+        for key, limit in ((f"u:{username.lower()}", get_settings().login_attempts), (f"i:{ip}", IP_LIMIT)):
             q = _fails.get(key)
             if not q:
                 continue
             _trim(q, now)
             if len(q) >= limit:
-                wait = max(wait, q[0] + WINDOW - now)
+                wait = max(wait, q[0] + _window() - now)
     return int(wait) + 1 if wait > 0 else 0
 
 

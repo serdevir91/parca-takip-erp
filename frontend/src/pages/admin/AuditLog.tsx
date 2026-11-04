@@ -19,7 +19,7 @@ const ACTION_TR: Record<string, string> = {
 };
 const ENTITY_TR: Record<string, string> = {
   project: "Proje", part: "Parça", bom: "BOM", setting: "Ayar", user: "Kullanıcı", firm: "Firma",
-  fastener_rule: "Bağlantı elemanı kuralı", tracking: "Takip", drawing: "Teknik resim", t35: "T-35",
+  fastener_rule: "Bağlantı elemanı kuralı", tracking: "Takip", drawing: "Teknik resim", t35: "Durum listesi",
 };
 const actionLabel = (a: string) => ACTION_TR[a] ?? a;
 const entityLabel = (e: string) => ENTITY_TR[e] ?? e;

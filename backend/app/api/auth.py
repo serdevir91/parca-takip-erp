@@ -11,10 +11,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import create_token, dummy_verify, hash_password, verify_password
+from ..config import get_settings
 from ..db import SessionLocal
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLE_VIEWER, User
 from ..permissions import effective
-from ..services import audit, loginguard, mailer
+from ..services import audit, loginguard, mailer, system
 from ..services.settings import signup_enabled
 from .deps import any_user, get_db
 
@@ -37,16 +38,16 @@ def check_email(email: str) -> str:
         raise HTTPException(400, "E-posta adresi geçersiz")
     return email
 
-MIN_PASSWORD = 8
-
 
 def check_password_rules(pw: str) -> None:
-    if len(pw) < MIN_PASSWORD:
-        raise HTTPException(400, f"Şifre en az {MIN_PASSWORD} karakter olmalı")
+    least = get_settings().password_min_length
+    if len(pw) < least:
+        raise HTTPException(400, f"Şifre en az {least} karakter olmalı")
 
 
 @router.post("/login")
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)) -> dict:
+    system.apply_runtime(db)
     name = form.username.strip()
     ip = request.client.host if request.client else "?"
     wait = loginguard.blocked_for(name, ip)
@@ -65,13 +66,15 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     if not u.active:
         raise HTTPException(403, "Hesabınız pasif. Yöneticinize başvurun.")
     loginguard.succeeded(name)
-    return {"access_token": create_token(u), "token_type": "bearer", "user": user_out(u)}
+    return {"access_token": create_token(u), "token_type": "bearer",
+            "user": {**user_out(u), "system": system.for_user(db)}}
 
 
 @router.get("/options")
 def options(db: Session = Depends(get_db)) -> dict:
     """What the login screen offers (no login needed)."""
-    return {"signup": signup_enabled(db)}
+    system.apply_runtime(db)
+    return {"signup": signup_enabled(db), **system.for_login(db)}
 
 
 class SignupIn(BaseModel):
@@ -93,9 +96,9 @@ def _notify_admins(user_id: int) -> None:
         if not to:
             return
         body = (f"Yeni hesap isteği:\n\nKullanıcı adı: {u.username}\nAd soyad: {u.full_name or '-'}\n"
-                f"E-posta: {u.email or '-'}\n\nOnaylamak için LAB ERP > Yönetim > Kullanıcılar.")
+                f"E-posta: {u.email or '-'}\n\nOnaylamak için {system.app_name(db)} > Yönetim > Kullanıcılar.")
         try:
-            mailer.send(cfg, to, f"LAB ERP: {u.username} hesap onayı bekliyor", body)
+            mailer.send(cfg, to, f"{system.app_name(db)}: {u.username} hesap onayı bekliyor", body)
         except RuntimeError as e:
             log.warning("sign-up notice not sent: %s", e)
 
@@ -128,8 +131,8 @@ def register(body: SignupIn, request: Request, background: BackgroundTasks,
 
 
 @router.get("/me")
-def me(user: User = Depends(any_user)) -> dict:
-    return user_out(user)
+def me(user: User = Depends(any_user), db: Session = Depends(get_db)) -> dict:
+    return {**user_out(user), "system": system.for_user(db)}
 
 
 class ProfileIn(BaseModel):

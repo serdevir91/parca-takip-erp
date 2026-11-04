@@ -36,10 +36,11 @@ FASTENER_FIELDS: dict[str, str] = {H_FX_STATUS: "order_status", H_SPARE: "spare_
 assert set(PART_FIELDS.values()) <= set(TRACKING_FIELDS)
 
 LABELS = {"progress": "İlerleme", "procurement_override": "Temin Şekli", "manufacturer": "Üretici",
-          "material_status": "Malzeme Durumu", "t35_note": "T-35 Notu", "note": "Not",
+          "material_status": "Malzeme Durumu", "t35_note": "Durum Notu", "note": "Not",
           "order_status": "Sipariş Durumu", "spare_pct": "Yedek %", "unit_price": "Birim Fiyat",
           "supplier": "Tedarikçi"}
 _HEADER_SCAN_ROWS = 15
+H_T35_OLD = "T-35 Notu"
 
 
 class ImportError_(ValueError):
@@ -65,6 +66,8 @@ def _num(v: Any) -> float | None:
 def _find_header(ws: Worksheet, needed: set[str]) -> tuple[int, dict[str, int]] | None:
     for r in range(1, _HEADER_SCAN_ROWS + 1):
         cols = {_txt(c.value): c.column for c in ws[r] if _txt(c.value)}
+        if H_T35_OLD in cols:                            # file exported before 1.5.4
+            cols.setdefault(H_T35, cols[H_T35_OLD])
         if needed <= set(cols):
             return r, cols
     return None
@@ -344,7 +347,8 @@ def apply(db: Session, project: Project, user: User | None, changes: list[dict[s
         else:
             fs = ctx.view.fastener_settings.get(key)
             if fs is None:
-                fs = FastenerSetting(project_id=project.id, key=key, spare_pct=10.0, supplier="", unit="Adet",
+                fs = FastenerSetting(project_id=project.id, key=key, spare_pct=ctx.view.fastener_defaults["spare_pct"],
+                                     supplier="", unit=ctx.view.fastener_defaults["unit"],
                                      unit_price=None, order_status=FASTENER_ORDER_STATUSES[0], note="")
                 db.add(fs)
                 ctx.view.fastener_settings[key] = fs

@@ -1,8 +1,89 @@
+<div align="center">
+
+<img src="frontend/public/logo-192.png" width="96" alt="LAB ERP logosu">
+
 # LAB ERP
+
+**Üretim yapan şirketler için kendi sunucunuzda çalışan ERP.**<br>
+Proje, BOM, teknik resim, satın alma, stok, iş emri, satış, finans ve personel tek yerde.
+
+[![Son sürüm](https://img.shields.io/github/v/release/serdevir91/parca-takip-erp?label=s%C3%BCr%C3%BCm&color=2563eb)](https://github.com/serdevir91/parca-takip-erp/releases/latest)
+[![İndirme](https://img.shields.io/github/downloads/serdevir91/parca-takip-erp/total?label=indirme&color=16a34a)](https://github.com/serdevir91/parca-takip-erp/releases)
+![Windows](https://img.shields.io/badge/Windows-10%2B-0078d4)
+![Android](https://img.shields.io/badge/Android-8.0%2B-3ddc84)
+![Linux](https://img.shields.io/badge/Linux-sunucu-f59e0b)
+
+[**Windows için indir**](https://github.com/serdevir91/parca-takip-erp/releases/latest) ·
+[**Android için indir**](https://github.com/serdevir91/parca-takip-erp/releases/latest) ·
+[**Kurulum kılavuzu**](KURULUM_KILAVUZU.md)
 
 [![Codespaces'te aç](https://github.com/codespaces/badge.svg)](https://codespaces.new/serdevir91/parca-takip-erp?quickstart=1)
 
-**Hemen dene:** Yukarıdaki düğmeye tıklayın, ardından "Create codespace" deyin. GitHub bulutta bir makine açar,
+<br>
+
+<img src="docs/screenshots/home.png" width="860" alt="Ana sayfa: günün özeti, dikkat gerektirenler ve son işlemler">
+
+</div>
+
+## Neden LAB ERP?
+
+- **Verileriniz sizde kalır.** Yerel ağda, internetsiz çalışır. Bulut hesabı veya aylık ücret yoktur.
+- **Kurulumu kolaydır.** Bir Windows bilgisayarı sunucu yapın ya da uygulamanın içinden kendi Linux sunucunuza kurun.
+- **Şirketinize uyar.** Ad, logo, para birimi, KDV, belge numaraları, güvenlik kuralları ve modüller Yönetim ekranından değişir.
+- **Herkes aynı anda çalışır.** Bir cihazda yapılan değişiklik diğer ekranlara birkaç saniye içinde yansır.
+
+## Ekranlar
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/parts.png" alt="Parça listesi"><br><b>Parça listesi.</b> Ağaç veya düz liste, Excel gibi filtre, toplu düzenleme.</td>
+<td width="50%"><img src="docs/screenshots/bom.png" alt="BOM sürümleri"><br><b>BOM sürümleri.</b> SolidWorks listesini yükleyin, sürümleri karşılaştırıp onaylayın.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/drawings.png" alt="Teknik resimler"><br><b>Teknik resimler.</b> PDF ve görselleri parçayla otomatik eşleştirir, revizyonu kontrol eder.</td>
+<td><img src="docs/screenshots/planning.png" alt="İhtiyaç ve maliyet"><br><b>İhtiyaç ve maliyet.</b> Eksik parçaları görün, sipariş ve iş emrine çevirin.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/sales.png" alt="Satış ve teklif"><br><b>Satış ve teklif.</b> Teklifi siparişe, siparişi faturaya dönüştürün.</td>
+<td><img src="docs/screenshots/finance.png" alt="Fatura ve ödeme"><br><b>Fatura ve ödeme.</b> Alacak, borç, tahsilat ve cari hesap takibi.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/hr.png" alt="Personel ve zaman"><br><b>Personel ve zaman.</b> Çalışma saatleri işçilik maliyeti olarak projeye yazılır.</td>
+<td><img src="docs/screenshots/chat.png" alt="Sohbet"><br><b>Sohbet.</b> Birebir ve grup mesajları, dosya ekleri, şirket içinde kalır.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/admin.png" alt="Sistem ayarları"><br><b>Sistem ayarları.</b> Şirket bilgileri, belgeler, güvenlik, yedek ve modüller.</td>
+<td><img src="docs/screenshots/home-dark.png" alt="Koyu tema"><br><b>Üç tema.</b> Açık, koyu ve saf siyah (AMOLED).</td>
+</tr>
+</table>
+
+### Telefonda
+
+Android uygulaması ağdaki sunucuyu kendisi bulur. Fotoğraf çekip parçaya ekleyebilir, stok ve faturaya sahadan bakabilirsiniz.
+
+<p align="center"><img src="docs/screenshots/mobile.png" width="860" alt="Android ekranları: ana sayfa, parça listesi, stok, fatura ve ödeme"></p>
+
+### Kendi sunucunuza kurun
+
+Masaüstü uygulamasındaki **Sunucuma kur** seçeneği SSH ile bağlanır ve kurulumu kendisi yapar. Ekrandaki kılavuz
+sunucuda ve bilgisayarda yapılacakları adım adım gösterir. **Bağlantıyı dene** düğmesi hazır olmayan adımı işaretler.
+
+<p align="center"><img src="docs/screenshots/guide.png" width="560" alt="Sunucuma kur kılavuzu"></p>
+
+## Neler var?
+
+| Alan | Özellikler |
+|---|---|
+| **Mühendislik** | Proje ve BOM sürümleri, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
+| **Üretim** | İhtiyaç analizi, iş emirleri, stok kartları ve hareketleri, proje maliyeti |
+| **Ticari** | Satın alma, cari kartlar, teklif, satış siparişi, fatura, tahsilat ve ödeme |
+| **Ekip** | Personel kartları, zaman kaydı, sohbet, e-posta ile paylaşım |
+| **Yönetim** | Modül bazında yetki, kayıt onayı, denetim kaydı, otomatik yedek, sistem ayarları |
+| **Platform** | Windows uygulaması, Android uygulaması, tarayıcı, Docker veya Docker'sız Linux sunucu |
+
+## Hemen deneyin
+
+Yukarıdaki **Codespaces'te aç** düğmesine tıklayın, ardından "Create codespace" deyin. GitHub bulutta bir makine açar,
 uygulamayı demo projelerle kurar ve tarayıcıda yeni sekmede açar (ilk açılış 3-5 dakika, sonrakiler birkaç saniye).
 Giriş: **admin / admin**. Sekme açılmazsa alttaki **PORTS** sekmesinde 8000 numaralı portun yanındaki 🌐 simgesine tıklayın.
 Codespace kullanılmadığında 30 dakikada kendiliğinden durur; https://github.com/codespaces adresinden silinebilir.
@@ -10,10 +91,9 @@ Codespace kullanılmadığında 30 dakikada kendiliğinden durur; https://github
 **İlk kez kuruyorsanız:** adım adım anlatım için [KURULUM_KILAVUZU.md](KURULUM_KILAVUZU.md) dosyasını okuyun
 (sunucu, istemciler, hesap onayı, e-posta ayarı, sorun giderme).
 
-Yerel ağda (internetsiz) çalışan parça takip sistemi. SolidWorks BOM listeleri, teknik resimler,
-üretim ve satın alma durumu tek yerde tutulur. Tarayıcıdan kullanılır, istemci bilgisayarlara kurulum gerekmez.
+## Teknik yapı
 
-Sistem dört Docker konteynerinden oluşur:
+Sunucu Docker ile kurulduğunda sistem dört konteynerden oluşur:
 
 | Servis | Görevi |
 |---|---|
@@ -144,6 +224,10 @@ Tarayıcı yerine kendi penceresinde açılan Windows uygulamasıdır. Docker, P
    - **Ağdaki sunucuya bağlan:** "Ağda sunucu ara" düğmesi aynı ağdaki sunucuları bulur. Adres elle de
      yazılabilir (örnek `http://192.168.1.20:8000`).
 3. Aynı ağdaki telefon, tablet veya başka bilgisayarlar tarayıcıdan sunucunun adresini de açabilir.
+
+**Arka planda çalışma:** Sunucu olan bilgisayarda pencereyi kapatmak sunucuyu durdurmaz. Uygulama görev çubuğundaki
+gizli simgelere (saatin yanındaki ^ okuna) iner ve diğer cihazlar çalışmaya devam eder. Pencereyi simgeye tıklayarak
+geri açın. Sunucuyu tamamen kapatmak için simgeye sağ tıklayıp **Sunucuyu durdur ve çık** seçin.
 
 **Canlı eşitleme:** Bir cihazda yapılan değişiklik diğer açık ekranlara birkaç saniye içinde yansır, sayfayı
 yenilemek gerekmez. Üst çubuktaki "Canlı" göstergesi bağlantıyı gösterir; "Bağlantı yok" görünürse sunucu
@@ -319,7 +403,7 @@ docker compose exec backend python -m app.cli create-admin --username admin --pa
 
 Kullanıcı yoksa oluşturulur. Varsa aktif yönetici yapılır ve şifresi sıfırlanır.
 
-**Deneme verisi (isteğe bağlı):** Örnek BOM ve T-35 listesiyle iki demo proje oluşturur:
+**Deneme verisi (isteğe bağlı):** Örnek BOM ve durum listesiyle iki demo proje oluşturur:
 
 ```bash
 docker compose exec backend python -m app.cli seed
@@ -481,7 +565,7 @@ Sorun çıkarsa eski sürüme dönmek için `.env` içindeki `ERP_TAG` değerini
 |---|---|
 | **Admin** | Her şey. Kullanıcı, firma, ayar yönetimi; denetim kaydı (audit log); yedekleme. |
 | **Tasarımcı** | Proje açma, BOM yükleme ve onaylama, teknik resim yükleme, durum güncelleme. |
-| **Planlama / Satın alma** | Üretim ve malzeme durumunu güncelleme, T-35 listesi aktarma, bağlantı elemanı siparişi. |
+| **Planlama / Satın alma** | Üretim ve malzeme durumunu güncelleme, durum listesi aktarma, bağlantı elemanı siparişi. |
 | **İzleyici** | Sadece görüntüleme ve dışa aktarma. Değişiklik yapamaz. |
 
 **Modül yetkileri:** Yönetici, Yönetim › Kullanıcılar ekranında her kullanıcı için modül bazında yetki
@@ -538,6 +622,10 @@ Uygulama yerel ağ için tasarlanmıştır. İnternete açmayın; uzaktan erişi
 | `ERP_UPDATE_FEED_URL` | boş | Yerel ağdaki sürüm bilgisi adresi (güncelleme bildirimi) |
 | `TZ` | `Europe/Istanbul` | Saat dilimi |
 | `ERP_IMAGE_PREFIX` / `ERP_TAG` | `parca-takip` / `latest` | İmaj adı ve sürümü |
+
+Yönetim > **Sistem Ayarları** ekranında kaydedilen yedek saati, yedek saklama süresi, yükleme sınırı ve oturum süresi
+`.env` değerlerinin önüne geçer. Ekranda değiştirilmeyen ayar `.env` değerini kullanır. Kuruluma özel değerler
+(port, veritabanı, oturum anahtarı) yalnızca `.env` dosyasından okunur.
 
 `POSTGRES_PASSWORD` ilk kurulumda veritabanına yazılır. Sonradan `.env` içinde değiştirmek yetmez.
 Önce veritabanında da değiştirin:

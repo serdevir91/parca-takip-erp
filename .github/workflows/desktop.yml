@@ -73,6 +73,22 @@ jobs:
           Get-Content (Join-Path $env:ERP_DESKTOP_CONFIG_DIR "desktop.log") -Tail 40 -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "window test failed ($($p.ExitCode))" }
 
+      # Server profile: the close button must hide the window, keep the server up, a second start must
+      # bring the window back and the app must still quit for real
+      - name: Background test (tray)
+        shell: pwsh
+        run: |
+          $env:ERP_DESKTOP_CONFIG_DIR = Join-Path $env:RUNNER_TEMP "traycfg"
+          New-Item -ItemType Directory -Force $env:ERP_DESKTOP_CONFIG_DIR | Out-Null
+          $data = (Join-Path $env:RUNNER_TEMP "traydata").Replace("\", "/")
+          @{ mode = "server"; data_dir = $data; port = 18150; jwt_secret = "ci-tray-test-secret-0123456789abcdef" } |
+            ConvertTo-Json | Set-Content (Join-Path $env:ERP_DESKTOP_CONFIG_DIR "desktop.json") -Encoding utf8NoBOM
+          $out = Join-Path $env:RUNNER_TEMP "tray.json"
+          $p = Start-Process -FilePath dist\LabERP\LabERP.exe -ArgumentList "--tray-test", "`"$out`"" -Wait -PassThru
+          Get-Content $out -ErrorAction SilentlyContinue
+          Get-Content (Join-Path $env:ERP_DESKTOP_CONFIG_DIR "desktop.log") -Tail 40 -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "background test failed ($($p.ExitCode))" }
+
       - name: Installer (Inno Setup)
         shell: pwsh
         run: |

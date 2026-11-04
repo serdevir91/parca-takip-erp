@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type CSSProperties } from "react";
 import { api } from "../api/client";
+import { curSign, sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
 import { Page } from "../components/Layout";
@@ -110,7 +111,7 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
   const [code, setCode] = useState(item?.code ?? "");
   const [name, setName] = useState(item?.name ?? "");
   const [kind, setKind] = useState<string>(item?.kind ?? "part");
-  const [unit, setUnit] = useState(item?.unit ?? "Adet");
+  const [unit, setUnit] = useState(item?.unit ?? sys.unit);
   const [minQty, setMinQty] = useState(item ? String(item.min_qty) : "0");
   const [cost, setCost] = useState(item?.unit_cost == null ? "" : String(item.unit_cost));
   const [location, setLocation] = useState(item?.location ?? "");
@@ -143,7 +144,7 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
         </Field>
         <Field label="Birim"><input value={unit} onChange={(e) => setUnit(e.target.value)} /></Field>
         <Field label="Minimum stok"><input inputMode="decimal" value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
-        <Field label="Birim maliyet (₺)"><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+        <Field label={`Birim maliyet (${curSign()})`}><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
         <Field label="Konum (raf/depo)"><input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
         {!item && <Field label="Açılış miktarı"><input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} /></Field>}
       </div>
@@ -194,7 +195,7 @@ function MoveModal({ item, onClose }: { item: StockItem; onClose: () => void }) 
           </select>
         </Field>
         <Field label={kind === "count" ? "Sayılan miktar" : "Miktar"}><input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-        {kind === "in" && <Field label="Birim maliyet (₺)" hint="Ortalama maliyeti günceller."><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>}
+        {kind === "in" && <Field label={`Birim maliyet (${curSign()})`} hint="Ortalama maliyeti günceller."><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>}
         {(kind === "issue" || kind === "out") && (
           <Field label="Proje" hint={kind === "issue" ? "Projeye verilen miktar ihtiyaç analizinde karşılanmış sayılır." : undefined}>
             <ProjectSelect value={project} onChange={setProject} emptyLabel={kind === "issue" ? "(Proje seçin)" : "(Proje yok)"} />

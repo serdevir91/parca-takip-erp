@@ -49,7 +49,7 @@ function T35Form({ data }: { data: T35Cfg }) {
     mutationFn: () => api.put<T35Cfg>("/t35/config", { rules: toRules(rules), default_progress: defProg, skip_note: skip }),
     onSuccess: (d) => {
       qc.setQueryData(QK, d);
-      toast("T-35 ayarları kaydedildi");
+      toast("Durum listesi kuralları kaydedildi");
     },
     onError: (e) => toast(errText(e), true),
   });
@@ -77,9 +77,17 @@ function T35Form({ data }: { data: T35Cfg }) {
   return (
     <div className="grid" style={{ gap: 12 }}>
       <div className="card">
+        <h3>Bu ayarlar ne işe yarar?</h3>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Parçalar ekranındaki <b>Durum listesi içe aktar</b> işlemi, firmanızın elinde tuttuğu Excel durum listesini okur. Listedeki serbest
+          açıklama metni buradaki kurallarla ilerleme, malzeme durumu ve üreticiye çevrilir; metnin kendisi Durum Notu alanına yazılır.
+          Böyle bir liste kullanmıyorsanız bu sekmeyi değiştirmeniz gerekmez.
+        </p>
+      </div>
+      <div className="card">
         <h3>Anahtar kelime kuralları</h3>
         <p className="muted">
-          T-35 listesindeki açıklama metni bir kuralın <b>tüm</b> anahtar kelimelerini içeriyorsa (büyük/küçük harf ve Türkçe karakter farkı gözetilmez)
+          Durum listesindeki açıklama metni bir kuralın <b>tüm</b> anahtar kelimelerini içeriyorsa (büyük/küçük harf ve Türkçe karakter farkı gözetilmez)
           ilgili alan kuralın değerine ayarlanır. Her alan için düşük öncelikli kural önce denenir, ilk eşleşen kazanır.
         </p>
         <div className="adm-scroll">
@@ -139,7 +147,7 @@ function T35Form({ data }: { data: T35Cfg }) {
           </Field>
           <div>
             <b>Yok sayılan not metinleri</b>
-            <p className="muted" style={{ margin: "4px 0 8px" }}>Bu metinlerle birebir aynı olan T-35 notları takip listesine yazılmaz.</p>
+            <p className="muted" style={{ margin: "4px 0 8px" }}>Bu metinlerle birebir aynı olan durum notları takip listesine yazılmaz.</p>
             <ListEditor value={skip} onChange={setSkip} placeholder="Not metni" />
           </div>
           {data.mark_note && (

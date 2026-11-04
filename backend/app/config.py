@@ -16,11 +16,15 @@ class Settings(BaseSettings):
     backup_keep_days: int = 14
     jwt_secret: str = "change-me"
     jwt_expire_hours: int = 12
+    password_min_length: int = 8
+    login_attempts: int = 5
+    login_lock_minutes: int = 15
+    disabled_modules: list[str] = []
     admin_user: str = "admin"
     admin_password: str = "admin"
     # Interactive API docs at /api/docs (off by default: they map the whole API without a login)
     api_docs: bool = False
-    app_version: str = "1.5.3"
+    app_version: str = "1.5.4"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048

@@ -28,7 +28,7 @@ a = Analysis(
     ],
     # Routers are found with pkgutil at runtime and uvicorn loads its protocols by name. The app modules are
     # listed from the files: collect_submodules runs in a subprocess that does not see pathex.
-    hiddenimports=APP_MODULES + collect_submodules("uvicorn") + ["python_multipart", "multipart", "remote_install"] + collect_submodules("paramiko"),
+    hiddenimports=APP_MODULES + collect_submodules("uvicorn") + ["python_multipart", "multipart", "remote_install", "pystray._win32"] + collect_submodules("paramiko"),
     excludes=["psycopg", "psycopg_binary", "tkinter", "pytest"],
     noarchive=False,
 )
