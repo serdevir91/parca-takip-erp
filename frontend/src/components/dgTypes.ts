@@ -20,6 +20,8 @@ export type GridProps<T> = {
   columns: GridColumn<T>[];
   getRowId: (r: T) => string;
   onEdit?: (row: T, columnId: string, value: string) => void;
+  /** A cell editor opened; the value in it may go stale while the user types. */
+  onEditStart?: () => void;
   /** Paste, fill, replace and undo: several cells at once. Without it onEdit is called per cell. */
   onEditMany?: (changes: CellChange<T>[]) => void;
   onRowClick?: (row: T) => void;

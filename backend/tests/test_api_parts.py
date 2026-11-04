@@ -269,3 +269,58 @@ def test_grid_export_gives_an_excel_file(client, admin_headers):
     assert [c.value for c in ws[1]] == ["No", "Adet"] and ws["B2"].value == 2
     assert ws.freeze_panes == "A2" and ws.auto_filter.ref == "A1:B3"
     assert ws["A3"].data_type == "s"
+
+
+def _other_editor(client, admin_headers, name):
+    assert client.post("/api/admin/users", headers=admin_headers, json={
+        "username": name, "password": "pass1234", "full_name": name, "role": "designer"}).status_code == 201
+    token = client.post("/api/auth/login", data={"username": name, "password": "pass1234"}).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_a_stale_edit_does_not_overwrite_someone_else(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "Clash")
+    other = _other_editor(client, admin_headers, "clash_other")
+    a = next(r["part_no"] for r in _parts(client, admin_headers, pid) if not r["is_assembly"])
+    rev = client.get(f"/api/projects/{pid}/parts", headers=admin_headers).json()["rev"]
+    url = f"/api/projects/{pid}/parts/{a}"
+    assert client.patch(url, json={"note": "onların"}, headers=other).status_code == 200
+
+    r = client.patch(f"{url}?rev={rev}", json={"note": "benim"}, headers=admin_headers)
+    assert r.status_code == 409
+    c = r.json()["detail"]["conflicts"][0]
+    assert (c["field"], c["theirs"], c["mine"], c["by"]) == ("note", "onların", "benim", "clash_other")
+    row = next(x for x in _parts(client, admin_headers, pid) if x["part_no"] == a)
+    assert row["note"] == "onların"
+
+    # Another field of the same part, and the same value, are no conflict
+    assert client.patch(f"{url}?rev={rev}", json={"progress": PROG_RUN}, headers=admin_headers).status_code == 200
+    assert client.patch(f"{url}?rev={rev}", json={"note": "onların"}, headers=admin_headers).status_code == 200
+    # Nor is one's own earlier edit
+    assert client.patch(f"{url}?rev={rev}", json={"progress": PROG_DONE}, headers=admin_headers).status_code == 200
+    assert client.patch(f"{url}?rev={rev}&force=true", json={"note": "benim"}, headers=admin_headers).status_code == 200
+
+
+def test_stale_cells_come_back_and_the_rest_are_saved(client, admin_headers, data_file):
+    pid = _project_with_bom(client, admin_headers, data_file, "ClashCells")
+    other = _other_editor(client, admin_headers, "clash_cells")
+    a, b = [r["part_no"] for r in _parts(client, admin_headers, pid) if not r["is_assembly"]][:2]
+    url = f"/api/projects/{pid}/parts/cells"
+    rev = client.get(f"/api/projects/{pid}/parts", headers=admin_headers).json()["rev"]
+    assert client.post(url, headers=other, json={"changes": [
+        {"part_no": a, "field": "progress", "value": PROG_RUN},
+        {"part_no": a, "field": "part_name", "value": "Onların adı"}]}).status_code == 200
+
+    body = {"rev": rev, "changes": [
+        {"part_no": a, "field": "progress", "value": PROG_DONE},
+        {"part_no": a, "field": "part_name", "value": "Benim adım"},
+        {"part_no": b, "field": "progress", "value": PROG_DONE}]}
+    r = client.post(url, headers=admin_headers, json=body).json()
+    assert r["fields_changed"] == 1 and {c["field"] for c in r["conflicts"]} == {"progress", "part_name"}
+    rows = {x["part_no"]: x for x in _parts(client, admin_headers, pid)}
+    assert rows[a]["progress"] == PROG_RUN and rows[a]["part_name"] == "Onların adı" and rows[b]["progress"] == PROG_DONE
+
+    r = client.post(url, headers=admin_headers, json={**body, "force": True}).json()
+    assert not r["conflicts"]
+    rows = {x["part_no"]: x for x in _parts(client, admin_headers, pid)}
+    assert rows[a]["progress"] == PROG_DONE and rows[a]["part_name"] == "Benim adım"

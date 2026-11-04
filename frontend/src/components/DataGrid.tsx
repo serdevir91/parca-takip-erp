@@ -478,7 +478,7 @@ function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Tabl
             const ed = editable(id);
             return (
               <span className={ed ? "dgc-val editable" : "dgc-val"} style={d.cellStyle?.(row.original)}
-                onClick={ed ? (e) => { e.stopPropagation(); setEditing({ row: row.id, col: id }); } : undefined}
+                onClick={ed ? (e) => { e.stopPropagation(); p.onEditStart?.(); setEditing({ row: row.id, col: id }); } : undefined}
                 title={ed ? "Değiştirmek için dokunun" : undefined}>
                 {isEmpty(cells[id].getValue()) && ed ? "—" : render(id)}
               </span>

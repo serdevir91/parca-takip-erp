@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,7 +18,8 @@ from ..services.settings import manufacturers, suppliers
 from ..services.settings import temin_choices, temin_types
 from ..services.state import FASTENER_COLORS, ProjectView, row_types
 from ..services.state import FASTENER_ORDER_STATUSES
-from ..services.tracking import (apply_changes, check_progress, clean_changes, material_status_choices,
+from ..services.tracking import (apply_changes, check_progress, clean_changes, conflict_of, current_rev,
+                                 material_status_choices, recent_edits,
                                  resolve_alias, resolve_aliases, set_names, tracking_map, tracking_of,
                                  tracking_view)
 from ..permissions import require
@@ -55,6 +57,8 @@ class CellIn(BaseModel):
 
 class CellsIn(BaseModel):
     changes: list[CellIn] = Field(min_length=1, max_length=100000)
+    rev: int | None = None      # from the part list; cells others changed since then come back as conflicts
+    force: bool = False
 
 
 class NameIn(BaseModel):
@@ -158,6 +162,7 @@ def list_parts(pid: int, view: str = Query("flat", pattern="^(flat|tree)$"), q: 
     archived=true lists parts removed from the BOM whose tracking is kept."""
     project = project_or_404(db, pid)
     _check_version(db, project, version_id)
+    rev = current_rev(db)
     pv = ProjectView.load(db, project, version_id)
     if archived:
         rows = [tracking_view(t) for t in sorted(pv.tracking.values(), key=lambda t: t.part_no) if t.archived]
@@ -173,7 +178,7 @@ def list_parts(pid: int, view: str = Query("flat", pattern="^(flat|tree)$"), q: 
     if offset or limit:
         rows = rows[offset: offset + limit if limit else None]
     return {"version_id": pv.version.id if pv.version else None, "view": "archived" if archived else view,
-            "total": total, "count": count, "total_qty": total_qty, "offset": offset, "rows": rows}
+            "total": total, "count": count, "total_qty": total_qty, "offset": offset, "rev": rev, "rows": rows}
 
 
 @router.get("/{pid}/parts/choices")
@@ -220,13 +225,17 @@ def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User 
 def edit_cells(pid: int, body: CellsIn, db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
     """Pasted and filled table cells: a different value per cell. A bad cell is reported, the rest are saved."""
     project = project_or_404(db, pid)
+    edits = recent_edits(db, user, project.id, body.rev) if body.rev is not None and not body.force else {}
     wanted = resolve_aliases(db, list(dict.fromkeys(c.part_no.strip() for c in body.changes)))
     canon = {c.part_no: resolve_alias(db, c.part_no.strip()) for c in body.changes}
     tmap = tracking_map(db, project.id, wanted)
     names: dict[str, str] = {}
-    fields, errors, not_found = 0, [], set()
+    fields, errors, conflicts, not_found = 0, [], [], set()
     for c in body.changes:
         pno = canon[c.part_no]
+        if clash := conflict_of(edits, pno, c.field, c.value):
+            conflicts.append(clash)
+            continue
         if c.field == "part_name":
             names[pno] = str(c.value or "")
             continue
@@ -240,7 +249,8 @@ def edit_cells(pid: int, body: CellsIn, db: Session = Depends(get_db), user: Use
             errors.append(f"{c.part_no}: {e.detail}")
     fields += set_names(db, user, names)
     db.commit()
-    return {"fields_changed": fields, "errors": errors[:20], "error_count": len(errors), "not_found": sorted(not_found)}
+    return {"fields_changed": fields, "errors": errors[:20], "error_count": len(errors), "conflicts": conflicts,
+            "not_found": sorted(not_found)}
 
 
 @router.post("/{pid}/parts/names")
@@ -262,14 +272,18 @@ def edit_names(pid: int, body: NamesIn, db: Session = Depends(get_db), user: Use
 
 
 @router.patch("/{pid}/parts/{part_no:path}")
-def edit_part(pid: int, part_no: str, body: TrackingPatch, db: Session = Depends(get_db),
-              user: User = Depends(parts_edit)) -> dict:
+def edit_part(pid: int, part_no: str, body: TrackingPatch, rev: int | None = None, force: bool = False,
+              db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict:
     project = project_or_404(db, pid)
+    edits = recent_edits(db, user, project.id, rev) if rev is not None and not force else {}
     pno = resolve_alias(db, part_no)
     t = tracking_of(db, project.id, pno)
     if t is None:
         raise HTTPException(404, f"Parça bu projede takip edilmiyor: {part_no}")
     changes = clean_changes(db, _patch_changes(body))
+    clashes = [c for f, v in changes.items() if (c := conflict_of(edits, pno, f, v))]
+    if clashes:
+        raise HTTPException(409, {"message": "Bu alanı başkası değiştirdi", "conflicts": jsonable_encoder(clashes)})
     n = apply_changes(db, user, t, changes)
     db.commit()
     row = _part_or_tracking(db, ProjectView.load(db, project), pno)

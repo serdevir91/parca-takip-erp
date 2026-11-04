@@ -400,6 +400,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     const col = cols[q.c];
     if (!editable(row, col)) return;
     reveal(q);
+    p.onEditStart?.();
     setEditing({ row: row.id, col: col.id, seed, open });
   };
   const editDone = (q: Pos, v?: string, move?: Move) => {

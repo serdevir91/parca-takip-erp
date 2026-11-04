@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { api, download } from "../api/client";
+import { ApiError, api, download } from "../api/client";
 import { useAuth } from "../api/auth";
 import BulkEdit from "../components/BulkEdit";
 import DataGrid, { type CellChange, type GridColumn } from "../components/DataGrid";
 import MailDialog, { type MailFile } from "../components/MailDialog";
+import EditConflicts, { type EditConflict } from "../components/EditConflicts";
 import ExcelImportModal from "../components/ExcelImportModal";
 import { Page, useProject } from "../components/Layout";
 import PartDetail, { type PartChoices, type PartRow } from "../components/PartDetail";
@@ -19,10 +20,11 @@ const EXPORT_PARCA_TAKIP = (pid: number) => `/excel/${pid}/parca-takip`;
 const EXPORT_TAKIP_LISTESI = (pid: number) => `/excel/${pid}/takip-listesi`;
 
 type View = "tree" | "flat";
-type PartsResp = { version_id: number | null; view: string; total: number; count: number; total_qty: number; rows: PartRow[] };
+type PartsResp = { version_id: number | null; view: string; total: number; count: number; total_qty: number; rev: number; rows: PartRow[] };
 type GridRow = PartRow & { _key: string; _kids?: boolean; _open?: boolean; _dim?: boolean };
-type EditVars = { partNo: string; changes: Record<string, unknown> };
-type CellsResult = { fields_changed: number; error_count: number; errors: string[]; not_found: string[] };
+type EditVars = { partNo: string; changes: Record<string, unknown>; rev?: number };
+type CellsResult = { fields_changed: number; error_count: number; errors: string[]; conflicts: EditConflict[]; not_found: string[] };
+type CellsVars = { list: EditVars[]; rev?: number; force?: boolean };
 
 const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.inPurchased", archived: "parts.showArchived",
   kinds: "parts.kinds" };
@@ -249,9 +251,21 @@ export default function Parts() {
     });
   }, [qc, pid]);
 
+  // What the user was looking at when the edit began, so a save can tell if someone changed the field since
+  const [clashes, setClashes] = useState<EditConflict[]>([]);
+  const listRev = useRef<number | undefined>(undefined);
+  listRev.current = mainQ.data?.rev;
+  const editRev = useRef<number | undefined>(undefined);
+  const onEditStart = useCallback(() => { editRev.current = listRev.current; }, []);
+  const takeRev = useCallback(() => {
+    const rev = editRev.current ?? listRev.current;
+    editRev.current = undefined;
+    return rev;
+  }, []);
+
   const edit = useMutation({
-    mutationFn: ({ partNo, changes }: EditVars) =>
-      api.patch<{ changed: number; part: PartRow }>(`/projects/${pid}/parts/${encodeURIComponent(partNo)}`, changes),
+    mutationFn: ({ partNo, changes, rev }: EditVars) =>
+      api.patch<{ changed: number; part: PartRow }>(`/projects/${pid}/parts/${encodeURIComponent(partNo)}${rev === undefined ? "" : `?rev=${rev}`}`, changes),
     onMutate: async ({ partNo, changes }: EditVars) => {
       await qc.cancelQueries({ queryKey: ["parts", pid] });
       const snap = qc.getQueriesData<unknown>({ queryKey: ["parts", pid] });
@@ -260,7 +274,11 @@ export default function Parts() {
     },
     onError: (e, _v, ctx) => {
       ctx?.snap.forEach(([k, d]) => qc.setQueryData(k, d));
-      toast(errText(e), true);
+      const found = e instanceof ApiError && e.status === 409 ? (e.body as { detail?: { conflicts?: EditConflict[] } })?.detail?.conflicts : undefined;
+      if (found?.length) {
+        setClashes(found);
+        qc.invalidateQueries({ queryKey: ["parts", pid] });
+      } else toast(errText(e), true);
     },
     onSuccess: (res, { partNo }) => {
       if (res?.part) updateRows(partNo, (r) => mergeServer(r, res.part));
@@ -272,10 +290,11 @@ export default function Parts() {
 
   // Pasted, filled and replaced cells: one request and one optimistic update for all of them
   const cells = useMutation({
-    mutationFn: (list: EditVars[]) => api.post<CellsResult>(`/projects/${pid}/parts/cells`, {
+    mutationFn: ({ list, rev, force }: CellsVars) => api.post<CellsResult>(`/projects/${pid}/parts/cells`, {
       changes: list.flatMap(({ partNo, changes }) => Object.entries(changes).map(([field, value]) => ({ part_no: partNo, field, value }))),
+      rev, force,
     }),
-    onMutate: async (list: EditVars[]) => {
+    onMutate: async ({ list }: CellsVars) => {
       await qc.cancelQueries({ queryKey: ["parts", pid] });
       const snap = qc.getQueriesData<unknown>({ queryKey: ["parts", pid] });
       const byPart = new Map<string, Record<string, unknown>>();
@@ -292,6 +311,7 @@ export default function Parts() {
       toast(errText(e), true);
     },
     onSuccess: (res) => {
+      if (res.conflicts.length) setClashes(res.conflicts);
       if (res.error_count) toast(`${res.error_count.toLocaleString("tr-TR")} hücre kaydedilemedi: ${res.errors[0]}`, true);
       else if (res.not_found.length) toast(`${res.not_found.length.toLocaleString("tr-TR")} parça bulunamadı`, true);
     },
@@ -305,9 +325,10 @@ export default function Parts() {
   const onEdit = useCallback((r: GridRow, col: string, v: string) => {
     const changes = cellChange(col, v);
     if (!changes) return;
-    if (col === "part_name") saveCells([{ partNo: r.part_no, changes }]);
-    else mutate({ partNo: r.part_no, changes });
-  }, [mutate, saveCells]);
+    const rev = takeRev();
+    if (col === "part_name") saveCells({ list: [{ partNo: r.part_no, changes }], rev });
+    else mutate({ partNo: r.part_no, changes, rev });
+  }, [mutate, saveCells, takeRev]);
 
   const onEditMany = useCallback((list: CellChange<GridRow>[]) => {
     const out: EditVars[] = [];
@@ -315,8 +336,8 @@ export default function Parts() {
       const changes = cellChange(c.columnId, c.value);
       if (changes) out.push({ partNo: c.row.part_no, changes });
     }
-    if (out.length) saveCells(out);
-  }, [saveCells]);
+    if (out.length) saveCells({ list: out, rev: takeRev() });
+  }, [saveCells, takeRev]);
 
   // ---------- columns ----------
   const columns = useMemo<GridColumn<GridRow>[]>(() => {
@@ -559,6 +580,7 @@ export default function Parts() {
             columns={columns}
             getRowId={getRowId}
             onEdit={canEdit ? onEdit : undefined}
+            onEditStart={onEditStart}
             onEditMany={canEdit ? onEditMany : undefined}
             onRowClick={onRowClick}
             rowStyle={rowStyle}
@@ -612,6 +634,12 @@ export default function Parts() {
       {detail && <PartDetail pid={pid} partNo={detail} onClose={closeDetail} />}
       {bulkOpen && (
         <BulkEdit pid={pid} partNos={selectedPartNos} choices={choices} onClose={() => setBulkOpen(false)} onDone={() => setSelection({})} />
+      )}
+      {clashes.length > 0 && (
+        <EditConflicts items={clashes} onKeep={() => setClashes([])} onOverwrite={() => {
+          saveCells({ force: true, list: clashes.map((c) => ({ partNo: c.part_no, changes: { [c.field]: c.mine } })) });
+          setClashes([]);
+        }} />
       )}
       {imp === "t35" && <T35ImportModal pid={pid} open onClose={() => setImp(null)} />}
       {imp === "excel" && <ExcelImportModal pid={pid} open onClose={() => setImp(null)} />}

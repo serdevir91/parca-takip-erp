@@ -8,13 +8,13 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..core.status import MATERIAL_STATUS_CHOICES, PROGRESS_CHOICES
-from ..models import MissingRow, PartAlias, PartName, Tracking, User
+from ..models import AuditLog, MissingRow, PartAlias, PartName, SyncState, Tracking, User
 from . import audit
 from .settings import get_setting, manufacturers, temin_choices
 
@@ -76,6 +76,30 @@ def apply_changes(db: Session, user: User, t: Tracking, changes: dict[str, Any])
     if n:
         t.updated_by = user.username
     return n
+
+
+def current_rev(db: Session) -> int:
+    """Handed out with the part list and sent back with edits: what the editor had seen."""
+    return db.scalar(select(func.max(AuditLog.id))) or 0
+
+
+def recent_edits(db: Session, user: User, project_id: int, rev: int) -> dict[tuple[str, str], AuditLog]:
+    """What others changed in this project after `rev`, latest per (part, field)."""
+    # Holds a write lock until commit: of two people saving the same cell at once, the second one sees the first
+    db.execute(update(SyncState).where(SyncState.id == 1).values(rev=SyncState.rev))
+    rows = db.scalars(select(AuditLog).where(
+        AuditLog.id > rev, AuditLog.entity.in_(("tracking", "part_name")), AuditLog.username != user.username,
+        or_(AuditLog.project_id == project_id, AuditLog.project_id.is_(None))).order_by(AuditLog.id))
+    return {(r.entity_id, r.field): r for r in rows}
+
+
+def conflict_of(edits: dict[tuple[str, str], AuditLog], part_no: str, field: str, value: Any) -> dict[str, Any] | None:
+    """Saving `value` would overwrite someone else's newer entry; arriving at the same value is no conflict."""
+    r = edits.get((part_no, "name" if field == "part_name" else field))
+    mine = audit.text(value) or ""
+    if r is None or (r.new or "") == mine:
+        return None
+    return {"part_no": part_no, "field": field, "mine": value, "theirs": r.new, "by": r.username, "at": r.ts}
 
 
 def set_names(db: Session, user: User, names: dict[str, str]) -> int:

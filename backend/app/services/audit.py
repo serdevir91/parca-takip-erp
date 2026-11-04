@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..models import AuditLog, User
 
 
-def _s(v: Any) -> str | None:
+def text(v: Any) -> str | None:
     if v is None:
         return None
     if isinstance(v, bool):
@@ -22,7 +22,7 @@ def record(db: Session, user: User | None, entity: str, entity_id: str | int | N
            project_id: int | None = None, action: str = "update") -> AuditLog:
     log = AuditLog(user_id=user.id if user else None, username=user.username if user else "sistem",
                    project_id=project_id, entity=entity, entity_id=str(entity_id) if entity_id is not None else "",
-                   field=field, old=_s(old), new=_s(new), action=action)
+                   field=field, old=text(old), new=text(new), action=action)
     db.add(log)
     return log
 
