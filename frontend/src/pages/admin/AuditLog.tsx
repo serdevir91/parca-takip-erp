@@ -18,7 +18,7 @@ const ACTION_TR: Record<string, string> = {
   signup: "Hesap isteği", approve: "Onay", reject: "Ret", mail: "E-posta",
 };
 const ENTITY_TR: Record<string, string> = {
-  project: "Proje", part: "Parça", bom: "BOM", setting: "Ayar", user: "Kullanıcı", firm: "Firma",
+  project: "Proje", project_template: "Proje şablonu", part: "Parça", bom: "BOM", setting: "Ayar", user: "Kullanıcı", firm: "Firma",
   fastener_rule: "Bağlantı elemanı kuralı", tracking: "Takip", drawing: "Teknik resim", t35: "Durum listesi",
   attendance: "Mesai",
 };

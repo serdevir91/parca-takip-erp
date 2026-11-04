@@ -10,8 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, PurchaseOrder, SalesOrder, StockMove,
-                      TimeEntry, Tracking, User, WorkOrder)
+from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, ProjectTemplate, PurchaseOrder,
+                      SalesOrder, StockMove, TimeEntry, Tracking, User, WorkOrder, utcnow)
 from ..services import audit
 from ..services import backup as backup_svc
 from ..permissions import can, require
@@ -60,6 +60,7 @@ class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     root_part_no: str = ""
     description: str = ""
+    template_id: int | None = None
 
 
 class ProjectPatch(BaseModel):
@@ -89,6 +90,11 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = 
     if _name_taken(db, name):
         raise HTTPException(400, f"Bu isimde bir proje zaten var: {name}")
     p = Project(name=name, root_part_no=body.root_part_no.strip(), description=body.description)
+    if body.template_id is not None:
+        template = db.get(ProjectTemplate, body.template_id)
+        if template is None:
+            raise HTTPException(404, "Şablon bulunamadı")
+        p.bom_draft = {"tree": template.payload, "rev": 1, "by": user.username, "at": utcnow().isoformat()}
     db.add(p)
     db.flush()
     audit.record(db, user, "project", p.id, "name", None, name, p.id, action="create")

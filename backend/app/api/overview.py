@@ -20,10 +20,10 @@ router = APIRouter(tags=["overview"])
 ENTITY_LABELS = {"tracking": "Parça", "bom": "BOM", "drawing": "Teknik resim", "purchase_order": "Satın alma",
                  "work_order": "İş emri", "stock": "Stok", "sales_order": "Satış", "invoice": "Fatura",
                  "payment": "Ödeme", "employee": "Personel", "time_entry": "Zaman", "firm": "Cari kart",
-                 "user": "Kullanıcı", "project": "Proje", "photo": "Fotoğraf"}
+                 "user": "Kullanıcı", "project": "Proje", "project_template": "Proje şablonu", "photo": "Fotoğraf"}
 # Who may see an entity in the activity feed; anything not listed is for admins only
 ENTITY_MODULE = {"tracking": "parts", "part": "parts", "part_name": "parts", "photo": "parts", "alias": "parts",
-                 "project": "projects", "bom": "projects", "bom_version": "projects", "drawing": "drawings",
+                 "project": "projects", "project_template": "projects", "bom": "projects", "bom_version": "projects", "drawing": "drawings",
                  "control": "control", "check_rule": "control", "fastener": "fasteners",
                  "fastener_rule": "fasteners", "purchase_order": "purchasing", "work_order": "workorders",
                  "stock": "stock", "employee": "hr", "time_entry": "hr", "attendance": "attendance",
