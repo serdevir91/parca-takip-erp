@@ -17,6 +17,7 @@ const Planning = lazy(() => import("./pages/Planning"));
 const Purchasing = lazy(() => import("./pages/Purchasing"));
 const WorkOrders = lazy(() => import("./pages/WorkOrders"));
 const Stock = lazy(() => import("./pages/Stock"));
+const Scan = lazy(() => import("./pages/Scan"));
 const Home = lazy(() => import("./pages/Home"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const Sales = lazy(() => import("./pages/Sales"));
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="purchasing" element={<M m="purchasing"><Purchasing /></M>} />
         <Route path="work-orders" element={<M m="workorders"><WorkOrders /></M>} />
         <Route path="stock" element={<M m="stock"><Stock /></M>} />
+        <Route path="scan" element={<S><Scan /></S>} />
         <Route path="hr" element={<M m="hr"><Hr /></M>} />
         <Route path="hr/me" element={<S><MyCard /></S>} />
         <Route path="attendance" element={<S><Attendance /></S>} />

@@ -414,7 +414,7 @@ class PurchaseReceipt(Base):
 
 class WorkOrder(Base):
     """İş emri for a manufactured part. firm_name empty = in-house, else fason (subcontract).
-    status: planned | in_progress | done | cancelled."""
+    status: planned | in_progress | done | closed | cancelled. closed = stopped short: keeps done_qty and its cost."""
     __tablename__ = "work_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     no: Mapped[str] = mapped_column(String(30), unique=True)
@@ -446,6 +446,8 @@ class WorkOrderMaterial(Base):
     unit: Mapped[str] = mapped_column(String(20), default="Adet")
     planned_qty: Mapped[float] = mapped_column(Float, default=0.0)
     issued_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    issued_value: Mapped[float] = mapped_column(Float, default=0.0)   # at the cost of each issue; a return gives it back
+    booked_value: Mapped[float] = mapped_column(Float, default=0.0)   # part of it already in the finished part's cost
 
 
 class WorkOrderOp(Base):
