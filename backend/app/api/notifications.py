@@ -65,7 +65,7 @@ def _finance(db: Session, today: date) -> list[dict[str, Any]]:
 
 
 def _sales(db: Session, today: date) -> list[dict[str, Any]]:
-    orders = db.scalars(select(SalesOrder).where(SalesOrder.status == "confirmed", SalesOrder.due_date < today))
+    orders = db.scalars(select(SalesOrder).where(SalesOrder.status.in_(commerce.SO_SHIPPING), SalesOrder.due_date < today))
     return [_item(f"so:{s.id}:{s.due_date}", "Satış", f"Geciken teslimat {s.no}",
                   f"{s.firm_name}, {(today - s.due_date).days} gün gecikti", "/sales", s.due_date, True)
             for s in orders]

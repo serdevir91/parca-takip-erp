@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import date, timedelta
 from typing import Any
 
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from ..models import (AuditLog, BomVersion, Invoice, Project, PurchaseOrder, SalesOrder, StockItem, TimeEntry, User,
                       WorkOrder)
 from ..permissions import can
-from ..services import commerce, erp
+from ..services import commerce, erp, fx
 from .deps import any_user, get_db
 
 router = APIRouter(tags=["overview"])
@@ -34,9 +35,15 @@ def _count(db: Session, q: Any) -> int:
     return db.scalar(select(func.count()).select_from(q.subquery())) or 0
 
 
+def _sum(rows: Iterable[dict[str, Any]], key: str = "base_total") -> float:
+    """In the base currency; a currency with no rate yet cannot be added in, as on the finance screen."""
+    return round(sum(r[key] or 0 for r in rows), 2)
+
+
 @router.get("/overview")
 def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     today = date.today()
+    book = fx.Book(db)
     out: dict[str, Any] = {"user": me.full_name or me.username, "today": today.isoformat()}
     if can(me, "projects"):
         out["projects"] = {
@@ -47,7 +54,7 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
         open_pos = list(db.scalars(select(PurchaseOrder).where(PurchaseOrder.status.in_(erp.PO_OPEN))))
         late = [erp.po_out(p, False) for p in open_pos if p.due_date and p.due_date < today and p.status != "draft"]
         out["purchasing"] = {"open": len(open_pos), "overdue": len(late),
-                             "open_value": round(sum(erp.po_out(p, False)["total"] for p in open_pos), 2),
+                             "open_value": _sum(erp.po_out(p, False, book=book) for p in open_pos),
                              "late": sorted(late, key=lambda p: p["due_date"])[:6]}
     if can(me, "workorders"):
         wos = list(db.scalars(select(WorkOrder).where(WorkOrder.status.in_(erp.WO_OPEN))))
@@ -62,11 +69,12 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
                         "low_items": [erp.stock_out(i) for i in low[:6]]}
     if can(me, "sales"):
         sos = list(db.scalars(select(SalesOrder).where(SalesOrder.status.in_(commerce.SO_OPEN))))
-        rows = [commerce.so_out(s, False) for s in sos]
+        rows = [commerce.so_out(s, False, book=book) for s in sos]
+        shipping = [r for r in rows if r["status"] in commerce.SO_SHIPPING]
         out["sales"] = {"quotes": sum(1 for s in sos if s.status in ("draft", "quoted")),
-                        "quote_value": round(sum(r["total"] for r in rows if r["status"] != "confirmed"), 2),
-                        "confirmed": sum(1 for s in sos if s.status == "confirmed"),
-                        "confirmed_value": round(sum(r["total"] for r in rows if r["status"] == "confirmed"), 2),
+                        "quote_value": _sum(r for r in rows if r["status"] in ("draft", "quoted")),
+                        "confirmed": len(shipping),
+                        "confirmed_value": _sum(shipping),
                         "late": sum(1 for r in rows if r["late"])}
     if can(me, "finance"):
         bal = commerce.balances(db)
@@ -74,10 +82,9 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
         paid = commerce.paid_by_invoice(db, [i.id for i in invs])
         due = [commerce.inv_out(i, paid.get(i.id, 0.0), False) for i in invs]
         due = [r for r in due if r["remaining"] > 0 and r["due_date"] and r["due_date"] <= (today + timedelta(days=7)).isoformat()]
-        out["finance"] = {"receivable": round(sum(b["receivable"] for b in bal), 2),
-                          "payable": round(sum(b["payable"] for b in bal), 2),
-                          "overdue_receivable": round(sum(b["overdue_receivable"] for b in bal), 2),
-                          "overdue_payable": round(sum(b["overdue_payable"] for b in bal), 2),
+        out["finance"] = {"receivable": _sum(bal, "base_receivable"), "payable": _sum(bal, "base_payable"),
+                          "overdue_receivable": _sum(bal, "base_overdue_receivable"),
+                          "overdue_payable": _sum(bal, "base_overdue_payable"),
                           "due_soon": sorted(due, key=lambda r: r["due_date"])[:8]}
     if can(me, "hr"):
         since = today.replace(day=1)

@@ -110,7 +110,7 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
     item.qty = _num(item.qty + delta)
     m = StockMove(item_id=item.id, kind=kind, qty=_num(delta), balance=item.qty, project_id=project_id, ref=ref,
                   note=note, username=user.username if user else "",
-                  unit_cost=unit_cost if unit_cost is not None or reverse else item.unit_cost)
+                  unit_cost=unit_cost if unit_cost is not None or kind == "issue_return" else item.unit_cost)
     db.add(m)
     return m
 
