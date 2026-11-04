@@ -124,6 +124,7 @@ function Forms({ data }: { data: Data }) {
             <Num f={f} set={set} k="work_hours" label="Günlük çalışma saati" />
             <Num f={f} set={set} k="week_hours" label="Haftalık çalışma saati (üstü fazla mesai)" />
             <Num f={f} set={set} k="break_minutes" label="Mola süresi (dk, 4 saatten uzun mesaide düşülür)" />
+            <Num f={f} set={set} k="annual_leave_days" label="Yıllık izin hakkı (gün, personel kartında değiştirilebilir)" />
           </>
         )}
       </Card>

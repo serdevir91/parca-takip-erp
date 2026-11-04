@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { IdCard } from "lucide-react";
+import { useState } from "react";
 import { api } from "../api/client";
 import { Page, PageHeader } from "../components/Layout";
 import { Loading } from "./admin/shared";
 import { fmtDay, fmtMoney } from "./erp/common";
 import { Stat, type Employee, type TimeEntry } from "./erp/commerce";
+import { MyHours } from "./SelfService";
 
 type MyResp = { employee: Employee | null; rows: TimeEntry[]; total_hours: number; month_hours?: number; total_cost: number };
 const fmtH = (h: number) => `${h.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} sa`;
@@ -14,16 +16,24 @@ export default function MyCard() {
   const q = useQuery({ queryKey: ["hr-me"], queryFn: () => api.get<MyResp>("/hr/me") });
   const d = q.data;
   const e = d?.employee;
+  const [tab, setTab] = useState<"card" | "hours">("card");
   return (
     <Page>
       <PageHeader icon={IdCard} title="Personel kartım" sub="Yalnızca size ait bilgiler ve son 90 günün çalışma saatleri" />
       <Loading error={q.error} loading={q.isLoading} />
+      {e && (
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "card"} className={tab === "card" ? "active" : ""} onClick={() => setTab("card")}>Kartım</button>
+          <button role="tab" aria-selected={tab === "hours"} className={tab === "hours" ? "active" : ""} onClick={() => setTab("hours")}>Saat dağıtımı</button>
+        </div>
+      )}
       {d && !e && (
         <div className="card empty">
           Hesabınıza bağlı bir personel kartı yok. Personel kartınızın hesabınıza bağlanması için yöneticinize başvurun.
         </div>
       )}
-      {d && e && (
+      {e && tab === "hours" && <MyHours />}
+      {d && e && tab === "card" && (
         <>
           <div className="grid stats">
             <Stat label="Bu ay" value={fmtH(d.month_hours ?? 0)} />

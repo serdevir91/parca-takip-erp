@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { LogIn, LogOut, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
@@ -9,21 +9,25 @@ import { errText, useToast } from "../components/Toast";
 import { Field, Loading, Modal } from "./admin/shared";
 import { fmtDay, numOrNull, today } from "./erp/common";
 import { Stat } from "./erp/commerce";
+import { FixQueue, LeaveQueue, usePeople } from "./AttendanceQueues";
+import { MyFixes, MyHours, MyLeaves, fmtH, useAttRefresh as useRefresh } from "./SelfService";
 
 type Shift = {
   id: number; employee_id: number; employee_name: string; work_date: string; start: string; end: string | null;
   next_day: boolean; break_minutes: number; hours: number; overtime: number; status: "open" | "forgot" | "done";
   note: string; corrected_by: string;
 };
-type Summary = { hours: number; overtime: number; days: number; forgot: number };
+type Summary = { hours: number; overtime: number; days: number; forgot: number; expected: number; covered: number; missing_days: number; short: number };
+type LeaveDay = { employee_id: number; employee_name: string; work_date: string; kind: string; label: string };
 type MyResp = {
   employee: { id: number; name: string } | null; open: { id: number; clock_in: string } | null;
-  rows: Shift[]; summary: Summary; week_hours?: number;
+  rows: Shift[]; leave_days: LeaveDay[]; summary: Summary; week_hours?: number;
 };
-type Person = Summary & { employee_id: number; name: string; department: string; inside: boolean };
-type AllResp = { rows: Shift[]; people: Person[]; total: Summary; inside: number };
+type Person = Summary & { employee_id: number; name: string; department: string; inside: boolean; leave: Record<string, number> };
+type AllResp = { rows: Shift[]; people: Person[]; total: Summary; inside: number; leave_days: LeaveDay[] };
+type GridRow = Shift & { leave?: string };
+type Tab = "all" | "leave" | "fixes" | "me" | "my-leave" | "my-fixes" | "my-hours";
 
-const fmtH = (h: number) => `${h.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} sa`;
 const STATUS: Record<Shift["status"], string> = { open: "İçeride", forgot: "Çıkış unutuldu", done: "Tamam" };
 const thisMonth = () => today().slice(0, 7);
 const monthEnd = (m: string) => {
@@ -32,36 +36,43 @@ const monthEnd = (m: string) => {
 };
 const endText = (s: Shift) => (s.end ? `${s.end}${s.next_day ? " (+1)" : ""}` : "");
 
-/** Everyone with a card, for the pickers; the summary of a filtered query holds only the chosen person. */
-function usePeople() {
-  return useQuery({
-    queryKey: ["attendance", "people"],
-    queryFn: () => api.get<AllResp>(`/attendance?date_from=${today()}&date_to=${today()}`),
-    select: (d) => d.people,
-  });
-}
-
-function useRefresh() {
-  const qc = useQueryClient();
-  return () => {
-    for (const k of ["attendance-me", "attendance"]) void qc.invalidateQueries({ queryKey: [k] });
-  };
-}
+/** A leave day as a row of the shift grid, so the day reads izinli instead of looking empty. */
+const leaveRow = (l: LeaveDay): GridRow => ({
+  id: 0, employee_id: l.employee_id, employee_name: l.employee_name, work_date: l.work_date, start: "", end: null, next_day: false,
+  break_minutes: 0, hours: 0, overtime: 0, status: "done", note: "", corrected_by: "", leave: l.label,
+});
+const leaveCount = (p: Person) => Object.values(p.leave).reduce((a, b) => a + b, 0);
 
 /** Mesai takibi: herkes yalnızca kendi mesaisini görür; mesai yetkisi olan tüm personeli görür ve düzeltir. */
 export default function Attendance() {
   const manager = useAuth().can("attendance");
-  const [tab, setTab] = useState<"me" | "all">(manager ? "all" : "me");
+  const [tab, setTab] = useState<Tab>(manager ? "all" : "me");
+  const queue = useQuery({ queryKey: ["attendance", "queue"], enabled: manager, queryFn: () => api.get<{ leave: number; shifts: number }>("/attendance/queue") });
+  const mine = useQuery({ queryKey: ["attendance-me", thisMonth()], queryFn: () => api.get<MyResp>(`/attendance/me?month=${thisMonth()}`) });
+  const tabs: [Tab, string, number?][] = [
+    ...(manager ? [["all", "Tüm personel"], ["leave", "İzin talepleri", queue.data?.leave], ["fixes", "Düzeltme talepleri", queue.data?.shifts]] as [Tab, string, number?][] : []),
+    ["me", manager ? "Benim mesaim" : "Mesaim"],
+    ...(mine.data?.employee ? [["my-leave", "İzinlerim"], ["my-fixes", "Düzeltme taleplerim"], ["my-hours", "Saat dağıtımı"]] as [Tab, string][] : []),
+  ];
   return (
     <Page>
-      <PageHeader icon={Timer} title="Mesai takibi" sub={manager ? "Giriş ve çıkış saatleri, fazla mesai" : "Yalnızca size ait mesai kayıtları"} />
-      {manager && (
+      <PageHeader icon={Timer} title="Mesai takibi" sub={manager ? "Giriş ve çıkış saatleri, izinler ve talepler" : "Yalnızca size ait kayıtlar"} />
+      {tabs.length > 1 && (
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "all"} className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>Tüm personel</button>
-          <button role="tab" aria-selected={tab === "me"} className={tab === "me" ? "active" : ""} onClick={() => setTab("me")}>Benim mesaim</button>
+          {tabs.map(([k, label, n]) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
+              {label}{n ? <> <span className="badge warn">{n}</span></> : null}
+            </button>
+          ))}
         </div>
       )}
-      {tab === "all" && manager ? <AllTab /> : <MyTab />}
+      {tab === "all" && manager && <AllTab />}
+      {tab === "leave" && manager && <LeaveQueue />}
+      {tab === "fixes" && manager && <FixQueue />}
+      {tab === "me" && <MyTab />}
+      {tab === "my-leave" && <MyLeaves />}
+      {tab === "my-fixes" && <MyFixes />}
+      {tab === "my-hours" && <MyHours />}
     </Page>
   );
 }
@@ -90,6 +101,10 @@ function MyTab() {
     onError: (e) => { refresh(); toast(errText(e), true); },
   });
   const d = q.data;
+  const days = useMemo(() => [
+    ...(d?.rows ?? []).map((s) => ({ day: s.work_date, s, l: null })),
+    ...(d?.leave_days ?? []).map((l) => ({ day: l.work_date, s: null, l })),
+  ].sort((a, b) => b.day.localeCompare(a.day)), [d]);
   return (
     <>
       <Loading error={q.error} loading={q.isLoading} />
@@ -118,14 +133,21 @@ function MyTab() {
             <Stat label="Çalışılan saat" value={fmtH(d.summary.hours)} />
             <Stat label="Fazla mesai" value={fmtH(d.summary.overtime)} sub={d.week_hours ? `Haftalık ${d.week_hours} saatin üstü` : undefined} />
             <Stat label="Çalışılan gün" value={d.summary.days} />
-            {d.summary.forgot > 0 && <Stat label="Çıkış unutuldu" value={d.summary.forgot} tone="warn" sub="Yöneticiniz düzeltir" />}
+            <Stat label="Beklenen saat" value={fmtH(d.summary.expected)} sub={d.summary.covered ? `${fmtH(d.summary.covered)} izinle karşılandı` : "Geçen iş günleri"} />
+            {d.leave_days.length > 0 && <Stat label="İzinli gün" value={d.leave_days.length} />}
+            {d.summary.missing_days > 0 && <Stat label="Eksik gün" value={d.summary.missing_days} tone="warn" sub="Mesai veya izin kaydı yok" />}
+            {d.summary.forgot > 0 && <Stat label="Çıkış unutuldu" value={d.summary.forgot} tone="warn" sub="Düzeltme talebi açın" />}
           </div>
           <div className="card">
             <div className="adm-scroll">
               <table className="simple erp-table">
                 <thead><tr><th>Tarih</th><th>Giriş</th><th>Çıkış</th><th className="num">Mola</th><th className="num">Saat</th><th className="num">Fazla</th><th>Durum</th><th>Not</th></tr></thead>
                 <tbody>
-                  {d.rows.map((s) => (
+                  {days.map(({ s, l }) => (l ? (
+                    <tr key={`l${l.work_date}`}>
+                      <td>{fmtDay(l.work_date)}</td><td colSpan={5} /><td><span className="badge">{l.label}</span></td><td />
+                    </tr>
+                  ) : s && (
                     <tr key={s.id}>
                       <td>{fmtDay(s.work_date)}</td><td>{s.start}</td><td>{endText(s)}</td>
                       <td className="num">{s.break_minutes ? `${s.break_minutes} dk` : ""}</td>
@@ -134,8 +156,8 @@ function MyTab() {
                       <td className={s.status === "forgot" ? "error" : ""}>{STATUS[s.status]}{s.corrected_by ? <span className="muted"> · düzeltildi</span> : null}</td>
                       <td className="muted">{s.note}</td>
                     </tr>
-                  ))}
-                  {!d.rows.length && <tr><td colSpan={8} className="muted empty">Bu ay kayıt yok.</td></tr>}
+                  )))}
+                  {!days.length && <tr><td colSpan={8} className="muted empty">Bu ay kayıt yok.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -156,7 +178,9 @@ function AllTab() {
   const params = `date_from=${from}&date_to=${to}${emp ? `&employee_id=${emp}` : ""}`;
   const q = useQuery({ queryKey: ["attendance", params], queryFn: () => api.get<AllResp>(`/attendance?${params}`), enabled: !!from && !!to });
   const d = q.data;
-  const columns = useMemo<GridColumn<Shift>[]>(() => [
+  const grid = useMemo(() => [...(d?.rows ?? []) as GridRow[], ...(d?.leave_days ?? []).map(leaveRow)]
+    .sort((a, b) => b.work_date.localeCompare(a.work_date)), [d]);
+  const columns = useMemo<GridColumn<GridRow>[]>(() => [
     { accessorKey: "employee_name", header: "Personel", size: 170, card: "title" },
     { id: "day", header: "Tarih", size: 105, card: "sub", accessorFn: (s) => fmtDay(s.work_date) },
     { accessorKey: "start", header: "Giriş", size: 75, card: "field" },
@@ -164,7 +188,7 @@ function AllTab() {
     { accessorKey: "break_minutes", header: "Mola (dk)", size: 85, card: "field" },
     { accessorKey: "hours", header: "Saat", size: 75, card: "field" },
     { accessorKey: "overtime", header: "Fazla Mesai", size: 95, card: "field" },
-    { id: "status", header: "Durum", size: 130, card: "badge", accessorFn: (s) => STATUS[s.status] },
+    { id: "status", header: "Durum", size: 130, card: "badge", accessorFn: (s) => s.leave ?? STATUS[s.status] },
     { accessorKey: "note", header: "Not", size: 200, card: "field" },
     { accessorKey: "corrected_by", header: "Düzelten", size: 110, card: "hide" },
   ], []);
@@ -186,29 +210,36 @@ function AllTab() {
             <Stat label="Şu an içeride" value={d.inside} />
             <Stat label="Toplam saat" value={fmtH(d.total.hours)} />
             <Stat label="Fazla mesai" value={fmtH(d.total.overtime)} />
+            <Stat label="Beklenen saat" value={fmtH(d.total.expected)} sub={d.total.covered ? `${fmtH(d.total.covered)} izinle karşılandı` : "Geçen iş günleri"} />
+            <Stat label="Eksik gün" value={d.total.missing_days} tone={d.total.missing_days ? "warn" : undefined} sub="Mesai veya izin kaydı yok" />
             <Stat label="Çıkış unutulan" value={d.total.forgot} tone={d.total.forgot ? "warn" : undefined} />
           </div>
           <div className="card">
             <div className="adm-scroll">
               <table className="simple erp-table">
-                <thead><tr><th>Personel</th><th>Bölüm</th><th>Şimdi</th><th className="num">Gün</th><th className="num">Saat</th><th className="num">Fazla mesai</th><th className="num">Çıkış yok</th></tr></thead>
+                <thead><tr><th>Personel</th><th>Bölüm</th><th>Şimdi</th><th className="num">Gün</th><th className="num">Saat</th><th className="num">Beklenen</th><th className="num">İzin karşılığı</th><th className="num">Eksik saat</th><th className="num">İzinli gün</th><th className="num">Eksik gün</th><th className="num">Fazla mesai</th><th className="num">Çıkış yok</th></tr></thead>
                 <tbody>
                   {d.people.map((p) => (
                     <tr key={p.employee_id}>
                       <td><b>{p.name}</b></td><td className="muted">{p.department}</td>
                       <td>{p.inside ? "İçeride" : <span className="muted">Dışarıda</span>}</td>
                       <td className="num">{p.days}</td><td className="num">{fmtH(p.hours)}</td>
+                      <td className="num">{fmtH(p.expected)}</td>
+                      <td className="num">{p.covered ? fmtH(p.covered) : ""}</td>
+                      <td className="num">{p.short ? fmtH(p.short) : ""}</td>
+                      <td className="num">{leaveCount(p) || ""}</td>
+                      <td className={`num${p.missing_days ? " error" : ""}`}>{p.missing_days || ""}</td>
                       <td className="num">{p.overtime ? fmtH(p.overtime) : ""}</td>
                       <td className={`num${p.forgot ? " error" : ""}`}>{p.forgot || ""}</td>
                     </tr>
                   ))}
-                  {!d.people.length && <tr><td colSpan={7} className="muted empty">Personel kartı yok.</td></tr>}
+                  {!d.people.length && <tr><td colSpan={12} className="muted empty">Personel kartı yok.</td></tr>}
                 </tbody>
               </table>
             </div>
           </div>
-          <DataGrid data={d.rows} columns={columns} getRowId={(s) => String(s.id)} exportName={`mesai_${from}_${to}`} stateKey="attendance"
-            emptyText="Bu aralıkta mesai kaydı yok." onRowClick={canEdit ? setEdit : undefined} openOnClick />
+          <DataGrid data={grid} columns={columns} getRowId={(s) => (s.leave ? `l${s.employee_id}-${s.work_date}` : String(s.id))} exportName={`mesai_${from}_${to}`} stateKey="attendance"
+            emptyText="Bu aralıkta mesai kaydı yok." onRowClick={canEdit ? (s) => { if (!s.leave) setEdit(s); } : undefined} openOnClick />
         </>
       )}
       {edit && <ShiftModal shift={edit === "new" ? null : edit} onClose={() => setEdit(null)} />}
