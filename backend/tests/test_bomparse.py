@@ -1,4 +1,10 @@
-from app.core.bomparse import ROW_IN_PURCHASED, TEMIN_HAZIR, clean_material, parse_bom
+from pathlib import Path
+
+import pytest
+
+from app.core.bomparse import ROW_IN_PURCHASED, TEMIN_HAZIR, BomParseError, clean_material, parse_bom
+
+DATA = Path(__file__).parent / "data"
 
 
 def test_acceptance_1102(bom_1102):
@@ -55,3 +61,48 @@ def test_same_part_many_assemblies_totals(bom_1102):
             rows_by[r.part_no] += r.total_qty
     for k, v in rows_by.items():
         assert totals[k] == v
+
+
+MONTHS = "Oca Şub Mar Nis May Haz Tem Ağu Eyl Eki Kas Ara".split()
+
+
+def as_excel(v: str) -> str:
+    """What Turkish Excel writes back to the CSV for a dotted number it took for a date."""
+    parts = v.split(".")
+    if not all(x.isdigit() for x in parts):
+        return v
+    a, b = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    if len(parts) == 2:
+        if 1 <= a <= 31 and 1 <= b <= 12:
+            return f"{a}.{MONTHS[b - 1]}"
+        if 1 <= a <= 12 and len(parts[1]) <= 2:
+            return f"{MONTHS[a - 1]}.{b:02d}"
+    if len(parts) == 3 and 1 <= a <= 31 and 1 <= b <= 12 and len(parts[2]) <= 2:
+        y = int(parts[2])
+        return f"{a:02d}.{b:02d}.{2000 + y if y < 30 else 1900 + y}"
+    return v
+
+
+def test_bom_saved_by_turkish_excel_reads_the_same():
+    raw = (DATA / "BOM_T01_0000_0000_2026-11-02.csv").read_text(encoding="utf-8-sig").splitlines()
+    lines = [raw[0]]
+    for line in raw[1:]:
+        c = line.split(";")
+        c[0], c[4] = as_excel(c[0]), as_excel(c[4])
+        lines.append(";".join(c))
+    mangled = "\n".join(lines)
+    assert "1.Oca" in mangled and "Oca.13" in mangled and "01.01.2001" in mangled
+    got = parse_bom(mangled.encode("cp1254", "replace"))
+    want = parse_bom("\n".join(raw))
+    assert got.warnings and not want.warnings
+    assert [(r.level, r.part_no, r.total_qty, r.weight) for r in got.rows] == \
+           [(r.level, r.part_no, r.total_qty, r.weight) for r in want.rows]
+
+
+def test_unknown_level_text_is_still_refused():
+    csv = ("Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi\n"
+           "1;ROOT.SLDASM;1;;;;;\n"
+           "1.Abc;A.SLDASM;2;;;;;\n")
+    with pytest.raises(BomParseError, match="geçersiz seviye"):
+        parse_bom(csv.encode("utf-8-sig"))
+

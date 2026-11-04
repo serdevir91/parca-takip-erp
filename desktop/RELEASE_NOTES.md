@@ -1,6 +1,10 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.2 yenilikleri
+
+- **Düzeltme:** Excel'de açılıp kaydedilen BOM dosyası artık "geçersiz seviye '1.Oca'" hatası vermiyor. Excel'in tarihe çevirdiği seviye ve ağırlıklar otomatik geri düzeltilir, BOM sürümünde uyarı olarak gösterilir.
+
 ## 1.5.1 yenilikleri
 
 - **Yeni liste kartları:** Parça listesi, stok ve diğer listelerde her kayıt düzenli bir blok: üstte parça no ve tip, sağda durum rozeti, altında etiketli alan kutuları. Telefonda parça no tek satırda kalır, durum rozeti alt satıra geçer.

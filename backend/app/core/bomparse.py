@@ -34,6 +34,13 @@ DEFAULT_PART_NO_PATTERNS = [
 
 _UNSPECIFIED = ("not specified", "belirli değil")
 
+# Turkish Excel turns 1.1 into 1 January and saves the CSV with the date text: "1.Oca" (1.1), "Oca.13" (1.13),
+# "01.01.2001" (1.1.1). The same happens to small weights: "12.May" (12.05), "Ara.50" (12.50).
+_TR_MONTHS = {m: i for i, m in enumerate(("oca", "şub", "mar", "nis", "may", "haz", "tem", "ağu", "eyl", "eki", "kas", "ara"), 1)}
+_RX_DAY_MONTH = re.compile(r"(\d{1,2})[.\- ]([^\W\d_]{3})[^\W\d_]*")
+_RX_MONTH_YEAR = re.compile(r"([^\W\d_]{3})[^\W\d_]*[.\- ](\d{2})")
+_RX_FULL_DATE = re.compile(r"(\d{1,2})\.(\d{1,2})\.((?:19|20)\d{2})")
+
 
 class BomParseError(ValueError):
     pass
@@ -118,6 +125,31 @@ def _parse_weight(w: str) -> float | None:
         return None
 
 
+def _excel_pair(v: str) -> tuple[int, int] | None:
+    """The two numbers behind an Excel date text such as '1.Oca' or 'Oca.13', None for anything else."""
+    if m := _RX_DAY_MONTH.fullmatch(v):
+        month = _TR_MONTHS.get(m[2].lower())
+        return (int(m[1]), month) if month else None
+    if m := _RX_MONTH_YEAR.fullmatch(v):
+        month = _TR_MONTHS.get(m[1].lower())
+        return (month, int(m[2])) if month else None
+    return None
+
+
+def _restore_level(lvl: str) -> str:
+    if pair := _excel_pair(lvl):
+        return f"{pair[0]}.{pair[1]}"
+    if m := _RX_FULL_DATE.fullmatch(lvl):
+        return f"{int(m[1])}.{int(m[2])}.{int(m[3]) % 100}"
+    return lvl
+
+
+def _restore_weight(w: str) -> str:
+    """SolidWorks writes weights with two decimals, so the pair gives the exact value back."""
+    pair = _excel_pair(w)
+    return f"{pair[0]}.{pair[1]:02d}" if pair else w
+
+
 def decode_csv(data: bytes) -> str:
     for enc in ("utf-8-sig", "cp1254", "latin-1"):
         try:
@@ -166,8 +198,12 @@ def parse_bom(
     hazir_at: list[str] = []
     warnings: list[str] = []
     seen_levels: set[str] = set()
+    restored = 0
 
     for seq, (lvl, name, cnt, mat, w, rev, temin, kap) in enumerate(raw):
+        fixed_lvl, fixed_w = _restore_level(lvl), _restore_weight(w)
+        restored += (fixed_lvl != lvl) + (fixed_w != w)
+        lvl, w = fixed_lvl, fixed_w
         if not re.fullmatch(r"\d+(?:\.\d+)*", lvl):
             raise BomParseError(f"Satır {seq + 2}: geçersiz seviye '{lvl}'")
         if lvl in seen_levels:
@@ -215,5 +251,8 @@ def parse_bom(
             row.row_type = ROW_PART
         out.append(row)
 
+    if restored:
+        warnings.append(f"Excel'in tarihe çevirdiği {restored} değer (seviye, ağırlık) geri düzeltildi. "
+                        "Bu sorunu önlemek için SolidWorks'ten alınan CSV'yi Excel'de kaydetmeden yükleyin.")
     root = out[0].part_no if out and out[0].depth == 0 else ""
     return ParsedBom(rows=out, root_part_no=root, warnings=warnings)
