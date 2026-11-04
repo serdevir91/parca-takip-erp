@@ -200,7 +200,7 @@ function CompleteModal({ wo, onClose }: { wo: WorkOrder; onClose: () => void }) 
       <Modal title={`Eksik malzeme: ${wo.no}`} onClose={onClose} footer={<button className="btn primary" onClick={onClose}>Tamam</button>}>
         <p>Üretim girişi kaydedildi, ancak şu malzemeler stoktan tam çıkılamadı:</p>
         <ul className="scan-warn">{warnings.map((w) => <li key={w.code}>{w.message}</li>)}</ul>
-        <p className="muted">Stoktaki kadarı çıkıldı. Eksik kalan, proje maliyetine yansımaz; iş emri açıksa sonraki üretim girişinde yeniden denenir.</p>
+        <p className="muted">Stoktaki kadarı çıkıldı. İş emri açıksa eksik kalan sonraki üretim girişinde yeniden denenir.</p>
       </Modal>
     );
   }

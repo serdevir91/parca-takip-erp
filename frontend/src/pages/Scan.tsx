@@ -97,6 +97,9 @@ export default function Scan() {
   const [camera, setCamera] = useState(false);
   const [decoding, setDecoding] = useState(false);
   const box = useRef<HTMLInputElement>(null);
+  const last = useRef("");
+  // A phone would pop its keyboard over the result; a desk with a hand scanner wants the cursor ready
+  const focusBox = () => { if (window.matchMedia("(pointer: fine)").matches) box.current?.focus({ preventScroll: true }); };
   const liveCamera = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
 
   const res = useQuery({
@@ -109,17 +112,14 @@ export default function Scan() {
     if (!v) return;
     setCamera(false);
     setText("");
-    setPayload((old) => {
-      if (old === v) void refetch();
-      return v;
-    });
-    box.current?.focus({ preventScroll: true });
+    // The same code again is a fresh read: the quantity may have changed since
+    if (last.current === v) void refetch();
+    last.current = v;
+    setPayload(v);
+    focusBox();
   }, [refetch]);
 
-  useEffect(() => {
-    // A phone would pop its keyboard over the camera buttons; a desk with a hand scanner wants the cursor ready
-    if (window.matchMedia("(pointer: fine)").matches) box.current?.focus();
-  }, []);
+  useEffect(focusBox, []);
 
   const photo = async (file: File | undefined) => {
     if (!file) return;
