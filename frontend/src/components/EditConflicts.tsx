@@ -3,7 +3,7 @@ import { Modal, fmtDate } from "../pages/admin/shared";
 export type EditConflict = { part_no: string; field: string; mine: unknown; theirs: string | null; by: string; at: string };
 
 const FIELD: Record<string, string> = {
-  procurement_override: "Temin şekli", progress: "İlerleme", note: "Not", t35_note: "Liste notu", manufacturer: "Üretici",
+  procurement_override: "Temin şekli", progress: "İlerleme", note: "Not", t35_note: "Durum Notu", manufacturer: "Üretici",
   material_status: "Malzeme durumu", is_new: "Yeni", hidden: "Gizli", part_name: "Parça adı",
 };
 const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "(boş)" : v === true ? "Evet" : v === false ? "Hayır" : String(v));
