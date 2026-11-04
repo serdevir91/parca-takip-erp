@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     admin_password: str = "admin"
     # Interactive API docs at /api/docs (off by default: they map the whole API without a login)
     api_docs: bool = False
-    app_version: str = "1.5.7"
+    app_version: str = "1.5.8"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048
@@ -67,7 +67,8 @@ def get_settings() -> Settings:
     return s
 
 
-WEAK_SECRETS = {"", "change-me", "changeme", "secret", "please-change-me", "erp", "parca-takip"}
+WEAK_SECRETS = {"", "change-me", "changeme", "secret", "please-change-me", "erp", "parca-takip",
+                "degistir-bunu-uzun-rastgele-bir-anahtar"}
 
 
 def ensure_jwt_secret(cfg: Settings) -> None:

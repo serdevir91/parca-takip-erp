@@ -8,10 +8,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Employee, Project, TimeEntry, User, WorkOrder
+from ..models import Attendance, Employee, Project, TimeEntry, User, WorkOrder
 from ..permissions import require
 from ..services import audit
 from .deps import any_user, get_db, project_or_404
@@ -82,12 +82,8 @@ def _check_user(db: Session, user_id: int | None, emp_id: int | None = None) -> 
 
 
 def _my_card(db: Session, me: User) -> Employee | None:
-    """The card linked to this login; a card with the same e-mail counts when no card is linked yet."""
-    e = db.scalar(select(Employee).where(Employee.user_id == me.id))
-    if e is None and (me.email or "").strip():
-        e = db.scalar(select(Employee).where(Employee.user_id.is_(None),
-                                             func.lower(Employee.email) == me.email.strip().lower()))
-    return e
+    """The card an admin linked to this login. Never matched by e-mail: users set their own e-mail freely."""
+    return db.scalar(select(Employee).where(Employee.user_id == me.id))
 
 
 @router.get("/hr/me")
@@ -161,6 +157,8 @@ def delete_employee(emp_id: int, me: User = Depends(hr_edit), db: Session = Depe
     e = _emp_or_404(db, emp_id)
     if db.scalar(select(TimeEntry.id).where(TimeEntry.employee_id == e.id).limit(1)):
         raise HTTPException(400, "Zaman kaydı olan personel silinemez; pasif yapın")
+    if db.scalar(select(Attendance.id).where(Attendance.employee_id == e.id).limit(1)):
+        raise HTTPException(400, "Mesai kaydı olan personel silinemez; pasif yapın")
     audit.record(db, me, "employee", e.id, "name", e.name, None, action="delete")
     db.delete(e)
     db.commit()

@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import hash_password
 from ..permissions import MODULES, catalog, clean_overrides, effective, require
-from ..models import ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Part, User
+from ..models import (ROLE_ADMIN, ROLE_LABELS, ROLES, AuditLog, Firm, Invoice, Part, Payment, PurchaseOrder, SalesOrder,
+                      User)
 from ..services import audit, backup as backup_svc, system
 from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR, KIND_IMALAT
 from ..services.tracking import material_status_choices
@@ -220,6 +221,8 @@ def deactivate_user(user_id: int, me: User = Depends(admin), db: Session = Depen
     u = _user_or_404(db, user_id)
     _guard_self(me, u, u.role, False)
     _guard_last_admin(db, u, u.role, False)
+    if u.active:
+        u.token_version = (u.token_version or 0) + 1
     audit.record_changes(db, me, u, {"active": False}, "user", u.id)
     db.commit()
     return user_out(u)
@@ -324,6 +327,8 @@ def update_firm(firm_id: int, body: FirmUpdate, me: User = Depends(contacts_edit
 def delete_firm(firm_id: int, me: User = Depends(contacts_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Tracking rows keep the firm name as text, so deleting a firm loses no history."""
     f = _firm_or_404(db, firm_id)
+    if any(db.scalar(select(m.id).where(m.firm_id == f.id).limit(1)) for m in (Invoice, Payment, PurchaseOrder, SalesOrder)):
+        raise HTTPException(400, "Bu firmanın fatura, ödeme veya sipariş kaydı var. Silmek yerine pasife alın.")
     audit.record(db, me, "firm", f.id, "name", f.name, None, action="delete")
     db.delete(f)
     db.commit()

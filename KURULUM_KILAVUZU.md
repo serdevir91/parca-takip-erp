@@ -114,7 +114,11 @@ Yeni çalışanlar kendi hesaplarını ister, yönetici onaylar.
 
 Her çalışan **Personel kartım** ekranında yalnızca kendi kartını ve çalışma saatlerini görür. Bunun için
 **Personel ve zaman › Personel** sekmesinde kişinin kartını açıp **Kullanıcı hesabı** alanından hesabını seçin
-(kartın e-postası hesabın e-postasıyla aynıysa bağlantı kendiliğinden kurulur).
+(bağlantıyı yalnızca yönetici kurar; e-posta eşleşmesi artık sayılmaz).
+
+**Mesai takibi:** Çalışan menüdeki **Mesai takibi** ekranından giriş ve çıkış yapar, yalnızca kendi mesaisini görür.
+Yöneticiye herkesi göstermek için **Mesai takibi (tüm personel)** modülünü açın: Görür herkesi listeler, Düzenler
+kayıt ekler ve düzeltir. Haftalık çalışma saati ve mola süresi Sistem Ayarları'nda.
 
 Yetkiler sonradan da aynı ekrandan değiştirilebilir. Herkesin hesap istemesini kapatmak için
 Kullanıcılar sekmesindeki **Girişte "Hesap oluştur" göster** kutusunun işaretini kaldırın.

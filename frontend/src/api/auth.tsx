@@ -7,7 +7,7 @@ export type Level = "none" | "view" | "edit";
 /** Permission modules (backend/app/permissions.py MODULES). */
 export type Module =
   | "projects" | "parts" | "fasteners" | "drawings" | "control" | "planning" | "purchasing"
-  | "workorders" | "stock" | "hr" | "contacts" | "sales" | "finance" | "chat" | "admin";
+  | "workorders" | "stock" | "hr" | "attendance" | "contacts" | "sales" | "finance" | "chat" | "admin";
 const RANK: Record<Level, number> = { none: 0, view: 1, edit: 2 };
 
 export interface User {
@@ -19,6 +19,7 @@ export interface User {
   role_label: string;
   active: boolean;
   system?: SystemDefaults;
+  default_password?: boolean;
   /** Effective level per module: role defaults plus the admin's per-user overrides. */
   permissions?: Partial<Record<Module, Level>>;
 }

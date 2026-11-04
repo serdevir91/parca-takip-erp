@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -30,6 +31,17 @@ def user_out(u: User) -> dict:
     return {"id": u.id, "username": u.username, "full_name": u.full_name, "email": u.email or "",
             "role": u.role, "role_label": ROLE_LABELS.get(u.role, u.role), "active": u.active,
             "permissions": effective(u)}
+
+
+@lru_cache(maxsize=32)
+def _is_default_password(password_hash: str) -> bool:
+    return verify_password("admin", password_hash)
+
+
+def session_out(u: User, db: Session) -> dict:
+    """The signed-in user with the system settings; admins still on admin/admin get a warning on every page."""
+    return {**user_out(u), "system": system.for_user(db),
+            "default_password": u.role == ROLE_ADMIN and _is_default_password(u.password_hash)}
 
 
 def check_email(email: str) -> str:
@@ -65,9 +77,9 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
         raise HTTPException(403, "Hesabınız yönetici onayı bekliyor. Onaylandığında giriş yapabilirsiniz.")
     if not u.active:
         raise HTTPException(403, "Hesabınız pasif. Yöneticinize başvurun.")
-    loginguard.succeeded(name)
+    loginguard.succeeded(name, ip)
     return {"access_token": create_token(u), "token_type": "bearer",
-            "user": {**user_out(u), "system": system.for_user(db)}}
+            "user": session_out(u, db)}
 
 
 @router.get("/options")
@@ -132,7 +144,7 @@ def register(body: SignupIn, request: Request, background: BackgroundTasks,
 
 @router.get("/me")
 def me(user: User = Depends(any_user), db: Session = Depends(get_db)) -> dict:
-    return {**user_out(user), "system": system.for_user(db)}
+    return session_out(user, db)
 
 
 class ProfileIn(BaseModel):

@@ -146,6 +146,18 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
   const [find, setFind] = useState<"find" | "replace" | null>(null);
   const [fillTo, setFillTo] = useState<Range | null>(null);
   const [note, setNote] = useState("");
+  // Selection is by position; a refresh from another computer can move rows, so it follows the selected row
+  const headRow = useRef<string | null>(null);
+  useEffect(() => { headRow.current = head ? rows[head.r]?.id ?? null : null; }, [head]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!head || !anchor || headRow.current === null) return;
+    const at = rows.findIndex((r) => r.id === headRow.current);
+    if (at === head.r) return;
+    if (at < 0) { setAnchor(null); setHead(null); return; }
+    const shift = at - head.r;
+    setAnchor({ ...anchor, r: Math.max(0, Math.min(rows.length - 1, anchor.r + shift)) });
+    setHead({ ...head, r: at });
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
   // A filter popup closes on Escape and on any press outside it, toolbar included
   useEffect(() => {
     if (!openFilter) return;

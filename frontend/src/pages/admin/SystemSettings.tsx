@@ -122,6 +122,8 @@ function Forms({ data }: { data: Data }) {
             <Text f={f} set={set} k="unit" label="Varsayılan birim" />
             <Num f={f} set={set} k="spare_pct" label="Bağlantı elemanı yedek oranı (%)" />
             <Num f={f} set={set} k="work_hours" label="Günlük çalışma saati" />
+            <Num f={f} set={set} k="week_hours" label="Haftalık çalışma saati (üstü fazla mesai)" />
+            <Num f={f} set={set} k="break_minutes" label="Mola süresi (dk, 4 saatten uzun mesaide düşülür)" />
           </>
         )}
       </Card>

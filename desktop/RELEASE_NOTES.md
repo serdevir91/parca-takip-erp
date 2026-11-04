@@ -1,6 +1,18 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.8 yenilikleri
+
+- **Mesai takibi:** Çalışan giriş ve çıkış düğmesiyle mesaisini tutar, yalnızca kendisininkini görür. Yetkili yönetici herkesi görür, düzeltir, Excel'e aktarır. Haftalık fazla mesai otomatik hesaplanır.
+- **Önemli yedek düzeltmesi:** Veritabanı veri klasöründeyse (Sunucuma kur ile kurulan Linux sunucular) yedek alma sonraki kayıtların kaybolmasına yol açabiliyordu. Düzeltildi. Yedekler artık iç içe büyümüyor, geri yükleme eski yedekleri silmiyor.
+- **Stok:** Aynı anda yapılan hareketler artık birbirini ezmiyor.
+- **Numaralar:** Aynı anda açılan sipariş ve faturalar hata vermiyor.
+- **Çevrimdışı:** Bağlantı yokken kayıt sıraya girmiyor, hemen hata gösteriyor. Canlı göstergesi doğru durumu söylüyor.
+- **Tablo:** Başka bilgisayardan gelen değişiklikte seçili hücre aynı satırda kalıyor.
+- **Fatura:** Aynı satış siparişi iki kez faturalanamıyor. Satın alma siparişinde yalnızca faturalanmamış kısım gelir.
+- **Silme koruması:** Fatura veya siparişi olan firma, projeye hareketi olan stok kartı silinemiyor.
+- **Güvenlik:** Personel kartı e-posta ile eşleşmiyor (yönetici bağlamalı). Ana sayfa akışı yetkiye göre süzülüyor. Giriş kilidi başkasını dışarıda bırakmıyor. Girişsiz büyük istek reddediliyor. Yedekte imza anahtarı yok, yedek dosyası yalnızca sahibine açık. CSV formül koruması eklendi. Varsayılan admin şifresi için uyarı var. Kütüphaneler güncellendi.
+
 ## 1.5.7 yenilikleri
 
 - **Temin şekilleri:** Fason İmalat, Standart Parça, Stoktan Karşılama ve Müşteri Malı eklendi. Sistem Ayarları'ndan yenisini ekleyin; davranışını, teknik resim ve sipariş önerisini seçin.

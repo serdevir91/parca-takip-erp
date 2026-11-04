@@ -25,6 +25,7 @@ MODULES: list[tuple[str, str, str]] = [
     ("workorders", "İş emirleri", "Üretim"),
     ("stock", "Stok", "Üretim"),
     ("hr", "Personel ve zaman", "Üretim"),
+    ("attendance", "Mesai takibi (tüm personel)", "Üretim"),
     ("contacts", "Cari kartlar (müşteri, tedarikçi)", "Ticari"),
     ("sales", "Satış (teklif, sipariş)", "Ticari"),
     ("finance", "Fatura ve ödemeler", "Ticari"),
@@ -34,9 +35,10 @@ MODULES: list[tuple[str, str, str]] = [
 MODULE_KEYS = [m[0] for m in MODULES]
 
 _ENG = ("projects", "parts", "fasteners", "drawings", "control")
-_OPS = ("planning", "purchasing", "workorders", "stock", "hr", "contacts", "sales", "finance")
+_OPS = ("planning", "purchasing", "workorders", "stock", "hr", "attendance", "contacts", "sales", "finance")
 # Defaults follow the job: wages (hr), money (finance) and customer deals (sales) stay with the roles that
-# work on them. Every employee still sees their own personnel card (GET /hr/me) without hr rights.
+# work on them. Every employee still sees their own personnel card (GET /hr/me) and their own shifts
+# (GET /attendance/me) without hr or attendance rights.
 ROLE_DEFAULTS: dict[str, dict[str, str]] = {
     ROLE_ADMIN: {k: EDIT for k in MODULE_KEYS},
     ROLE_DESIGNER: {**{k: EDIT for k in _ENG}, **{k: NONE for k in _OPS},
@@ -45,7 +47,7 @@ ROLE_DEFAULTS: dict[str, dict[str, str]] = {
     # Planning/purchasing edits part tracking (progress, procurement) but does not upload BOMs or drawings
     ROLE_PLANNER: {**{k: VIEW for k in _ENG}, "parts": EDIT, "fasteners": EDIT, "control": EDIT,
                    **{k: EDIT for k in ("planning", "purchasing", "workorders", "stock", "contacts")},
-                   "sales": VIEW, "finance": NONE, "hr": NONE, "chat": EDIT, "admin": NONE},
+                   "sales": VIEW, "finance": NONE, "hr": NONE, "attendance": NONE, "chat": EDIT, "admin": NONE},
     # Everyone may chat; "view" on chat means read-only (no sending)
     ROLE_VIEWER: {**{k: VIEW for k in _ENG}, **{k: NONE for k in _OPS},
                   "planning": VIEW, "workorders": VIEW, "stock": VIEW, "chat": EDIT, "admin": NONE},

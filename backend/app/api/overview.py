@@ -21,6 +21,13 @@ ENTITY_LABELS = {"tracking": "Parça", "bom": "BOM", "drawing": "Teknik resim", 
                  "work_order": "İş emri", "stock": "Stok", "sales_order": "Satış", "invoice": "Fatura",
                  "payment": "Ödeme", "employee": "Personel", "time_entry": "Zaman", "firm": "Cari kart",
                  "user": "Kullanıcı", "project": "Proje", "photo": "Fotoğraf"}
+# Who may see an entity in the activity feed; anything not listed is for admins only
+ENTITY_MODULE = {"tracking": "parts", "part": "parts", "part_name": "parts", "photo": "parts", "alias": "parts",
+                 "project": "projects", "bom": "projects", "bom_version": "projects", "drawing": "drawings",
+                 "control": "control", "check_rule": "control", "fastener": "fasteners",
+                 "fastener_rule": "fasteners", "purchase_order": "purchasing", "work_order": "workorders",
+                 "stock": "stock", "employee": "hr", "time_entry": "hr", "attendance": "attendance",
+                 "firm": "contacts", "sales_order": "sales", "invoice": "finance", "payment": "finance"}
 
 
 def _count(db: Session, q: Any) -> int:
@@ -84,8 +91,11 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
     out["activity"] = [{"date": (since + timedelta(days=i)).isoformat(),
                         "count": per_day[(since + timedelta(days=i)).isoformat()]} for i in range(30)]
     names = dict(db.execute(select(Project.id, Project.name)).all())
+    feed = select(AuditLog)
+    if not can(me, "admin"):
+        feed = feed.where(AuditLog.entity.in_([e for e, m in ENTITY_MODULE.items() if can(me, m)]))
     out["recent"] = [{"ts": a.ts.isoformat(), "user": a.username, "entity": ENTITY_LABELS.get(a.entity, a.entity),
                       "entity_id": a.entity_id, "field": a.field, "action": a.action, "new": a.new,
                       "project": names.get(a.project_id or 0)}
-                     for a in db.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(12))]
+                     for a in db.scalars(feed.order_by(AuditLog.id.desc()).limit(12))]
     return out

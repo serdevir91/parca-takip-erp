@@ -80,7 +80,7 @@ sunucuda ve bilgisayarda yapılacakları adım adım gösterir. **Bağlantıyı 
 | **Mühendislik** | Proje ve BOM sürümleri, ürün ağacı oluşturma, Excel gibi tablo, gelişmiş filtre, toplu durum değiştirme, sürüm karşılaştırma, parça ve bağlantı elemanı takibi, teknik resim, kontrol listesi |
 | **Üretim** | İhtiyaç analizi, iş emirleri, stok kartları ve hareketleri, proje maliyeti |
 | **Ticari** | Satın alma, cari kartlar, teklif, satış siparişi, fatura, tahsilat ve ödeme |
-| **Ekip** | Personel kartları, zaman kaydı, sohbet, e-posta ile paylaşım |
+| **Ekip** | Personel kartları, zaman kaydı, mesai takibi, sohbet, e-posta ile paylaşım |
 | **Yönetim** | Modül bazında yetki, kayıt onayı, denetim kaydı, otomatik yedek, sistem ayarları |
 | **Platform** | Windows uygulaması, Android uygulaması, tarayıcı, Docker veya Docker'sız Linux sunucu |
 
@@ -463,6 +463,7 @@ stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projey
   Vadesi geçti) ve firma bazında cari bakiyeler.
 - **Personel ve zaman:** Personel kartları (saatlik maliyet) ve projeye veya iş emrine yazılan çalışma
   saatleri. İşçilik maliyeti projenin maliyet sekmesine "İşçilik" kaynağıyla eklenir.
+- **Mesai takibi:** Çalışan giriş ve çıkışını düğmeyle yapar, saati sunucu yazar. Herkes yalnızca kendi mesaisini görür. `Mesai takibi (tüm personel)` yetkisi olan yönetici herkesi görür, kayıtları düzeltir ve Excel'e aktarır. Fazla mesai haftalıktır; haftalık saat ve mola Sistem Ayarları'ndan gelir. Çalışanın personel kartı hesabına bağlı olmalıdır.
 
 ### Fotoğraflar ve resim görüntüleyici
 
@@ -507,6 +508,8 @@ Her yedek tek bir dosyadır: `erp_YYYYMMDD_HHMMSS.tar`. İçinde şunlar vardır
 - `db.dump`: veritabanı dökümü (`pg_dump` özel biçim)
 - `data/`: yüklenen BOM dosyaları, teknik resimler ve küçük resimler
 - `manifest.json`: yedek tarihi, uygulama sürümü, dosya sayısı
+
+Yedek dosyası yalnızca sahibine açıktır (0600). Oturum imza anahtarı yedeğe girmez.
 
 Yedekler varsayılan olarak `erpbackups` Docker volume'unda durur. **Disk arızasına karşı yedekleri
 başka bir diske de alın.** Bunun için `.env` dosyasında `ERP_BACKUP_PATH` değerine bir klasör yolu
@@ -606,8 +609,10 @@ değişince diğer cihazlardaki oturumlar kapanır.
 ## Güvenlik
 
 - **Şifreler:** En az 8 karakter. Şifreler bcrypt ile saklanır.
-- **Giriş denemeleri:** Bir kullanıcı adıyla 15 dakikada 5, bir IP adresinden 30 hatalı denemeden sonra giriş
-  geçici olarak engellenir.
+- **Giriş denemeleri:** Bir adresten bir kullanıcı adıyla 15 dakikada 5, bir adresten toplam 30, bir kullanıcı
+  adıyla tüm adreslerden 50 hatalı denemeden sonra giriş geçici olarak engellenir. Tek makine başkasını kilitleyemez.
+- **Büyük istekler:** Girişsiz istek en fazla 1 MB, girişli JSON isteği en fazla 64 MB olabilir.
+- **Varsayılan şifre:** Yönetici hâlâ `admin` şifresini kullanıyorsa her ekranda uyarı görür.
 - **Oturumlar:** Şifre değişince, yönetici şifreyi sıfırlayınca veya kullanıcı pasif yapılınca o kullanıcının
   bütün açık oturumları kapanır.
 - **Oturum anahtarı:** `ERP_JWT_SECRET` boş, varsayılan (`change-me`) veya 32 karakterden kısaysa uygulama veri

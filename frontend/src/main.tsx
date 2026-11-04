@@ -10,7 +10,11 @@ import { ThemeProvider } from "./theme/theme";
 import "./styles.css";
 
 const qc = new QueryClient({
-  defaultOptions: { queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false } },
+  // Offline saves fail with a message: a queue would replay them later, over newer data and twice for stock moves
+  defaultOptions: {
+    queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false },
+    mutations: { networkMode: "always" },
+  },
 });
 
 createRoot(document.getElementById("root")!).render(

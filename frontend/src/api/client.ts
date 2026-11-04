@@ -52,7 +52,10 @@ export async function request<T = unknown>(method: string, path: string, body?: 
     headers.set("Content-Type", "application/json");
     payload = JSON.stringify(body);
   }
-  const res = await fetch(`/api${path}`, { ...init, method, headers, body: payload });
+  const res = await fetch(`/api${path}`, { ...init, method, headers, body: payload }).catch((e) => {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    throw new ApiError(0, "Sunucuya ulaşılamadı");
+  });
   if (res.status === 401 && !path.startsWith("/auth/login")) onUnauthorized();
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("application/json") ? await res.json() : await res.text();

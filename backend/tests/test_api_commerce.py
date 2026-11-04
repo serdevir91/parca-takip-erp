@@ -207,10 +207,3 @@ def test_employee_sees_only_own_card(client, admin_headers, pid):
     assert other["name"] in firms
     assert client.get("/api/hr/users", headers=me_h).status_code == 403
     assert any(u["id"] == me_id for u in client.get("/api/hr/users", headers=h).json())
-
-
-def test_card_found_by_email_when_not_linked(client, admin_headers):
-    mail = f"{uuid.uuid4().hex[:6]}@lab.test"
-    me_h, _ = _login(client, admin_headers, "viewer", email=mail)
-    e = client.post("/api/employees", headers=admin_headers, json={"name": _u("Can"), "email": mail.upper()}).json()
-    assert client.get("/api/hr/me", headers=me_h).json()["employee"]["id"] == e["id"]

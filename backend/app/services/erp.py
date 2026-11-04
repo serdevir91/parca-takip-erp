@@ -16,11 +16,11 @@ from datetime import date
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..core.status import KIND_IMALAT, PROG_DONE, PROG_RUN, PROG_WAIT
-from ..models import (Employee, FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove,
+from ..models import (Employee, FastenerSetting, Project, PurchaseOrder, PurchaseOrderLine, StockItem, StockMove, SyncState,
                       TimeEntry, Tracking, User, WorkOrder)
 from . import audit, system
 from .state import FASTENER_ORDER_STATUSES, ProjectView
@@ -45,6 +45,8 @@ def _num(v: float) -> float:
 
 def next_no(db: Session, model: Any) -> str:
     """SA-2026-0001 style numbers, counting per year; the prefix comes from Sistem Ayarları."""
+    # Holds a write lock until commit: two people creating at once get consecutive numbers, not a UNIQUE error
+    db.execute(update(SyncState).where(SyncState.id == 1).values(rev=SyncState.rev))
     base = f"{system.prefix(db, model)}-{date.today().year}-"
     used = [n[len(base):] for n in db.scalars(select(model.no).where(model.no.like(f"{base}%")))]
     last = max((int(n) for n in used if n.isdigit()), default=0)
@@ -69,6 +71,10 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
     """Book a stock move. qty is positive; out/issue subtract, count sets the counted quantity."""
     if kind not in MOVE_KINDS:
         raise HTTPException(400, f"Geçersiz hareket türü: {kind}")
+    # Take the row lock before reading the balance, so parallel moves queue up instead of losing each other
+    db.flush()
+    db.execute(update(StockItem).where(StockItem.id == item.id).values(qty=StockItem.qty))
+    db.refresh(item)
     if kind == "count":
         if qty < 0:
             raise HTTPException(400, "Sayım miktarı negatif olamaz")

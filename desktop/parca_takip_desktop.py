@@ -212,7 +212,7 @@ class EmbeddedServer:
         from app.main import app  # imported here (not by name) so the bundler sees it
 
         config = uvicorn.Config(app, host="0.0.0.0", port=self.port, workers=1, log_config=None,
-                                timeout_keep_alive=75, proxy_headers=True, forwarded_allow_ips="*")
+                                timeout_keep_alive=75, proxy_headers=True, forwarded_allow_ips="127.0.0.1")
         self.server = uvicorn.Server(config)
         t = threading.Thread(target=self._run, name="uvicorn", daemon=True)
         t.start()

@@ -140,6 +140,22 @@ def _dump_db(database_url: str, workdir: Path) -> tuple[str, Path]:
     raise BackupError(f"Desteklenmeyen veritabanı: {backend}")
 
 
+def _not_data(data_dir: Path, database_url: str, backup_dir: Path) -> set[str]:
+    """Names in data_dir (relative) that a backup leaves alone, because some installs keep them there.
+
+    The live SQLite files above all: closing any handle on them drops the locks SQLite holds in this process,
+    which can lose every later write. They are in the backup as the dump. Older backups would nest in each
+    other and a restore would wipe them. The token signing key stays out so a stolen backup forges no logins.
+    """
+    root = data_dir.resolve()
+    paths = [backup_dir.resolve()]
+    url = make_url(database_url)
+    if url.get_backend_name() == "sqlite" and url.database:
+        db = Path(url.database).resolve()
+        paths += [db.with_name(db.name + s) for s in ("", "-wal", "-shm", "-journal")]
+    return {".jwt_secret"} | {p.relative_to(root).as_posix() for p in paths if p.is_relative_to(root)}
+
+
 def create_backup(database_url: str | None = None, data_dir: Path | None = None,
                   backup_dir: Path | None = None, keep_days: int | None = None,
                   now: datetime | None = None) -> BackupInfo:
@@ -171,10 +187,12 @@ def create_backup(database_url: str | None = None, data_dir: Path | None = None,
                     tar.add(mpath, arcname="manifest.json")
                     tar.add(dump, arcname=dump.name)
                     if data_dir.is_dir():
-                        tar.add(data_dir, arcname="data")
+                        skip = {f"data/{n}" for n in _not_data(data_dir, database_url, backup_dir)}
+                        tar.add(data_dir, arcname="data", filter=lambda i: None if i.name in skip else i)
             except BaseException:
                 partial.unlink(missing_ok=True)
                 raise
+        partial.chmod(0o600)  # the whole database is in here
         partial.rename(final)
         prune(keep_days, backup_dir, now=ts)
         return BackupInfo(name, final, final.stat().st_size, _stamp_of(final))
@@ -190,7 +208,8 @@ def read_manifest(path: Path) -> dict[str, Any]:
         return json.loads(f.read().decode("utf-8"))
 
 
-def restore_backup(path: Path, database_url: str | None = None, data_dir: Path | None = None) -> dict[str, Any]:
+def restore_backup(path: Path, database_url: str | None = None, data_dir: Path | None = None,
+                   backup_dir: Path | None = None) -> dict[str, Any]:
     """Restore database and data directory from a backup tar. Overwrites current data.
 
     Run it with the backend stopped (or no users active); see README "Geri yükleme"."""
@@ -222,10 +241,13 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
         src = t / "data"
         if src.is_dir():
             data_dir.mkdir(parents=True, exist_ok=True)
+            keep = {n.split("/")[0] for n in _not_data(data_dir, database_url, Path(backup_dir or cfg.backup_dir))}
             for child in data_dir.iterdir():
-                shutil.rmtree(child) if child.is_dir() else child.unlink()
+                if child.name not in keep:
+                    shutil.rmtree(child) if child.is_dir() else child.unlink()
             for child in src.iterdir():
-                shutil.move(str(child), str(data_dir / child.name))
+                if child.name not in keep:   # backups made before 1.5.8 can still hold these
+                    shutil.move(str(child), str(data_dir / child.name))
     return manifest
 
 

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes, Calculator, ClipboardCheck, Clock, Contact, Factory, FileText, FolderKanban, GitCompare, House, IdCard, Layers,
-  ListTree, LogOut, Menu, MessageCircle, Moon, Network, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Wallet, Wrench, type LucideIcon,
+  ListTree, LogOut, Menu, MessageCircle, Moon, Network, RefreshCw, Server, Settings, ShoppingCart, Sun, TrendingUp, Timer, Wallet, Wrench, type LucideIcon,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -29,7 +29,8 @@ export function useProject() {
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", designer: "Tasarımcı", planner: "Planlama/Satın alma", viewer: "İzleyici" };
 
 // unless: hidden for users who have that module (they get the full screen instead)
-type Item = { to: string; label: string; icon: LucideIcon; module?: Module; unless?: Module; end?: boolean };
+// off: open to everyone, hidden only when that module is switched off for the company
+type Item = { to: string; label: string; icon: LucideIcon; module?: Module; unless?: Module; off?: Module; end?: boolean };
 type Group = { title: string; items: Item[] };
 
 const GROUPS: Group[] = [
@@ -42,6 +43,7 @@ const GROUPS: Group[] = [
       { to: "/stock", label: "Stok", icon: Boxes, module: "stock" },
       { to: "/hr", label: "Personel ve zaman", icon: Clock, module: "hr", end: true },
       { to: "/hr/me", label: "Personel kartım", icon: IdCard, unless: "hr" },
+      { to: "/attendance", label: "Mesai takibi", icon: Timer, off: "attendance" },
     ],
   },
   {
@@ -103,7 +105,7 @@ function useLiveSync() {
     }
     last.current = rev;
   }, [rev, qc, reloadUser]);
-  return { online: !q.isError && q.data != null, lastSync: q.dataUpdatedAt };
+  return { online: !q.isError && q.data != null && q.fetchStatus !== "paused", lastSync: q.dataUpdatedAt };
 }
 
 /** Chat has its own poll (chat writes do not bump the global rev): unread badge, "(n)" in the tab title,
@@ -177,7 +179,8 @@ export default function Layout() {
       return !c;
     });
   };
-  const visible = (i: Item) => (!i.module || can(i.module)) && !(i.unless && (can(i.unless) || sys.modules_off.includes(i.unless)));
+  const visible = (i: Item) => (!i.module || can(i.module)) && !(i.unless && (can(i.unless) || sys.modules_off.includes(i.unless)))
+    && !(i.off && sys.modules_off.includes(i.off));
   const brand = useBrand();
   const brandWords = brand.name.split(" ");
   const brandTail = brandWords.pop();
@@ -266,6 +269,12 @@ export default function Layout() {
         </header>
         {upd.message && <div className="muted" style={{ padding: "4px 16px" }}>{upd.message}</div>}
         <UpdateBanner />
+        {user?.default_password && (
+          <div className="card alerts" style={{ margin: "8px 16px" }}>
+            <b>Yönetici şifresi hâlâ varsayılan (admin).</b> Ağdaki herkes yönetici olarak girebilir.{" "}
+            <button className="btn sm" onClick={() => setProfile(true)}>Şifreyi değiştir</button>
+          </div>
+        )}
         <Outlet />
         {profile && <Profile onClose={() => setProfile(false)} />}
       </div>

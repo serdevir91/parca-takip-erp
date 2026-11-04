@@ -560,6 +560,21 @@ class TimeEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Attendance(Base):
+    """Mesai: one shift of one employee. Times are the server's wall clock with no zone, as on a time sheet;
+    work_date is the day the shift began, so a night shift belongs to its first day. No clock_out = still open."""
+    __tablename__ = "attendance"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    clock_in: Mapped[datetime] = mapped_column(DateTime)
+    clock_out: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    break_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_by: Mapped[str] = mapped_column(String(64), default="")   # a manager who corrected the shift
+
+
 class Photo(Base):
     """A product photo, attached to a part number (global like drawings) or a stock item (by id)."""
     __tablename__ = "photos"

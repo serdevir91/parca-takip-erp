@@ -184,6 +184,9 @@ def invoice_from_so(db: Session, user: User, so: SalesOrder) -> Invoice:
         raise HTTPException(400, "Yalnızca onaylanmış veya teslim edilmiş siparişin faturası kesilir")
     if any(l.unit_price is None for l in so.lines):
         raise HTTPException(400, "Fiyatı girilmemiş satır var")
+    old = db.scalar(select(Invoice).where(Invoice.sales_order_id == so.id, Invoice.status != "cancelled"))
+    if old is not None:
+        raise HTTPException(400, f"Bu siparişin faturası zaten var: {old.no}. Yenisi için önce onu iptal edin.")
     firm = db.get(Firm, so.firm_id) if so.firm_id else None
     inv = new_invoice(db, user, "sales", firm=firm, project_id=so.project_id, sales_order_id=so.id,
                       currency=so.currency, tax_rate=so.tax_rate,
@@ -204,9 +207,19 @@ def invoice_from_po(db: Session, user: User, po: PurchaseOrder, no: str, tax_rat
         raise HTTPException(400, "Taslak veya iptal edilmiş siparişin faturası girilemez")
     firm = db.get(Firm, po.firm_id) if po.firm_id else None
     got = any(l.received_qty > 0 for l in po.lines)
-    lines = [{"code": l.code, "description": l.description, "unit": l.unit,
-              "qty": min(l.received_qty, l.qty) if got else l.qty, "unit_price": l.unit_price or 0.0}
-             for l in po.lines]
+    billed: dict[tuple[str, str], float] = defaultdict(float)   # earlier invoices: only the rest is billed now
+    for old in db.scalars(select(Invoice).where(Invoice.purchase_order_id == po.id, Invoice.status != "cancelled")):
+        for l in old.lines:
+            billed[(l.code, l.description)] += l.qty
+    lines = []
+    for l in po.lines:
+        qty = min(l.received_qty, l.qty) if got else l.qty
+        done = min(qty, billed[(l.code, l.description)])
+        billed[(l.code, l.description)] -= done
+        lines.append({"code": l.code, "description": l.description, "unit": l.unit, "qty": qty - done,
+                      "unit_price": l.unit_price or 0.0})
+    if not any(l["qty"] > 0 for l in lines):
+        raise HTTPException(400, "Bu siparişte faturalanacak miktar kalmadı")
     inv = new_invoice(db, user, "purchase", firm=firm, no=no, project_id=po.project_id, purchase_order_id=po.id,
                       currency=po.currency, tax_rate=tax_rate, note=f"{po.no} siparişinden")
     if not firm:

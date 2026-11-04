@@ -83,6 +83,7 @@ Read this file first. Do not re-scan the whole project.
 - Temin types (v1.5.7): setting `temin_types`, a list of `{name, kind, drawing, order}`; defaults in
   `core/status.py`. Rows keep the type's name in `procurement`; status logic goes through `state.base_kind` and
   `needs_drawing`, never a comparison with a literal name. `FIXED_TEMINS` cannot be removed.
+- Attendance (v1.5.8): table `attendance` (migration 0009), `core/attendance.py` (arithmetic), `api/attendance.py`. `/attendance/me`, `clock-in`, `clock-out` are any_user on the card linked to the login; the list and edits need module `attendance`. Datetimes are naive server wall clock; `work_date` is the day the shift began; overtime is weekly over `production.week_hours`.
 - Part names (v1.5.7): global `part_names` table (migration 0008), row field `part_name`, `tracking.set_names`.
   `POST /projects/{id}/parts/cells` saves many cells at once and reports bad ones per cell; `/parts/names` takes a
   pasted list. `POST /export/grid` writes the visible rows to `data_dir/exports`, the GET by id downloads it, because

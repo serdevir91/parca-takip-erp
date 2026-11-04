@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
 from . import api as api_pkg
+from .bodylimit import BodyLimit
 from .config import get_settings
 from .db import SessionLocal, engine
 from .services import sync
@@ -55,6 +56,10 @@ SPA_CSP = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 
            "form-action 'self'; frame-ancestors 'none'")
 API_CSP = "default-src 'none'; img-src 'self'; sandbox; frame-ancestors 'none'"
 _DOCS_PATHS = ("/api/docs", "/api/openapi.json")
+
+
+# Added first, so it sits inside the two below: their task groups would turn its refusal into a plain 400
+app.add_middleware(BodyLimit)
 
 
 @app.middleware("http")

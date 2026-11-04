@@ -120,7 +120,9 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
   const save = useMutation({
     mutationFn: () => {
       const body = { name, kind, unit, min_qty: numOrNull(minQty) ?? 0, unit_cost: numOrNull(cost), location, note };
-      return item ? api.put<StockItem>(`/stock/${item.id}`, body)
+      // Only what changed: fields someone else edited meanwhile keep their value
+      const changed = item && Object.fromEntries(Object.entries(body).filter(([k, v]) => v !== item[k as keyof typeof body]));
+      return item ? api.put<StockItem>(`/stock/${item.id}`, changed)
         : api.post<StockItem>("/stock", { ...body, code: code.trim(), qty: numOrNull(opening) ?? 0 });
     },
     onSuccess: () => { toast(item ? "Stok kartı güncellendi" : "Stok kartı açıldı"); refresh(); onClose(); },

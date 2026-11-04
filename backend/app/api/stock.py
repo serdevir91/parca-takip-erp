@@ -107,6 +107,8 @@ def delete_item(item_id: int, me: User = Depends(stock_edit), db: Session = Depe
     i = _item_or_404(db, item_id)
     if abs(i.qty) > erp.EPS:
         raise HTTPException(400, "Stokta miktar olan kart silinemez; önce sayım ile sıfırlayın")
+    if db.scalar(select(StockMove.id).where(StockMove.item_id == i.id, StockMove.project_id.is_not(None)).limit(1)):
+        raise HTTPException(400, "Projeye hareketi olan kart silinemez: proje maliyeti bu hareketlerden hesaplanır")
     audit.record(db, me, "stock", i.code, "code", i.code, None, action="delete")
     db.delete(i)
     db.commit()

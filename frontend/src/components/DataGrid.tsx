@@ -55,7 +55,9 @@ function globalMatch(row: Row<any>, id: string, value: string): boolean {
 
 export function toCsv<R>(rows: R[], cols: GridColumn<any>[], get: (r: R, id: string) => unknown): string {
   const esc = (v: unknown) => {
-    const t = isEmpty(v) ? "" : typeof v === "number" ? String(v).replace(".", ",") : String(v);
+    let t = isEmpty(v) ? "" : typeof v === "number" ? String(v).replace(".", ",") : String(v);
+    // Excel would run a cell starting with = + - @ as a formula; plain numbers and phone numbers stay as they are
+    if (typeof v !== "number" && /^[=+\-@\t\r]/.test(t) && !/^[+-]?\d[\d\s.,]*$/.test(t)) t = `'${t}`;
     return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   };
   const use = cols.filter((c) => !c.noExport && headerText(c) && colId(c) !== "actions");
