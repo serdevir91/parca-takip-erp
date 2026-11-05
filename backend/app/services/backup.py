@@ -23,6 +23,7 @@ import tarfile
 import tempfile
 import threading
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -99,6 +100,9 @@ def prune(keep_days: int, backup_dir: Path | None = None, now: datetime | None =
     for p in d.glob("erp_*.tar.partial"):  # leftovers of crashed runs
         if datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc) < limit:
             p.unlink(missing_ok=True)
+    for p in d.glob("erp_bk_*"):  # work folders of the same runs
+        if datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc) < limit:
+            shutil.rmtree(p, ignore_errors=True)
     return deleted
 
 
@@ -128,7 +132,8 @@ def _dump_db(database_url: str, workdir: Path) -> tuple[str, Path]:
         if not src or src == ":memory:":
             raise BackupError("Bellek içi SQLite veritabanı yedeklenemez")
         dst = workdir / "db.sqlite3"
-        with sqlite3.connect(src) as s, sqlite3.connect(dst) as t:
+        # closing() and not the connection's own "with", which only commits: Windows cannot remove an open file
+        with closing(sqlite3.connect(src)) as s, closing(sqlite3.connect(dst)) as t:
             s.backup(t)
         return "sqlite", dst
     if backend == "postgresql":
@@ -201,6 +206,9 @@ def create_backup(database_url: str | None = None, data_dir: Path | None = None,
         partial.rename(final)
         prune(keep_days, backup_dir, now=ts)
         return BackupInfo(name, final, final.stat().st_size, _stamp_of(final))
+    except OSError as e:  # a full disk, a locked file, a folder without write access
+        log.exception("backup failed")
+        raise BackupError(f"Yedek dosyası yazılamadı: {e}") from e
     finally:
         _lock.release()
 

@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.exc import DataError, IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from . import api as api_pkg
@@ -48,6 +49,19 @@ _docs = get_settings().api_docs
 app = FastAPI(title="LAB ERP", version=get_settings().app_version, lifespan=lifespan,
               docs_url="/api/docs" if _docs else None, openapi_url="/api/openapi.json" if _docs else None,
               redoc_url=None)
+
+
+@app.exception_handler(DataError)
+async def value_does_not_fit(_: Request, e: DataError) -> JSONResponse:
+    """PostgreSQL refuses what SQLite stores: a text longer than its column, a number beyond its type."""
+    log.warning("value refused by the database: %s", e.orig)
+    return JSONResponse({"detail": "Girilen değer çok uzun veya çok büyük"}, status_code=400)
+
+
+@app.exception_handler(IntegrityError)
+async def record_in_conflict(_: Request, e: IntegrityError) -> JSONResponse:
+    log.warning("integrity error: %s", e.orig)
+    return JSONResponse({"detail": "Bu kayıt zaten var veya başka kayıtlarla bağlantılı"}, status_code=409)
 
 # The SPA: own scripts only (pdf.js needs wasm), inline styles (charts), blob: for previews and the
 # pdf.js worker; connect-src adds only the configured update feed. API responses (JSON and stored files)

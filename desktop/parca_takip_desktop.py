@@ -1136,11 +1136,16 @@ def open_folder(path: Path) -> None:
 
 
 def smoke_purge(base: str, token: str) -> dict:
-    """Add a project and delete it for good: the delete takes a backup first, which only this run does on Windows."""
+    """Add a project, delete it for good, restore it from the delete's own backup: file locks only show on Windows."""
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "X-Requested-With": "LabERP"}
     project = http_json(base + "/api/projects", 10, data=b'{"name": "Smoke"}', headers=headers)
     try:
-        return http_json(f"{base}/api/projects/{project['id']}/purge", 120, data=b"{}", headers=headers)
+        name = http_json(f"{base}/api/projects/{project['id']}/purge", 120, data=b"{}", headers=headers)["backup"]
+        gone = not http_json(base + "/api/projects", 10, headers=headers)
+        http_json(f"{base}/api/admin/backups/{name}/restore", 120, headers=headers,
+                  data=json.dumps({"confirm": name}).encode())
+        back = [p["name"] for p in http_json(base + "/api/projects", 10, headers=headers)] == ["Smoke"]
+        return {"ok": gone and back, "backup": name, "gone": gone, "restored": back}
     except urllib.error.HTTPError as e:
         return {"ok": False, "status": e.code, "body": e.read().decode("utf-8", "replace")[:500]}
 

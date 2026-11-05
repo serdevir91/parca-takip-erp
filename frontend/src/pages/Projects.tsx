@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { ApiError, api } from "../api/client";
 import { saveRev } from "../api/conflict";
 import { useAuth } from "../api/auth";
 import { FolderKanban } from "lucide-react";
@@ -181,10 +181,14 @@ function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: 
     queryFn: () => api.get<Impact>(`/projects/${project.id}/delete-impact`),
     gcTime: 0,
   });
+  const [backupError, setBackupError] = useState("");
   const purge = useMutation({
-    mutationFn: () => api.post<{ backup: string }>(`/projects/${project.id}/purge`, {}),
-    onSuccess: (r) => { toast(r.backup ? `Proje silindi. Silmeden önceki yedek: ${r.backup}` : "Proje silindi."); onDone(); },
-    onError: (e) => toast(errText(e), true),
+    mutationFn: (skip_backup: boolean) => api.post<{ backup: string }>(`/projects/${project.id}/purge`, { skip_backup }),
+    onSuccess: (r) => { toast(r.backup ? `Proje silindi. Silmeden önceki yedek: ${r.backup}` : "Proje yedeksiz silindi."); onDone(); },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 424) setBackupError(errText(e));
+      else toast(errText(e), true);
+    },
   });
   const deleted = impact.data ? impactList(impact.data.deleted) : [];
   const unlinked = impact.data ? impactList(impact.data.unlinked) : [];
@@ -201,11 +205,13 @@ function PurgeDialog({ project, onClose, onDone }: { project: Project; onClose: 
             {unlinked.length > 0 && <><b>Silinmez, proje bağlantısı kalkar:</b><ul>{unlinked}</ul></>}
           </>
         )}
-        <p><b>Onaylıyor musunuz?</b></p>
+        {backupError
+          ? <div className="error">{backupError}<br />Yine de silerseniz veriler geri getirilemez.</div>
+          : <p><b>Onaylıyor musunuz?</b></p>}
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
           <button className="btn" onClick={onClose} disabled={purge.isPending}>Vazgeç</button>
-          <button className="btn danger" onClick={() => purge.mutate()} disabled={purge.isPending || !impact.data}>
-            {purge.isPending ? "Yedek alınıp siliniyor…" : "Evet, kalıcı olarak sil"}
+          <button className="btn danger" onClick={() => purge.mutate(!!backupError)} disabled={purge.isPending || !impact.data}>
+            {purge.isPending ? "Siliniyor…" : backupError ? "Yedeksiz kalıcı olarak sil" : "Evet, kalıcı olarak sil"}
           </button>
         </div>
       </div>

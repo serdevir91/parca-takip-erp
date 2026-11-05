@@ -12,6 +12,20 @@ permissions:
   contents: write
 
 jobs:
+  # File locks and paths behave differently on Windows; SQLite installs there have no other coverage.
+  windows-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q --maxfail=60
+
   windows:
     runs-on: windows-latest
     steps:

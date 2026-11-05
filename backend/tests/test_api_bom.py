@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import uuid
+
+import pytest
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -224,3 +226,58 @@ def test_purge_project(client, admin_headers, data_file):
         po = db.scalar(select(PurchaseOrder).where(PurchaseOrder.no == f"PO-{pid}"))
         assert po is not None and po.project_id is None
 
+
+
+def test_purge_failed_backup_explains_and_can_be_skipped(client, admin_headers, monkeypatch):
+    from app.models import AuditLog
+    from app.db import SessionLocal
+    from app.services import backup
+    h = admin_headers
+    pid = _project(client, h, "Yedeksiz silinecek")
+
+    def fail(*_a, **_k):
+        raise backup.BackupError("disk dolu")
+    monkeypatch.setattr(backup, "create_backup", fail)
+    r = client.post(f"/api/projects/{pid}/purge", headers=h, json={})
+    assert r.status_code == 424 and "disk dolu" in r.json()["detail"]
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200
+
+    r = client.post(f"/api/projects/{pid}/purge", headers=h, json={"skip_backup": True})
+    assert r.status_code == 200 and r.json()["backup"] == ""
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 404
+    with SessionLocal() as db:
+        row = db.scalar(select(AuditLog).where(AuditLog.entity == "project", AuditLog.entity_id == str(pid),
+                                               AuditLog.action == "delete"))
+        assert row is not None and row.new == "yedeksiz"
+
+
+def test_purge_while_a_backup_runs_keeps_the_project(client, admin_headers, monkeypatch):
+    from app.services import backup
+    h = admin_headers
+    pid = _project(client, h, "Yedek sürerken")
+
+    def busy(*_a, **_k):
+        raise backup.BackupBusy("Yedekleme zaten çalışıyor")
+    monkeypatch.setattr(backup, "create_backup", busy)
+    assert client.post(f"/api/projects/{pid}/purge", headers=h, json={}).status_code == 424
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200
+
+
+def test_backup_file_errors_are_backup_errors(tmp_path, monkeypatch):
+    from app.services import backup
+    blocked = tmp_path / "yedek"
+    blocked.write_text("klasör değil, dosya")
+    with pytest.raises(backup.BackupError, match="Yedek dosyası yazılamadı"):
+        backup.create_backup(database_url=f"sqlite:///{tmp_path}/x.db", data_dir=tmp_path, backup_dir=blocked)
+
+
+def test_database_refusals_become_clear_messages(client, admin_headers, monkeypatch):
+    from sqlalchemy.exc import DataError, IntegrityError
+    from app.api import projects
+    for exc, code in ((DataError("x", {}, Exception("too long")), 400),
+                      (IntegrityError("x", {}, Exception("fk")), 409)):
+        def boom(*_a, _e=exc, **_k):
+            raise _e
+        monkeypatch.setattr(projects, "project_out", boom)
+        r = client.post("/api/projects", headers=admin_headers, json={"name": f"Hata {code}"})
+        assert r.status_code == code and r.json()["detail"]

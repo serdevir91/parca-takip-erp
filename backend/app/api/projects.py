@@ -163,18 +163,27 @@ def delete_impact(pid: int, db: Session = Depends(get_db), _: User = Depends(adm
                          "time_entries": _count(db, TimeEntry, p.id), "drawings": _count(db, Drawing, p.id)}}
 
 
+class PurgeIn(BaseModel):
+    skip_backup: bool = False  # the admin saw why the backup failed and chose to go on without one
+
+
 @router.post("/{pid}/purge")
-def purge_project(pid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict:
-    """Delete a project for good. A backup is taken first, so the data can still be restored from it."""
+def purge_project(pid: int, body: PurgeIn | None = None, db: Session = Depends(get_db),
+                  user: User = Depends(admin)) -> dict:
+    """Delete a project for good. A backup comes first, so the data can still be restored from it.
+
+    A failed backup stops the delete with 424 and the reason. The screen then offers `skip_backup`, so a broken
+    backup never leaves a project impossible to delete, and nothing goes without a backup unless the admin says so.
+    """
     p = project_or_404(db, pid)
     backup_name = ""
-    try:
-        backup_name = backup_svc.create_backup().name
-    except backup_svc.BackupBusy:
-        pass  # a backup is running or was just taken
-    except backup_svc.BackupError as e:
-        raise HTTPException(500, f"Yedek alınamadı, proje silinmedi: {e}") from e
-    audit.record(db, user, "project", p.id, "deleted", p.name, None, action="delete")
+    skip = bool(body and body.skip_backup)
+    if not skip:
+        try:
+            backup_name = backup_svc.create_backup().name
+        except backup_svc.BackupError as e:
+            raise HTTPException(424, f"Yedek alınamadı, proje silinmedi: {e}") from e
+    audit.record(db, user, "project", p.id, "deleted", p.name, "yedeksiz" if skip else None, action="delete")
     p.current_version_id = None
     db.flush()
     db.delete(p)
