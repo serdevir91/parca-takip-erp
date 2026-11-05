@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { api, setToken } from "../api/client";
+import { api } from "../api/client";
 import { sys } from "../api/system";
 import { useAuth, type User } from "../api/auth";
 import { Field, Modal, roleLabel } from "../pages/admin/shared";
@@ -34,8 +34,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
     try {
       if (nameChanged) await api.put<User>("/auth/me", { full_name: name.trim(), email: email.trim() });
       if (pwWanted) {
-        const r = await api.post<{ access_token: string }>("/auth/password", { old_password: oldPw, new_password: newPw });
-        setToken(r.access_token); // the old token is revoked; other devices must log in again
+        await api.post("/auth/password", { old_password: oldPw, new_password: newPw });
       }
       reloadUser();
       toast(pwWanted ? "Profil ve şifre kaydedildi. Diğer cihazlarda yeniden giriş gerekir." : "Profil kaydedildi");

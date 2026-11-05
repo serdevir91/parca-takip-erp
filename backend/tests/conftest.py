@@ -1,5 +1,6 @@
 import os
 import tempfile
+from http.cookiejar import DefaultCookiePolicy
 from pathlib import Path
 
 # API tests run against a throwaway SQLite file; must be set before app.db is imported
@@ -42,6 +43,8 @@ def client():
 
     from app.main import app
     with TestClient(app) as c:
+        # Tests pass Bearer headers; a cookie left by a login would answer for the anonymous requests too.
+        c.cookies.jar.set_policy(DefaultCookiePolicy(allowed_domains=[]))
         yield c
 
 

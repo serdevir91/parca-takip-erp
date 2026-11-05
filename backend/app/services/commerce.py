@@ -1,11 +1,15 @@
 """Ticari modüller: sales orders and quotes, invoices, payments and the per-firm current account (cari).
 
-Money rule: a document total is sum(qty * unit_price), minus the discount, plus KDV (tax_rate %).
+Money rule: each line amount is rounded to kuruş, the subtotal is the sum of those amounts, then the discount and
+KDV (tax_rate %) are rounded in turn, so what a document prints always adds up. `core/numbers.py` holds the rule.
 A firm's balance is positive when the firm owes us:
-  + issued sales invoice, + payment we made (out); - issued purchase invoice, - payment we received (in).
+  + issued sales invoice, + payment we made (out), + purchase credit note;
+  - issued purchase invoice, - payment we received (in), - sales credit note.
 A document keeps its own currency; `fx` converts for totals. A payment on an invoice is always in the invoice's
-currency, so an invoice is settled exactly in that currency. A firm's base total values each open balance at
-today's rate, so a settled account is zero whatever the rates did in between.
+currency, so an invoice is settled exactly in that currency. The base value of a balance follows the setting
+commerce.balance_basis: "today" values the open balance at today's rate, so a settled account is zero whatever the
+rates did in between; "doc" adds each document at its own rate, and the difference from today's value is the
+exchange difference (kur farkı).
 Like `erp`, these functions do not commit; the API layer commits.
 """
 from __future__ import annotations
@@ -18,22 +22,27 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..models import (Firm, Invoice, InvoiceLine, Payment, PurchaseOrder, SalesDelivery, SalesOrder, SalesOrderLine,
                       StockItem, StockMove, User)
-from . import audit, erp, fx, xlsafe
+from . import audit, erp, fx, system, xlsafe
 from .erp import next_no
 
 SO_STATUS = {"draft": "Taslak", "quoted": "Teklif verildi", "confirmed": "Onaylandı", "partial": "Kısmi teslim",
-             "delivered": "Teslim edildi", "cancelled": "İptal", "lost": "Kaybedildi"}
+             "delivered": "Teslim edildi", "closed": "Eksik kapatıldı", "cancelled": "İptal", "lost": "Kaybedildi"}
 SO_OPEN = ("draft", "quoted", "confirmed", "partial")
 SO_SHIPPING = ("confirmed", "partial")
 # allowed moves; delivered/cancelled/lost are final except that a lost quote can be quoted again.
 # partial and the way back to confirmed come from deliveries and returns; goods out must come back before cancelling
 SO_NEXT = {"draft": {"quoted", "confirmed", "cancelled"}, "quoted": {"confirmed", "lost", "cancelled", "draft"},
            "confirmed": {"delivered", "cancelled"}, "partial": {"delivered"}, "lost": {"quoted"}, "delivered": set(),
-           "cancelled": set()}
+           "cancelled": set(), "closed": set()}
 INV_STATUS = {"draft": "Taslak", "issued": "Kesildi", "cancelled": "İptal"}
-INV_KINDS = {"sales": "Satış faturası", "purchase": "Alış faturası"}
+INV_KINDS = {"sales": "Satış faturası", "purchase": "Alış faturası", "sales_credit": "Alacak dekontu",
+             "purchase_credit": "Alış iade faturası"}
+CREDIT_OF = {"sales_credit": "sales", "purchase_credit": "purchase"}    # a credit note and the kind it takes back
+INV_SIGN = {"sales": 1, "purchase": -1, "sales_credit": -1, "purchase_credit": 1}   # + means the firm owes us more
+BALANCE_BASIS = {"today": "Bugünkü kur", "doc": "Belge tarihindeki kur"}
 PAY_STATE = {"unpaid": "Ödenmedi", "partial": "Kısmi ödendi", "paid": "Ödendi", "overdue": "Vadesi geçti"}
 PAY_DIRECTIONS = {"in": "Tahsilat", "out": "Ödeme"}
 PAY_METHODS = ["Havale/EFT", "Nakit", "Kredi kartı", "Çek", "Senet", "Mahsup"]
@@ -46,16 +55,24 @@ def _iso(d: date | None) -> str | None:
 
 
 def totals(lines: list[Any], tax_rate: float, discount_pct: float = 0.0) -> dict[str, float]:
-    sub = sum(l.qty * (l.unit_price or 0.0) for l in lines)
-    disc = sub * (discount_pct or 0.0) / 100
-    tax = (sub - disc) * (tax_rate or 0.0) / 100
-    return {"subtotal": round(sub, 2), "discount": round(disc, 2), "tax": round(tax, 2),
-            "total": round(sub - disc + tax, 2)}
+    sub = num.money(sum(num.money(l.qty * (l.unit_price or 0.0)) for l in lines))
+    disc = num.money(sub * (discount_pct or 0.0) / 100)
+    tax = num.money((sub - disc) * (tax_rate or 0.0) / 100)
+    return {"subtotal": sub, "discount": disc, "tax": tax, "total": num.money(sub - disc + tax)}
+
+
+def inv_totals(inv: Invoice) -> dict[str, float]:
+    """An invoice issued before the single rounding rule keeps the amounts it was printed with."""
+    if inv.legacy_total:
+        sub = sum(l.qty * (l.unit_price or 0.0) for l in inv.lines)
+        tax = sub * (inv.tax_rate or 0.0) / 100
+        return {"subtotal": round(sub, 2), "discount": 0.0, "tax": round(tax, 2), "total": round(sub + tax, 2)}
+    return totals(inv.lines, inv.tax_rate, inv.discount_pct)
 
 
 def _check_lines(lines: list[dict[str, Any]]) -> None:
     for i, l in enumerate(lines, 1):
-        if l["qty"] <= 0:
+        if num.qty(l["qty"]) <= 0:
             raise HTTPException(400, f"Satır {i}: miktar sıfırdan büyük olmalı")
         if not (l.get("code") or "").strip() and not (l.get("description") or "").strip():
             raise HTTPException(400, f"Satır {i}: kod veya açıklama gerekli")
@@ -63,17 +80,17 @@ def _check_lines(lines: list[dict[str, Any]]) -> None:
 
 def _line(model: type[Any], i: int, l: dict[str, Any]) -> Any:
     return model(seq=i, code=(l.get("code") or "").strip(), description=(l.get("description") or "").strip(),
-                 unit=l.get("unit") or "Adet", qty=float(l["qty"]), unit_price=l.get("unit_price"))
+                 unit=l.get("unit") or "Adet", qty=num.qty(float(l["qty"])), unit_price=l.get("unit_price"))
 
 
 def line_out(l: Any) -> dict[str, Any]:
     out = {"id": l.id, "seq": l.seq, "code": l.code, "description": l.description, "unit": l.unit, "qty": l.qty,
            "unit_price": l.unit_price,
-           "amount": round(l.qty * l.unit_price, 2) if l.unit_price is not None else None}
+           "amount": num.money(l.qty * l.unit_price) if l.unit_price is not None else None}
     if isinstance(l, InvoiceLine):
         out["source_line_id"] = l.source_line_id
     elif isinstance(l, SalesOrderLine):
-        out.update(delivered_qty=l.delivered_qty, remaining=max(0.0, round(l.qty - l.delivered_qty, 6)))
+        out.update(delivered_qty=l.delivered_qty, remaining=max(0.0, num.qty(l.qty - l.delivered_qty)))
     return out
 
 
@@ -98,11 +115,11 @@ def so_out(so: SalesOrder, with_lines: bool = True, project_name: str | None = N
         "order_date": _iso(so.order_date), "valid_until": _iso(so.valid_until), "due_date": _iso(so.due_date),
         "expired": bool(so.valid_until and so.valid_until < date.today() and so.status in ("draft", "quoted")),
         "late": bool(so.due_date and so.due_date < date.today() and so.status in SO_SHIPPING),
-        "currency": so.currency, "rate": so.rate, "base_total": round(t["total"] * rate, 2) if rate is not None else None,
-        "delivered_pct": round(100 * sum(min(l.delivered_qty, l.qty) for l in so.lines) / qty, 1) if qty else 0.0,
+        "currency": so.currency, "rate": so.rate, "base_total": num.money(t["total"] * rate) if rate is not None else None,
+        "delivered_pct": num.pct(100 * sum(min(l.delivered_qty, l.qty) for l in so.lines) / qty) if qty else 0.0,
         "tax_rate": so.tax_rate, "discount_pct": so.discount_pct, "note": so.note,
         "created_at": so.created_at.isoformat() if so.created_at else None, "created_by": so.created_by,
-        "line_count": len(so.lines), **t, "invoiced": round(invoiced, 2),
+        "line_count": len(so.lines), **t, "invoiced": num.money(invoiced), "rev": so.edit_rev,
         "missing_price": sum(1 for l in so.lines if l.unit_price is None),
         "next_statuses": sorted(SO_NEXT.get(so.status, set())),
     }
@@ -188,24 +205,26 @@ def deliver(db: Session, user: User, so: SalesOrder, items: list[tuple[SalesOrde
     for line, qty in items:
         if qty > 0 and so.status not in SO_SHIPPING:
             raise HTTPException(400, "Sevk yalnızca onaylanmış siparişte yapılır")
-        if qty < 0 and so.status not in ("partial", "delivered"):
+        if qty < 0 and so.status not in ("partial", "delivered", "closed"):
             raise HTTPException(400, "Bu siparişte iade alınacak teslimat yok")
         label = line.code or line.description
         if line.delivered_qty + qty > line.qty + QTY_EPS:
-            raise HTTPException(400, f"{label}: en fazla {max(line.qty - line.delivered_qty, 0.0):g} {line.unit} daha "
-                                     f"teslim edilebilir (sipariş {line.qty:g}, teslim {line.delivered_qty:g})")
+            raise HTTPException(400, f"{label}: en fazla {num.text(max(line.qty - line.delivered_qty, 0.0))} {line.unit} daha "
+                                     f"teslim edilebilir (sipariş {num.text(line.qty)}, teslim {num.text(line.delivered_qty)})")
         if line.delivered_qty + qty < -QTY_EPS:
-            raise HTTPException(400, f"{label}: teslim edilen {line.delivered_qty:g}, en fazla bu kadar iade alınır")
+            raise HTTPException(400, f"{label}: teslim edilen {num.text(line.delivered_qty)}, en fazla bu kadar iade alınır")
         item = db.scalar(select(StockItem).where(StockItem.code == line.code)) if line.code else None
         if item is not None:
             if qty > 0:
                 _ship(db, user, so, line, item, qty, note)
             else:
                 _take_back(db, user, so, item, -qty, note)
-        line.delivered_qty = round(line.delivered_qty + qty, 6)
+        line.delivered_qty = num.qty(line.delivered_qty + qty)
         db.add(SalesDelivery(so_id=so.id, line_id=line.id, qty=qty, username=user.username, note=note[:300]))
         audit.record(db, user, "sales_order", so.no, f"{'sevk' if qty > 0 else 'iade'} {label}", None, abs(qty),
                      so.project_id)
+    if so.status == "closed":   # a return does not reopen what was closed short
+        return
     if all(l.delivered_qty + QTY_EPS >= l.qty for l in so.lines):
         status = "delivered"
     else:
@@ -215,11 +234,27 @@ def deliver(db: Session, user: User, so: SalesOrder, items: list[tuple[SalesOrde
         so.status = status
 
 
+def close_so(db: Session, user: User, so: SalesOrder, note: str = "") -> None:
+    """Siparişi eksik kapat: what was delivered stays, the rest will not ship."""
+    erp.lock_order(db, so)
+    if so.status != "partial":
+        raise HTTPException(400, "Yalnızca kısmi teslim edilmiş sipariş eksik kapatılır; hiç sevk edilmediyse iptal edin")
+    audit.record(db, user, "sales_order", so.no, "status", so.status, "closed", so.project_id)
+    so.status = "closed"
+    if note.strip():
+        so.note = f"{so.note}\nEksik kapatıldı: {note.strip()}".strip()
+
+
 def invoiced_by_so(db: Session) -> dict[int, float]:
+    """Billed per order net of issued credit notes. A draft credit note takes nothing back yet."""
     out: dict[int, float] = defaultdict(float)
     q = select(Invoice).where(Invoice.sales_order_id.is_not(None), Invoice.status != "cancelled")
     for inv in db.scalars(q):
-        out[inv.sales_order_id or 0] += totals(inv.lines, inv.tax_rate)["total"]
+        if inv.kind in CREDIT_OF:
+            if inv.status == "issued":
+                out[inv.sales_order_id or 0] -= inv_totals(inv)["total"]
+        else:
+            out[inv.sales_order_id or 0] += inv_totals(inv)["total"]
     return out
 
 
@@ -231,12 +266,24 @@ def paid_by_invoice(db: Session, ids: list[int] | None = None) -> dict[int, floa
     return {i: float(v or 0) for i, v in db.execute(q.group_by(Payment.invoice_id)).all()}
 
 
+def credited_by_invoice(db: Session, ids: list[int] | None = None) -> dict[int, float]:
+    """Amount of issued credit notes against each invoice."""
+    q = select(Invoice).where(Invoice.credit_of_id.is_not(None), Invoice.status == "issued")
+    if ids is not None:
+        q = q.where(Invoice.credit_of_id.in_(ids))
+    out: dict[int, float] = defaultdict(float)
+    for c in db.scalars(q):
+        out[c.credit_of_id or 0] += inv_totals(c)["total"]
+    return dict(out)
+
+
 def inv_out(inv: Invoice, paid: float = 0.0, with_lines: bool = True, project_name: str | None = None,
-            book: fx.Book | None = None) -> dict[str, Any]:
-    t = totals(inv.lines, inv.tax_rate)
+            book: fx.Book | None = None, credited: float = 0.0) -> dict[str, Any]:
+    t = inv_totals(inv)
     rate = book.doc(inv.currency, inv.rate, inv.invoice_date, inv.created_at) if book else inv.rate
-    remaining = round(max(0.0, t["total"] - paid), 2) if inv.status == "issued" else 0.0
-    if inv.status != "issued":
+    is_credit = inv.kind in CREDIT_OF
+    remaining = num.money(max(0.0, t["total"] - paid - credited)) if inv.status == "issued" and not is_credit else 0.0
+    if inv.status != "issued" or is_credit:
         pay = None
     elif remaining <= EPS:
         pay = "paid"
@@ -248,12 +295,14 @@ def inv_out(inv: Invoice, paid: float = 0.0, with_lines: bool = True, project_na
         "id": inv.id, "kind": inv.kind, "kind_label": INV_KINDS.get(inv.kind, inv.kind), "no": inv.no,
         "firm_id": inv.firm_id, "firm_name": inv.firm_name, "project_id": inv.project_id, "project_name": project_name,
         "sales_order_id": inv.sales_order_id, "purchase_order_id": inv.purchase_order_id,
+        "credit_of_id": inv.credit_of_id, "is_credit": is_credit, "rev": inv.edit_rev,
         "status": inv.status, "status_label": INV_STATUS.get(inv.status, inv.status),
         "pay_state": pay, "pay_label": PAY_STATE.get(pay or "", ""),
         "invoice_date": _iso(inv.invoice_date), "due_date": _iso(inv.due_date), "currency": inv.currency, "rate": inv.rate,
-        "base_total": round(t["total"] * rate, 2) if rate is not None else None,
-        "base_remaining": round(remaining * rate, 2) if rate is not None else None, "tax_rate": inv.tax_rate, "note": inv.note, "created_by": inv.created_by, "line_count": len(inv.lines),
-        **{k: v for k, v in t.items() if k != "discount"}, "paid": round(paid, 2), "remaining": remaining,
+        "base_total": num.money(t["total"] * rate) if rate is not None else None,
+        "base_remaining": num.money(remaining * rate) if rate is not None else None, "tax_rate": inv.tax_rate,
+        "discount_pct": inv.discount_pct, "note": inv.note, "created_by": inv.created_by, "line_count": len(inv.lines),
+        **t, "paid": num.money(paid), "credited": num.money(credited), "remaining": remaining,
     }
     if with_lines:
         out["lines"] = [line_out(l) for l in inv.lines]
@@ -274,14 +323,20 @@ def _got(order: Any, line: Any) -> float:
     return line.delivered_qty if isinstance(order, SalesOrder) else line.received_qty
 
 
-def billed_by_line(db: Session, order: SalesOrder | PurchaseOrder) -> dict[int, float]:
+def billed_by_line(db: Session, order: SalesOrder | PurchaseOrder, draft_credits: bool = False) -> dict[int, float]:
     """Quantity billed per order line by the order's invoices; cancelled ones free theirs. Invoices from before
-    source_line_id count by (code, description), first lines first."""
+    source_line_id count by (code, description), first lines first. Issued credit notes take theirs back; with
+    draft_credits so do the ones still in draft, which is what the next return has to know."""
     link = Invoice.sales_order_id if isinstance(order, SalesOrder) else Invoice.purchase_order_id
     ids = {l.id for l in order.lines}
     billed: dict[int, float] = defaultdict(float)
     old: dict[tuple[str, str], float] = defaultdict(float)
+    credits: list[InvoiceLine] = []
     for inv in db.scalars(select(Invoice).where(link == order.id, Invoice.status != "cancelled")):
+        if inv.kind in CREDIT_OF:
+            if inv.status == "issued" or draft_credits:
+                credits.extend(inv.lines)
+            continue
         for l in inv.lines:
             if l.source_line_id in ids:
                 billed[l.source_line_id] += l.qty
@@ -291,6 +346,9 @@ def billed_by_line(db: Session, order: SalesOrder | PurchaseOrder) -> dict[int, 
         take = min(old[(l.code, l.description)], max(0.0, l.qty - billed[l.id]))
         billed[l.id] += take
         old[(l.code, l.description)] -= take
+    for l in credits:
+        if l.source_line_id in ids:
+            billed[l.source_line_id] -= l.qty
     return billed
 
 
@@ -305,8 +363,8 @@ def bill_plan(db: Session, order: SalesOrder | PurchaseOrder) -> dict[int, dict[
     for l in order.lines:
         done = min(_got(order, l), l.qty)
         room = max(0.0, (done if closed else l.qty) - billed[l.id])
-        plan[l.id] = {"billed": round(billed[l.id], 6), "room": round(room, 6),
-                      "suggested": round(max(0.0, done - billed[l.id]) if moved else room, 6)}
+        plan[l.id] = {"billed": num.qty(billed[l.id]), "room": num.qty(room),
+                      "suggested": num.qty(max(0.0, done - billed[l.id]) if moved else room)}
     return plan
 
 
@@ -335,8 +393,8 @@ def _chosen_lines(db: Session, order: SalesOrder | PurchaseOrder,
         for line_id, qty in want.items():
             if qty > plan[line_id]["room"] + QTY_EPS:
                 l = by_id[line_id]
-                raise HTTPException(400, f"{l.code or l.description}: en fazla {plan[line_id]['room']:g} {l.unit} "
-                                         f"faturalanabilir (sipariş {l.qty:g}, faturalanan {plan[line_id]['billed']:g})")
+                raise HTTPException(400, f"{l.code or l.description}: en fazla {num.text(plan[line_id]['room'])} {l.unit} "
+                                         f"faturalanabilir (sipariş {num.text(l.qty)}, faturalanan {num.text(plan[line_id]['billed'])})")
         chosen = [(by_id[i], q) for i, q in want.items()]
     chosen = [(l, q) for l, q in chosen if q > QTY_EPS]
     if not chosen:
@@ -369,19 +427,22 @@ def set_order_inv_lines(db: Session, inv: Invoice, lines: list[dict[str, Any]]) 
         rows.append({**l, "source_line_id": sid})
     set_inv_lines(inv, rows)
     db.flush()
+    if inv.kind in CREDIT_OF:
+        _check_credit_room(db, order, inv)
+        return
     plan = bill_plan(db, order)
     touched = {r["source_line_id"] for r in rows}
     for l in order.lines:
         cap = min(_got(order, l), l.qty) if order.status == "closed" else l.qty
         if l.id in touched and plan[l.id]["billed"] > cap + QTY_EPS:
-            raise HTTPException(400, f"{l.code or l.description}: toplam faturalanan {plan[l.id]['billed']:g}, "
-                                     f"en fazla {cap:g} olabilir")
+            raise HTTPException(400, f"{l.code or l.description}: toplam faturalanan {num.text(plan[l.id]['billed'])}, "
+                                     f"en fazla {num.text(cap)} olabilir")
 
 
 def new_invoice(db: Session, user: User, kind: str, *, firm: Firm | None, no: str = "", **kw: Any) -> Invoice:
     if kind not in INV_KINDS:
         raise HTTPException(400, "Fatura türü satış veya alış olmalı")
-    if kind == "sales":
+    if kind != "purchase":
         no = next_no(db, Invoice)
     elif not no.strip():
         raise HTTPException(400, "Alış faturasında tedarikçinin fatura numarasını girin")
@@ -403,22 +464,21 @@ def _invoice_rate(db: Session, order: SalesOrder | PurchaseOrder, rate: float | 
 def invoice_from_so(db: Session, user: User, so: SalesOrder, picks: list[tuple[int, float]] | None = None,
                     rate: float | None = None) -> Invoice:
     """Sales invoice for the chosen lines and quantities (default: delivered and not billed yet).
-    The order discount goes into the unit prices."""
+    It keeps the list prices and the order discount, so a whole order bills to exactly the order total."""
     erp.lock_order(db, so)
-    if so.status not in ("confirmed", "partial", "delivered"):
+    if so.status not in ("confirmed", "partial", "delivered", "closed"):
         raise HTTPException(400, "Yalnızca onaylanmış veya teslim edilmiş siparişin faturası kesilir")
     chosen = _chosen_lines(db, so, picks)
     if any(l.unit_price is None for l, _ in chosen):
         raise HTTPException(400, "Fiyatı girilmemiş satır var")
     firm = db.get(Firm, so.firm_id) if so.firm_id else None
     inv = new_invoice(db, user, "sales", firm=firm, project_id=so.project_id, sales_order_id=so.id,
-                      currency=so.currency, tax_rate=so.tax_rate, rate=_invoice_rate(db, so, rate),
-                      note=f"{so.no} siparişinden" + (f", %{so.discount_pct:g} iskonto" if so.discount_pct else ""))
+                      currency=so.currency, tax_rate=so.tax_rate, discount_pct=so.discount_pct or 0.0,
+                      rate=_invoice_rate(db, so, rate), note=f"{so.no} siparişinden")
     if not firm:
         inv.firm_name = so.firm_name
-    k = 1 - (so.discount_pct or 0) / 100
     set_inv_lines(inv, [{"code": l.code, "description": l.description, "unit": l.unit, "qty": q,
-                         "unit_price": round((l.unit_price or 0) * k, 6), "source_line_id": l.id} for l, q in chosen])
+                         "unit_price": l.unit_price or 0.0, "source_line_id": l.id} for l, q in chosen])
     db.flush()
     audit.record(db, user, "invoice", inv.no, "no", None, inv.no, inv.project_id, action="create")
     return inv
@@ -444,13 +504,87 @@ def invoice_from_po(db: Session, user: User, po: PurchaseOrder, no: str, tax_rat
     return inv
 
 
+# ---------- credit notes for returned goods ----------
+def _credit_room(db: Session, order: SalesOrder | PurchaseOrder, kind: str) -> list[tuple[Invoice, dict[int, float], dict[int, InvoiceLine]]]:
+    """Issued invoices of the order, newest first, with what each can still take back per order line."""
+    link = Invoice.sales_order_id if isinstance(order, SalesOrder) else Invoice.purchase_order_id
+    by_text: dict[tuple[str, str], int] = {}
+    for l in order.lines:
+        by_text.setdefault((l.code, l.description), l.id)
+    invs = list(db.scalars(select(Invoice).where(link == order.id, Invoice.kind == kind, Invoice.status == "issued")
+                           .order_by(Invoice.invoice_date.desc(), Invoice.id.desc())))
+    taken: dict[tuple[int, int], float] = defaultdict(float)
+    for c in db.scalars(select(Invoice).where(link == order.id, Invoice.credit_of_id.is_not(None),
+                                              Invoice.status != "cancelled")):
+        for l in c.lines:
+            taken[(c.credit_of_id or 0, l.source_line_id or 0)] += l.qty
+    out = []
+    for inv in invs:
+        room: dict[int, float] = defaultdict(float)
+        rows: dict[int, InvoiceLine] = {}
+        for l in inv.lines:
+            lid = l.source_line_id or by_text.get((l.code, l.description))
+            if lid is not None:
+                room[lid] += l.qty
+                rows.setdefault(lid, l)
+        out.append((inv, {k: v - taken[(inv.id, k)] for k, v in room.items()}, rows))
+    return out
+
+
+def _check_credit_room(db: Session, order: SalesOrder | PurchaseOrder, inv: Invoice) -> None:
+    """An edited credit note answers to the invoice it takes back, not to the order's billing limit: it lowers what
+    is billed, and on a short-closed order that total may rightly stay above the delivered quantity until it is issued."""
+    room = next((r for src, r, _ in _credit_room(db, order, CREDIT_OF[inv.kind]) if src.id == inv.credit_of_id), {})
+    for l in order.lines:
+        if any(x.source_line_id == l.id for x in inv.lines) and room.get(l.id, -1.0) < -QTY_EPS:
+            raise HTTPException(400, f"{l.code or l.description}: dekont kaynak faturadaki miktarı aşıyor")
+
+
+def credits_for_return(db: Session, user: User, order: SalesOrder | PurchaseOrder,
+                       items: list[tuple[Any, float]]) -> list[Invoice]:
+    """Draft credit notes for goods that came back after being billed, one per source invoice, at that invoice's
+    prices, discount, KDV and rate. Only billed goods are credited: what was billed and is still with the customer
+    stays billed, so the credited quantity is the bill's excess over what stayed out. Call after the return is
+    booked, holding the order's row lock. The user checks a note and issues it; nothing moves the balance before."""
+    sales = isinstance(order, SalesOrder)
+    billed = billed_by_line(db, order, draft_credits=True)
+    need = {l.id: min(q, num.qty(billed[l.id] - _got(order, l))) for l, q in items}
+    need = {k: v for k, v in need.items() if v > QTY_EPS}
+    made: list[Invoice] = []
+    for src, room, rows in _credit_room(db, order, "sales" if sales else "purchase"):
+        lines = []
+        for lid in list(need):
+            q = min(need[lid], room.get(lid, 0.0))
+            if q <= QTY_EPS:
+                continue
+            need[lid] = num.qty(need[lid] - q)
+            l = rows[lid]
+            lines.append({"code": l.code, "description": l.description, "unit": l.unit, "qty": q,
+                          "unit_price": l.unit_price, "source_line_id": lid})
+        if not lines:
+            continue
+        firm = db.get(Firm, src.firm_id) if src.firm_id else None
+        inv = new_invoice(db, user, "sales_credit" if sales else "purchase_credit", firm=firm,
+                          project_id=src.project_id, currency=src.currency, tax_rate=src.tax_rate,
+                          discount_pct=src.discount_pct or 0.0, rate=src.rate, credit_of_id=src.id,
+                          sales_order_id=src.sales_order_id, purchase_order_id=src.purchase_order_id,
+                          note=f"{order.no} iadesi, {src.no} faturasına karşılık")
+        if not firm:
+            inv.firm_name = src.firm_name
+        set_inv_lines(inv, lines)
+        db.flush()
+        audit.record(db, user, "invoice", inv.no, "no", None, inv.no, inv.project_id, action="create")
+        made.append(inv)
+    return made
+
+
 # ---------- payments ----------
 def pay_out(p: Payment, invoice_no: str | None = None, book: fx.Book | None = None) -> dict[str, Any]:
     rate = book.doc(p.currency, p.rate, p.pay_date, p.created_at) if book else p.rate
     return {"id": p.id, "direction": p.direction, "direction_label": PAY_DIRECTIONS.get(p.direction, p.direction),
             "firm_id": p.firm_id, "firm_name": p.firm_name, "invoice_id": p.invoice_id, "invoice_no": invoice_no,
-            "pay_date": _iso(p.pay_date), "amount": round(p.amount, 2), "currency": p.currency, "rate": p.rate,
-            "base_amount": round(p.amount * rate, 2) if rate is not None else None, "method": p.method,
+            "pay_date": _iso(p.pay_date), "amount": num.money(p.amount), "currency": p.currency, "rate": p.rate,
+            "base_amount": num.money(p.amount * rate) if rate is not None else None, "method": p.method,
             "note": p.note, "created_by": p.created_by}
 
 
@@ -464,12 +598,12 @@ def _entries(db: Session, firm_id: int | None = None) -> list[dict[str, Any]]:
     if firm_id is not None:
         q = q.where(Invoice.firm_id == firm_id)
     for inv in db.scalars(q):
-        total = totals(inv.lines, inv.tax_rate)["total"]
+        total = inv_totals(inv)["total"]
         rows.append({"firm_id": inv.firm_id, "firm_name": inv.firm_name, "date": inv.invoice_date,
                      "due_date": inv.due_date, "currency": inv.currency, "kind": inv.kind, "doc": "invoice",
                      "rate": book.doc(inv.currency, inv.rate, inv.invoice_date, inv.created_at),
                      "id": inv.id, "no": inv.no, "label": INV_KINDS[inv.kind],
-                     "amount": total if inv.kind == "sales" else -total})
+                     "amount": total * INV_SIGN[inv.kind]})
     q2 = select(Payment)
     if firm_id is not None:
         q2 = q2.where(Payment.firm_id == firm_id)
@@ -482,60 +616,104 @@ def _entries(db: Session, firm_id: int | None = None) -> list[dict[str, Any]]:
     return rows
 
 
-def balances(db: Session) -> list[dict[str, Any]]:
+def basis_of(db: Session, basis: str | None = None) -> str:
+    """The basis asked for, else the one in Sistem Ayarları."""
+    if basis is not None and basis not in BALANCE_BASIS:
+        raise HTTPException(400, "Kur esası today veya doc olmalı")
+    return basis or system.system(db)["commerce"]["balance_basis"]
+
+
+def balances(db: Session, basis: str | None = None) -> list[dict[str, Any]]:
     """One row per firm and currency: receivable (they owe us), payable (we owe them), overdue amounts, each with
-    its base_ value at today's rate. Those are None when the currency has no rate; rows of one firm add up to its
-    base total."""
+    its base_ value on the chosen basis (see the module note). A base_ value is None when a rate is missing; rows of
+    one firm add up to its base total. fx_diff is the doc-basis value minus today's value of the open balance."""
+    basis = basis_of(db, basis)
     book = fx.Book(db)
     acc: dict[tuple[Any, str, str], dict[str, float]] = defaultdict(
-        lambda: {"sales": 0.0, "purchase": 0.0, "in": 0.0, "out": 0.0})
+        lambda: {"sales": 0.0, "purchase": 0.0, "sales_credit": 0.0, "purchase_credit": 0.0, "in": 0.0, "out": 0.0})
+    # at document rates: the signed base sum, None once a document has no rate
+    doc_base: dict[tuple[Any, str, str], float | None] = defaultdict(float)
     for e in _entries(db):
-        acc[(e["firm_id"], e["firm_name"], e["currency"])][e["kind"]] += abs(e["amount"])
-    # overdue = unpaid remainder of issued invoices past their due date
+        key = (e["firm_id"], e["firm_name"], e["currency"])
+        acc[key][e["kind"]] += abs(e["amount"])
+        was = doc_base[key]
+        doc_base[key] = None if was is None or e["rate"] is None else was + e["amount"] * e["rate"]
+    # overdue = what is left of issued invoices past their due date after payments and credit notes
     overdue: dict[tuple[Any, str, str], dict[str, float]] = defaultdict(lambda: {"sales": 0.0, "purchase": 0.0})
-    invs = list(db.scalars(select(Invoice).where(Invoice.status == "issued", Invoice.due_date < date.today())))
+    overdue_doc: dict[tuple[Any, str, str], dict[str, float | None]] = defaultdict(lambda: {"sales": 0.0, "purchase": 0.0})
+    invs = list(db.scalars(select(Invoice).where(Invoice.status == "issued", Invoice.due_date < date.today(),
+                                                 Invoice.kind.in_(("sales", "purchase")))))
     paid = paid_by_invoice(db, [i.id for i in invs])
+    credited = credited_by_invoice(db, [i.id for i in invs])
     for inv in invs:
-        rest = totals(inv.lines, inv.tax_rate)["total"] - paid.get(inv.id, 0.0)
+        rest = inv_totals(inv)["total"] - paid.get(inv.id, 0.0) - credited.get(inv.id, 0.0)
         if rest > EPS:
-            overdue[(inv.firm_id, inv.firm_name, inv.currency)][inv.kind] += rest
+            key = (inv.firm_id, inv.firm_name, inv.currency)
+            overdue[key][inv.kind] += rest
+            rate = book.doc(inv.currency, inv.rate, inv.invoice_date, inv.created_at)
+            was = overdue_doc[key][inv.kind]
+            overdue_doc[key][inv.kind] = None if was is None or rate is None else was + rest * rate
     kinds = dict(db.execute(select(Firm.id, Firm.kind)).all())
     out = []
-    for (fid, name, cur), v in acc.items():
-        net = v["sales"] - v["in"] - v["purchase"] + v["out"]
-        od = overdue.get((fid, name, cur), {"sales": 0.0, "purchase": 0.0})
+    for key, v in acc.items():
+        fid, name, cur = key
+        sales, purchases = v["sales"] - v["sales_credit"], v["purchase"] - v["purchase_credit"]
+        net = sales - v["in"] - purchases + v["out"]
+        od = overdue.get(key, {"sales": 0.0, "purchase": 0.0})
         rate = book.on(cur)
-        base = (lambda x: round(x * rate, 2)) if rate is not None else (lambda x: None)  # noqa: B023
+        today = num.money(net * rate) if rate is not None else None
+        doc = doc_base[key]
+        doc = num.money(doc) if doc is not None else None
+        if basis == "doc":
+            # a settled account has nothing to collect or pay, whatever exchange difference it left behind
+            open_base = doc if abs(net) > EPS else (0.0 if doc is not None else None)
+            base_od = {k: num.money(x) if x is not None else None
+                       for k, x in overdue_doc.get(key, {"sales": 0.0, "purchase": 0.0}).items()}
+        else:
+            open_base = today
+            base_od = {k: num.money(x * rate) if rate is not None else None for k, x in od.items()}
         out.append({"firm_id": fid, "firm_name": name or "(Firma yok)", "firm_kind": kinds.get(fid), "currency": cur,
-                    "rate": rate, "base_balance": base(net), "base_receivable": base(max(net, 0)),
-                    "base_payable": base(max(-net, 0)), "base_overdue_receivable": base(od["sales"]),
-                    "base_overdue_payable": base(od["purchase"]),
-                    "sales": round(v["sales"], 2), "collected": round(v["in"], 2),
-                    "purchases": round(v["purchase"], 2), "paid": round(v["out"], 2), "balance": round(net, 2),
-                    "receivable": round(max(net, 0), 2), "payable": round(max(-net, 0), 2),
-                    "overdue_receivable": round(od["sales"], 2), "overdue_payable": round(od["purchase"], 2)})
+                    "rate": rate, "basis": basis, "base_balance": doc if basis == "doc" else today,
+                    "base_receivable": max(open_base, 0.0) if open_base is not None else None,
+                    "base_payable": max(-open_base, 0.0) if open_base is not None else None,
+                    "base_overdue_receivable": base_od["sales"], "base_overdue_payable": base_od["purchase"],
+                    "fx_diff": num.money(doc - today) if doc is not None and today is not None else None,
+                    "sales": num.money(sales), "collected": num.money(v["in"]),
+                    "purchases": num.money(purchases), "paid": num.money(v["out"]), "balance": num.money(net),
+                    "receivable": num.money(max(net, 0)), "payable": num.money(max(-net, 0)),
+                    "overdue_receivable": num.money(od["sales"]), "overdue_payable": num.money(od["purchase"])})
     return sorted(out, key=lambda r: -abs(r["balance"]))
 
 
-def ledger(db: Session, firm_id: int) -> dict[str, Any]:
+def ledger(db: Session, firm_id: int, basis: str | None = None) -> dict[str, Any]:
     """Firm statement (cari ekstre): documents by date with a running balance per currency. Each row shows its base
-    value at the document's rate; base_balance values what is open at today's rate."""
+    value at the document's rate; base_balance follows the basis."""
+    basis = basis_of(db, basis)
     rows = sorted(_entries(db, firm_id), key=lambda e: (e["date"] or date.min, e["doc"] != "invoice", e["id"]))
     run: dict[str, float] = defaultdict(float)
+    doc_sum = 0.0
+    no_rate: set[str] = set()
     out = []
     for e in rows:
         run[e["currency"]] += e["amount"]
+        if e["rate"] is None:
+            no_rate.add(e["currency"])
+        else:
+            doc_sum += e["amount"] * e["rate"]
         out.append({"date": _iso(e["date"]), "due_date": _iso(e["due_date"]), "doc": e["doc"], "id": e["id"],
                     "no": e["no"], "label": e["label"], "currency": e["currency"], "rate": e["rate"],
-                    "base_amount": round(e["amount"] * e["rate"], 2) if e["rate"] is not None else None,
-                    "debit": round(e["amount"], 2) if e["amount"] > 0 else 0.0,
-                    "credit": round(-e["amount"], 2) if e["amount"] < 0 else 0.0,
-                    "balance": round(run[e["currency"]], 2)})
+                    "base_amount": num.money(e["amount"] * e["rate"]) if e["rate"] is not None else None,
+                    "debit": num.money(e["amount"]) if e["amount"] > 0 else 0.0,
+                    "credit": num.money(-e["amount"]) if e["amount"] < 0 else 0.0,
+                    "balance": num.money(run[e["currency"]])})
     book = fx.Book(db)
     rates = {k: book.on(k) for k, v in run.items() if abs(v) > EPS}
-    return {"rows": out, "balance": {k: round(v, 2) for k, v in run.items()}, "base": book.base,
-            "base_balance": round(sum(run[k] * r for k, r in rates.items() if r is not None), 2),
-            "unconverted": sorted(k for k, r in rates.items() if r is None)}
+    today = num.money(sum(run[k] * r for k, r in rates.items() if r is not None))
+    missing = {k for k, r in rates.items() if r is None}
+    return {"rows": out, "balance": {k: num.money(v) for k, v in run.items()}, "base": book.base, "basis": basis,
+            "base_balance": num.money(doc_sum) if basis == "doc" else today,
+            "fx_diff": num.money(doc_sum - today) if not no_rate and not missing else None,
+            "unconverted": sorted(no_rate if basis == "doc" else missing)}
 
 
 # ---------- printable form ----------
@@ -580,14 +758,14 @@ def form_xlsx(title: str, info: list[tuple[str, Any]], currency: str, lines: lis
     for i, l in enumerate(lines, 1):
         r = r0 + i
         for c, v in enumerate([i, l.code, l.description, l.unit, l.qty, l.unit_price,
-                               round(l.qty * l.unit_price, 2) if l.unit_price is not None else None], 1):
+                               num.money(l.qty * l.unit_price) if l.unit_price is not None else None], 1):
             ws.cell(r, c, v).border = box
         ws.cell(r, 6).number_format = ws.cell(r, 7).number_format = "#,##0.00"
     r = r0 + len(lines) + 1
     sums = [("Ara toplam", t["subtotal"])]
     if discount_pct:
-        sums.append((f"İskonto (%{discount_pct:g})", -t["discount"]))
-    sums += [(f"KDV (%{tax_rate:g})", t["tax"]), ("Genel toplam", t["total"])]
+        sums.append((f"İskonto (%{num.text(discount_pct)})", -t["discount"]))
+    sums += [(f"KDV (%{num.text(tax_rate)})", t["tax"]), ("Genel toplam", t["total"])]
     for k, v in sums:
         ws.cell(r, 6, k).font = bold
         cell = ws.cell(r, 7, v)

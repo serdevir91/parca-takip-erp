@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, download } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import LabelsModal from "../components/Labels";
@@ -13,6 +14,7 @@ import {
   CurrencyRate, FirmSelect, ITEM_KINDS, MoveHistory, PO_COLORS, ProjectSelect, QtyModal, fmtDay, fmtMoney, fmtQty, fmtRate, numOrNull, trIncludes,
   type PoLine, type PurchaseOrder,
 } from "./erp/common";
+import { formTotals } from "./erp/commerce";
 import { Suppliers } from "./erp/suppliers";
 
 type ListResp = { rows: PurchaseOrder[]; statuses: Record<string, string>; base: string };
@@ -246,7 +248,7 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
   const [prices, setPrices] = useState<string[]>(() => lines.map((l) => (l.unit_price == null ? "" : String(l.unit_price))));
 
   const upd = (i: number, patch: Partial<PoLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const total = lines.reduce((s, l, i) => s + (numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0), 0);
+  const { total } = formTotals(lines, prices);
 
   const save = useMutation({
     mutationFn: () => {
@@ -259,7 +261,7 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
             qty: l.qty, unit_price: numOrNull(prices[i] ?? "") }))
           .filter((l) => l.code || l.description);
       }
-      return order ? api.put<PurchaseOrder>(`/purchase-orders/${order.id}`, body) : api.post<PurchaseOrder>("/purchase-orders", body);
+      return order ? saveRev(order.rev, (rev) => api.put<PurchaseOrder>(`/purchase-orders/${order.id}`, { ...body, rev })) : api.post<PurchaseOrder>("/purchase-orders", body);
     },
     onSuccess: (po) => { toast(order ? "Sipariş güncellendi" : `${po.no} oluşturuldu`); refresh(); onSaved(po); },
     onError: (e) => toast(errText(e), true),
@@ -323,13 +325,16 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
 function ReceiveModal({ order, onClose }: { order: PurchaseOrder; onClose: () => void }) {
   const toast = useToast();
   const refresh = useRefresh();
+  const [rate, setRate] = useState("");
+  const typedRate = numOrNull(rate);
   const save = useMutation({
-    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string }) => api.post<PurchaseOrder>(`/purchase-orders/${order.id}/receive`, body),
+    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string; rate?: number | null }) => api.post<PurchaseOrder>(`/purchase-orders/${order.id}/receive`, body),
     onSuccess: (po) => { toast(`${po.no}: ${po.status_label}`); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <QtyModal title={`Mal kabul: ${order.no}`} qtyLabel="Bu teslimat" submit="Teslim al" noteLabel="Not (irsaliye no vb.)" busy={save.isPending}
+      ready={!order.needs_rate || (typedRate ?? 0) > 0}
       intro={order.project_id
         ? `Teslim alınan miktar stoğa girer ve aynı anda "${order.project_name}" projesine çıkılır.`
         : "Teslim alınan miktar stoğa girer."}
@@ -338,27 +343,51 @@ function ReceiveModal({ order, onClose }: { order: PurchaseOrder; onClose: () =>
         id: l.id!, code: l.code, description: l.description, unit: l.unit,
         cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.received_qty)], start: l.remaining ?? 0,
       }))}
-      onSubmit={(lines, note) => save.mutate({ lines, note })} onClose={onClose} />
+      onSubmit={(lines, note) => save.mutate(order.needs_rate ? { lines, note, rate: typedRate } : { lines, note })} onClose={onClose}>
+      {order.needs_rate && (
+        <div style={{ marginTop: 10 }}>
+          <Field label={`Kur (1 ${order.currency} = ? ${sys.currency})`}
+            hint="Bu sipariş için kur bulunamadı. Stok maliyeti bu kurla hesaplanır, girilen değer siparişe yazılır.">
+            <input autoFocus inputMode="decimal" aria-label="Kur" value={rate} onChange={(e) => setRate(e.target.value)} />
+          </Field>
+        </div>
+      )}
+    </QtyModal>
   );
 }
 
 function ReverseModal({ order, onClose }: { order: PurchaseOrder; onClose: () => void }) {
+  const canBill = useAuth().can("finance", "edit");
   const toast = useToast();
   const refresh = useRefresh();
+  const [credit, setCredit] = useState(canBill);
   const save = useMutation({
-    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string }) => api.post<PurchaseOrder>(`/purchase-orders/${order.id}/reverse`, body),
-    onSuccess: (po) => { toast(`${po.no}: ${po.status_label}`); refresh(); onClose(); },
+    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string; credit_note: boolean }) =>
+      api.post<PurchaseOrder & { credits?: { no: string }[] }>(`/purchase-orders/${order.id}/reverse`, body),
+    onSuccess: (po) => {
+      const made = (po.credits ?? []).map((c) => c.no).join(", ");
+      toast(made ? `${po.no}: ${po.status_label}. Taslak iade faturası: ${made}` : `${po.no}: ${po.status_label}`);
+      refresh();
+      onClose();
+    },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <QtyModal danger title={`Geri al / iade: ${order.no}`} qtyLabel="Geri alınacak" submit="Geri al" noteLabel="Neden (hatalı kabul, kusurlu mal vb.)" busy={save.isPending}
-      intro={`Mal stoktan geldiği maliyetle çıkar${order.project_id ? ", önce projeden geri alınır" : ""}. Stokta kalmadıysa işlem yapılmaz. Kesilmiş alış faturası kendiliğinden düzelmez.`}
+      intro={`Mal stoktan geldiği maliyetle çıkar${order.project_id ? ", önce projeden geri alınır" : ""}. Stokta kalmadıysa işlem yapılmaz.`}
       heads={["Sipariş", "Teslim alınan"]}
       rows={(order.lines ?? []).filter((l) => (l.received_qty ?? 0) > 0).map((l) => ({
         id: l.id!, code: l.code, description: l.description, unit: l.unit,
         cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.received_qty)], start: 0, max: l.received_qty,
       }))}
-      onSubmit={(lines, note) => save.mutate({ lines, note })} onClose={onClose} />
+      onSubmit={(lines, note) => save.mutate({ lines, note, credit_note: credit })} onClose={onClose}>
+      {canBill && (
+        <label className="row" style={{ marginTop: 10 }}>
+          <input type="checkbox" checked={credit} onChange={(e) => setCredit(e.target.checked)} />
+          Faturalanmış miktar için alış iade faturası oluştur (taslak olarak, Fatura ve ödeme ekranından kesilir)
+        </label>
+      )}
+    </QtyModal>
   );
 }
 

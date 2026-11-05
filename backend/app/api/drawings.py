@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import oauth2, user_from_token
+from ..auth import session_token, user_from_token
 from ..core.drawmatch import split_ext
 from ..models import Drawing, DrawingVersion, User
 from ..services import audit
@@ -24,8 +24,8 @@ drawings_edit = require("drawings", "edit")
 router = APIRouter(tags=["drawings"])
 
 
-def file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
-    """Bearer header only: tokens in URLs end up in logs and history and make links replayable."""
+def file_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:
+    """Cookie or Bearer header only: tokens in URLs end up in logs and history and make links replayable."""
     user = user_from_token(token, db)
     if not can(user, "drawings", "view"):
         raise HTTPException(403, "Bu işlem için yetkiniz yok")

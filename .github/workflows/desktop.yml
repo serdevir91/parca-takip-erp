@@ -89,6 +89,17 @@ jobs:
           Get-Content (Join-Path $env:ERP_DESKTOP_CONFIG_DIR "desktop.log") -Tail 40 -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "background test failed ($($p.ExitCode))" }
 
+      # A swapped server certificate must stop the web view on an already open address, not only at connect
+      - name: Certificate test (web view pin)
+        shell: pwsh
+        run: |
+          $env:ERP_DESKTOP_CONFIG_DIR = Join-Path $env:RUNNER_TEMP "pincfg"
+          $out = Join-Path $env:RUNNER_TEMP "pin.json"
+          $p = Start-Process -FilePath dist\LabERP\LabERP.exe -ArgumentList "--pin-test", "`"$out`"" -Wait -PassThru
+          Get-Content $out -ErrorAction SilentlyContinue
+          Get-Content (Join-Path $env:ERP_DESKTOP_CONFIG_DIR "desktop.log") -Tail 40 -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "certificate test failed ($($p.ExitCode))" }
+
       - name: Installer (Inno Setup)
         shell: pwsh
         run: |

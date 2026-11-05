@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..models import Project, StockItem, User, WorkOrder, WorkOrderMaterial, WorkOrderOp, utcnow
 from . import audit, erp, system
 
@@ -135,7 +136,7 @@ def give_back(db: Session, user: User, w: WorkOrder, m: WorkOrderMaterial, qty: 
     _open_or_400(w)
     db.refresh(m)
     if qty > m.issued_qty + erp.EPS:
-        raise HTTPException(400, f"{m.code}: iade çıkılan miktarı aşamaz (çıkılan {m.issued_qty:g})")
+        raise HTTPException(400, f"{m.code}: iade çıkılan miktarı aşamaz (çıkılan {num.text(m.issued_qty)})")
     item = _card(db, m.code)
     if item is None:
         raise HTTPException(400, f"{m.code}: stok kartı yok")
@@ -173,7 +174,7 @@ def consume(db: Session, user: User, w: WorkOrder) -> tuple[list[dict[str, Any]]
             audit.record(db, user, "work_order", w.no, f"malzeme eksik {m.code}", None, short, w.project_id)
             reason = "stokta yeterli yok" if item is not None else "stok kartı yok"
             warnings.append({"code": m.code, "description": m.description, "unit": m.unit, "needed": need, "issued": take,
-                             "short": short, "message": f"{m.code}: {short:g} {m.unit} çıkılamadı ({reason})"})
+                             "short": short, "message": f"{m.code}: {num.text(short)} {m.unit} çıkılamadı ({reason})"})
     _sync(db, user, w, codes)
     if w.project_id:
         return warnings, 0.0

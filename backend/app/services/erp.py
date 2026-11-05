@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..core.status import KIND_IMALAT, PROG_DONE, PROG_RUN, PROG_WAIT
 from ..models import (Employee, FastenerSetting, Invoice, Project, PurchaseOrder, PurchaseOrderLine, PurchaseReceipt,
                       StockItem, StockMove, SyncState, TimeEntry, Tracking, User, WorkOrder, WorkOrderMaterial)
@@ -45,7 +46,7 @@ STOCK_REF = "STOK"      # ref of issues taken from free stock (costed at the sto
 
 
 def _num(v: float) -> float:
-    return round(v + 0.0, 6)
+    return num.qty(v + 0.0)
 
 
 def lock_order(db: Session, order: Any) -> None:
@@ -99,7 +100,7 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
             raise HTTPException(400, "Miktar sıfırdan büyük olmalı")
         delta = -qty if kind in OUT_KINDS else qty
     if item.qty + delta < -EPS:
-        raise HTTPException(400, f"{item.code}: stokta yeterli miktar yok (stok {item.qty:g}, istenen {qty:g})")
+        raise HTTPException(400, f"{item.code}: stokta yeterli miktar yok (stok {num.text(item.qty)}, istenen {num.text(qty)})")
     if delta > 0 and unit_cost is not None:
         have = max(item.qty, 0.0)
         old_cost = item.unit_cost if item.unit_cost is not None else unit_cost
@@ -116,9 +117,9 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
 
 
 def stock_out(i: StockItem) -> dict[str, Any]:
-    return {"id": i.id, "code": i.code, "name": i.name, "kind": i.kind, "kind_label": ITEM_KINDS.get(i.kind, i.kind),
+    return {"id": i.id, "rev": i.edit_rev, "code": i.code, "name": i.name, "kind": i.kind, "kind_label": ITEM_KINDS.get(i.kind, i.kind),
             "unit": i.unit, "qty": i.qty, "min_qty": i.min_qty, "unit_cost": i.unit_cost,
-            "value": round(i.qty * i.unit_cost, 2) if i.unit_cost is not None else None,
+            "value": num.money(i.qty * i.unit_cost) if i.unit_cost is not None else None,
             "low": i.min_qty > 0 and i.qty < i.min_qty, "location": i.location, "note": i.note,
             "reorder_qty": i.reorder_qty, "preferred_firm_id": i.preferred_firm_id,
             "updated_at": i.updated_at.isoformat() if i.updated_at else None}
@@ -238,8 +239,8 @@ def issue_from_stock(db: Session, user: User, project: Project, code: str, qty: 
 def po_out(po: PurchaseOrder, with_lines: bool = True, project_name: str | None = None,
            book: fx.Book | None = None) -> dict[str, Any]:
     rate = book.doc(po.currency, po.rate, po.order_date, po.created_at) if book else po.rate
-    total = sum(l.qty * l.unit_price for l in po.lines if l.unit_price is not None)
-    received_value = sum(l.received_qty * l.unit_price for l in po.lines if l.unit_price is not None)
+    total = sum(num.money(l.qty * l.unit_price) for l in po.lines if l.unit_price is not None)
+    received_value = sum(num.money(l.received_qty * l.unit_price) for l in po.lines if l.unit_price is not None)
     qty = sum(l.qty for l in po.lines)
     rec = sum(min(l.received_qty, l.qty) for l in po.lines)
     out: dict[str, Any] = {
@@ -250,9 +251,10 @@ def po_out(po: PurchaseOrder, with_lines: bool = True, project_name: str | None 
         "overdue": bool(po.due_date and po.due_date < date.today() and po.status in ("sent", "partial")),
         "currency": po.currency, "rate": po.rate, "note": po.note,
         "created_at": po.created_at.isoformat() if po.created_at else None,
-        "created_by": po.created_by, "line_count": len(po.lines), "total": round(total, 2),
-        "base_total": round(total * rate, 2) if rate is not None else None,
-        "received_value": round(received_value, 2), "received_pct": round(100 * rec / qty, 1) if qty else 0.0,
+        "created_by": po.created_by, "line_count": len(po.lines), "total": num.money(total), "rev": po.edit_rev,
+        "needs_rate": bool(book) and rate is None,
+        "base_total": num.money(total * rate) if rate is not None else None,
+        "received_value": num.money(received_value), "received_pct": num.pct(100 * rec / qty) if qty else 0.0,
         "missing_price": sum(1 for l in po.lines if l.unit_price is None),
     }
     if with_lines:
@@ -264,19 +266,19 @@ def line_out(l: PurchaseOrderLine) -> dict[str, Any]:
     return {"id": l.id, "seq": l.seq, "code": l.code, "kind": l.kind, "kind_label": ITEM_KINDS.get(l.kind, l.kind),
             "description": l.description, "unit": l.unit, "qty": l.qty, "received_qty": l.received_qty,
             "remaining": max(0.0, _num(l.qty - l.received_qty)), "unit_price": l.unit_price,
-            "amount": round(l.qty * l.unit_price, 2) if l.unit_price is not None else None}
+            "amount": num.money(l.qty * l.unit_price) if l.unit_price is not None else None}
 
 
 def set_lines(po: PurchaseOrder, lines: list[dict[str, Any]]) -> None:
     po.lines.clear()
     for i, l in enumerate(lines, 1):
-        if l["qty"] <= 0:
+        if _num(l["qty"]) <= 0:
             raise HTTPException(400, f"Satır {i}: miktar sıfırdan büyük olmalı")
         if not (l.get("code") or "").strip() and not (l.get("description") or "").strip():
             raise HTTPException(400, f"Satır {i}: kod veya açıklama gerekli")
         po.lines.append(PurchaseOrderLine(seq=i, code=(l.get("code") or "").strip(), kind=l.get("kind") or "part",
                                           description=(l.get("description") or "").strip(),
-                                          unit=l.get("unit") or "Adet", qty=float(l["qty"]), received_qty=0.0,
+                                          unit=l.get("unit") or "Adet", qty=_num(float(l["qty"])), received_qty=0.0,
                                           unit_price=l.get("unit_price")))
 
 
@@ -339,11 +341,19 @@ def _set_receipt_status(po: PurchaseOrder) -> None:
 
 
 def receive(db: Session, user: User, po: PurchaseOrder, items: list[tuple[PurchaseOrderLine, float]],
-            note: str = "") -> None:
-    """Mal kabul: book the received quantities into stock (and to the project for project orders)."""
+            note: str = "", rate: float | None = None) -> None:
+    """Mal kabul: book the received quantities into stock (and to the project for project orders).
+    rate is typed on the receipt screen for a foreign currency order that has none."""
     lock_order(db, po)
     if po.status not in ("sent", "partial"):
         raise HTTPException(400, "Mal kabul yalnızca gönderilmiş siparişte yapılır")
+    if rate is not None and rate != po.rate:
+        if fx.norm(po.currency) == fx.base_currency(db):
+            raise HTTPException(400, f"{po.currency} ana para birimi, kur girilmez")
+        if any(l.received_qty > EPS for l in po.lines):
+            raise HTTPException(400, "Mal kabulü yapılmış siparişin kuru değiştirilemez")
+        audit.record(db, user, "purchase_order", po.no, "rate", po.rate, rate, po.project_id)
+        po.rate = rate
     over = 1 + system.system(db)["commerce"]["over_receipt_pct"] / 100
     codes: set[str] = set()
     for line, qty in items:
@@ -351,8 +361,8 @@ def receive(db: Session, user: User, po: PurchaseOrder, items: list[tuple[Purcha
             continue
         room = _num(line.qty * over - line.received_qty)
         if qty > room + EPS:
-            raise HTTPException(400, f"{line.code or line.description}: en fazla {max(room, 0.0):g} {line.unit} daha "
-                                     f"teslim alınabilir (sipariş {line.qty:g}, teslim alınan {line.received_qty:g})")
+            raise HTTPException(400, f"{line.code or line.description}: en fazla {num.text(max(room, 0.0))} {line.unit} daha "
+                                     f"teslim alınabilir (sipariş {num.text(line.qty)}, teslim alınan {num.text(line.received_qty)})")
         line.received_qty = _num(line.received_qty + qty)
         db.add(PurchaseReceipt(po_id=po.id, line_id=line.id, qty=qty, username=user.username if user else "",
                                note=note[:300]))
@@ -395,7 +405,7 @@ def reverse_receipt(db: Session, user: User, po: PurchaseOrder, items: list[tupl
             continue
         label = line.code or line.description
         if qty > line.received_qty + EPS:
-            raise HTTPException(400, f"{label}: teslim alınan {line.received_qty:g}, en fazla bu kadar geri alınabilir")
+            raise HTTPException(400, f"{label}: teslim alınan {num.text(line.received_qty)}, en fazla bu kadar geri alınabilir")
         line.received_qty = _num(line.received_qty - qty)
         db.add(PurchaseReceipt(po_id=po.id, line_id=line.id, qty=-qty, username=user.username if user else "",
                                note=note[:300]))
@@ -409,7 +419,7 @@ def reverse_receipt(db: Session, user: User, po: PurchaseOrder, items: list[tupl
         if po.project_id:
             held = project_held(db, po.project_id, item.id)
             if held + EPS < qty:
-                raise HTTPException(400, f"{label}: projede yeterli miktar yok (projede {held:g}, istenen {qty:g})")
+                raise HTTPException(400, f"{label}: projede yeterli miktar yok (projede {num.text(held)}, istenen {num.text(qty)})")
             move(db, user, item, "issue_return", qty, project_id=po.project_id, ref=po.no, note=note, unit_cost=cost)
             codes.add(line.code)
         move(db, user, item, "supplier_return", qty, project_id=po.project_id, ref=po.no, note=note, unit_cost=cost)
@@ -435,14 +445,14 @@ def close_po(db: Session, user: User, po: PurchaseOrder, note: str = "") -> None
 def wo_out(w: WorkOrder, project_name: str | None = None, ops: tuple[int, int] = (0, 0)) -> dict[str, Any]:
     """ops = (steps done, steps in total). A closed order stops at what was made, so nothing remains of it."""
     qty = w.done_qty if w.status == "closed" else w.qty
-    return {"id": w.id, "no": w.no, "project_id": w.project_id, "project_name": project_name, "part_no": w.part_no,
+    return {"id": w.id, "rev": w.edit_rev, "no": w.no, "project_id": w.project_id, "project_name": project_name, "part_no": w.part_no,
             "description": w.description, "qty": w.qty, "done_qty": w.done_qty,
             "remaining": max(0.0, _num(qty - w.done_qty)), "firm_name": w.firm_name,
             "subcontract": bool(w.firm_name), "status": w.status, "status_label": WO_STATUS.get(w.status, w.status),
             "start_date": w.start_date.isoformat() if w.start_date else None,
             "due_date": w.due_date.isoformat() if w.due_date else None,
             "overdue": bool(w.due_date and w.due_date < date.today() and w.status in WO_OPEN),
-            "unit_cost": w.unit_cost, "total_cost": round(qty * w.unit_cost, 2) if w.unit_cost is not None else None,
+            "unit_cost": w.unit_cost, "total_cost": num.money(qty * w.unit_cost) if w.unit_cost is not None else None,
             "note": w.note, "created_at": w.created_at.isoformat() if w.created_at else None,
             "created_by": w.created_by, "ops_done": ops[0], "ops_total": ops[1]}
 
@@ -661,13 +671,13 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
         for r in rows:
             acc[r[key]][0] += r["committed"]
             acc[r[key]][1] += r["actual"]
-        return sorted(({"name": k, "committed": round(c, 2), "actual": round(a, 2)} for k, (c, a) in acc.items()),
+        return sorted(({"name": k, "committed": num.money(c), "actual": num.money(a)} for k, (c, a) in acc.items()),
                       key=lambda x: -x["committed"])
 
     estimate = sum(f["total_price"] for f in pv.fasteners() if f["total_price"] is not None)
-    return {"currency": book.base, "committed": round(sum(r["committed"] for r in rows), 2),
-            "actual": round(sum(r["actual"] for r in rows), 2), "missing_price": missing_price,
-            "unconverted": [{**u, "committed": round(u["committed"], 2), "actual": round(u["actual"], 2)}
+    return {"currency": book.base, "committed": num.money(sum(r["committed"] for r in rows)),
+            "actual": num.money(sum(r["actual"] for r in rows)), "missing_price": missing_price,
+            "unconverted": [{**u, "committed": num.money(u["committed"]), "actual": num.money(u["actual"])}
                             for u in unconverted.values()],
-            "fastener_estimate": round(estimate, 2),
+            "fastener_estimate": num.money(estimate),
             "by_source": roll("source"), "by_firm": roll("firm"), "by_group": roll("group")}

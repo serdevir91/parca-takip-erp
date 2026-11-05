@@ -6,5 +6,5 @@ export type VersionBrief = {
 export type Project = {
   id: number; name: string; root_part_no: string; description: string; archived: boolean;
   created_at: string | null; current_version_id: number | null; current_version: VersionBrief | null;
-  pending_versions: number; tracked_parts: number;
+  pending_versions: number; tracked_parts: number; rev?: number;
 };

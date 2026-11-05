@@ -9,17 +9,46 @@ they never touch the BOM snapshots.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
+from typing import Any
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String,
                         Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from .db import Base
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class UtcDateTime(TypeDecorator):
+    """A moment in time, stored in UTC. SQLite drops the zone, so a value read back was naive and browsers took it
+    for local time. With this type it comes back zone-aware on SQLite and PostgreSQL alike. Attendance times are
+    wall clock on purpose and stay plain DateTime."""
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: date | datetime | None, dialect: Any) -> datetime | None:
+        if value is not None and not isinstance(value, datetime):   # a filter by day starts at local midnight
+            value = datetime.combine(value, time.min).astimezone()
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone.utc)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect: Any) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+class Revisioned:
+    """A record people edit in forms. edit_rev goes up with every save, so a form that was opened before someone
+    else's save can tell; services/conflict.py does the check."""
+    edit_rev: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    edit_by: Mapped[str] = mapped_column(String(64), default="", server_default="")
 
 
 ROLE_ADMIN = "admin"
@@ -46,10 +75,10 @@ class User(Base):
     pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Bumped on password change/reset and deactivation; tokens carry it ("tv"), older tokens stop working
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
-class Project(Base):
+class Project(Revisioned, Base):
     __tablename__ = "projects"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
@@ -57,7 +86,7 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     current_version_id: Mapped[int | None] = mapped_column(
         ForeignKey("bom_versions.id", use_alter=True, ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     # Ürün ağacı work in progress: {tree, rev, by, at}; sent trees become BOM versions
     bom_draft: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -71,7 +100,7 @@ class Part(Base):
     description: Mapped[str] = mapped_column(String(300), default="")
     # A purchased assembly keeps this flag on every upload
     is_purchased_assembly: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class BomVersion(Base):
@@ -83,9 +112,9 @@ class BomVersion(Base):
     filename: Mapped[str] = mapped_column(String(300))
     file_path: Mapped[str] = mapped_column(String(500), default="")
     uploaded_by: Mapped[str] = mapped_column(String(64), default="")
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    uploaded_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     approved_by: Mapped[str] = mapped_column(String(64), default="")
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     previous_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -151,7 +180,7 @@ class Tracking(Base):
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     # Shown dimmed in the lists; quantities and statuses do not change
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     updated_by: Mapped[str] = mapped_column(String(64), default="")
 
     __table_args__ = (UniqueConstraint("project_id", "part_no", name="uq_tracking_project_part"),)
@@ -162,7 +191,7 @@ class PartName(Base):
     __tablename__ = "part_names"
     part_no: Mapped[str] = mapped_column(String(200), primary_key=True)
     name: Mapped[str] = mapped_column(String(300), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     updated_by: Mapped[str] = mapped_column(String(64), default="")
 
 
@@ -177,7 +206,7 @@ class MissingRow(Base):
     progress: Mapped[str] = mapped_column(String(32), default="Bekliyor")
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class PartAlias(Base):
@@ -187,7 +216,7 @@ class PartAlias(Base):
     alias: Mapped[str] = mapped_column(String(200), unique=True)
     part_no: Mapped[str] = mapped_column(String(200), index=True)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class FastenerRule(Base):
@@ -224,7 +253,7 @@ class FastenerSetting(Base):
     __table_args__ = (UniqueConstraint("project_id", "key", name="uq_fastener_setting"),)
 
 
-class Firm(Base):
+class Firm(Revisioned, Base):
     """Cari kart: manufacturers, suppliers and customers. kind: manufacturer | supplier | both | customer."""
     __tablename__ = "firms"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -264,8 +293,8 @@ class Drawing(Base):
     # project the file was first uploaded from; used only to scope the "unmatched" list
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"),
                                                    nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
 
     versions: Mapped[list["DrawingVersion"]] = relationship(back_populates="drawing",
                                                             cascade="all, delete-orphan",
@@ -282,7 +311,7 @@ class DrawingVersion(Base):
     storage_path: Mapped[str] = mapped_column(String(500))
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     uploaded_by: Mapped[str] = mapped_column(String(64), default="")
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    uploaded_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
     drawing: Mapped[Drawing] = relationship(back_populates="versions")
 
@@ -302,9 +331,9 @@ class ControlIssue(Base):
     manual: Mapped[bool] = mapped_column(Boolean, default=False)
     present: Mapped[bool] = mapped_column(Boolean, default=True)      # auto issue still detected
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     resolved_by: Mapped[str] = mapped_column(String(64), default="")
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
 
     __table_args__ = (UniqueConstraint("project_id", "key", name="uq_control_issue_key"),)
@@ -313,7 +342,7 @@ class ControlIssue(Base):
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(primary_key=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    ts: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, index=True)
     user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     username: Mapped[str] = mapped_column(String(64), default="")
     project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
@@ -328,7 +357,7 @@ class AuditLog(Base):
 
 
 # ---------- ERP: stock, purchasing, work orders ----------
-class StockItem(Base):
+class StockItem(Revisioned, Base):
     """Stock card. code = part number, or the fastener key (type|std|size)."""
     __tablename__ = "stock_items"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -341,7 +370,7 @@ class StockItem(Base):
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)   # moving average
     location: Mapped[str] = mapped_column(String(100), default="")
     note: Mapped[str] = mapped_column(Text, default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     reorder_qty: Mapped[float] = mapped_column(Float, default=0.0)            # 0 = fill up to min_qty
     preferred_firm_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # no FK: added by ALTER on SQLite
 
@@ -351,7 +380,7 @@ class StockMove(Base):
     __tablename__ = "stock_moves"
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("stock_items.id", ondelete="CASCADE"), index=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    ts: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, index=True)
     kind: Mapped[str] = mapped_column(String(20))       # erp.MOVE_KINDS
     qty: Mapped[float] = mapped_column(Float)
     balance: Mapped[float] = mapped_column(Float)
@@ -363,7 +392,7 @@ class StockMove(Base):
     username: Mapped[str] = mapped_column(String(64), default="")
 
 
-class PurchaseOrder(Base):
+class PurchaseOrder(Revisioned, Base):
     """Satın alma siparişi. status: draft | sent | partial | received | closed | cancelled."""
     __tablename__ = "purchase_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -377,9 +406,9 @@ class PurchaseOrder(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="TRY")
     note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)   # base currency per 1 unit, fixed on the document
     lines: Mapped[list["PurchaseOrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", order_by="PurchaseOrderLine.seq")
@@ -407,12 +436,12 @@ class PurchaseReceipt(Base):
     po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True)
     line_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_order_lines.id", ondelete="SET NULL"), nullable=True)
     qty: Mapped[float] = mapped_column(Float)
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    received_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, index=True)
     username: Mapped[str] = mapped_column(String(64), default="")
     note: Mapped[str] = mapped_column(String(300), default="")
 
 
-class WorkOrder(Base):
+class WorkOrder(Revisioned, Base):
     """İş emri for a manufactured part. firm_name empty = in-house, else fason (subcontract).
     status: planned | in_progress | done | closed | cancelled. closed = stopped short: keeps done_qty and its cost."""
     __tablename__ = "work_orders"
@@ -430,9 +459,9 @@ class WorkOrder(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
 
 
 class WorkOrderMaterial(Base):
@@ -460,7 +489,7 @@ class WorkOrderOp(Base):
     planned_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     done_by: Mapped[str] = mapped_column(String(64), default="")
-    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    done_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     note: Mapped[str] = mapped_column(String(300), default="")
 
 
@@ -470,10 +499,10 @@ class SyncState(Base):
     __tablename__ = "sync_state"
     id: Mapped[int] = mapped_column(primary_key=True)
     rev: Mapped[int] = mapped_column(Integer, default=0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
-class SalesOrder(Base):
+class SalesOrder(Revisioned, Base):
     """Teklif / satış siparişi. status: draft | quoted | confirmed | partial | delivered | cancelled | lost."""
     __tablename__ = "sales_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -490,9 +519,9 @@ class SalesOrder(Base):
     tax_rate: Mapped[float] = mapped_column(Float, default=20.0)              # KDV %
     discount_pct: Mapped[float] = mapped_column(Float, default=0.0)
     note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     lines: Mapped[list["SalesOrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", order_by="SalesOrderLine.seq")
@@ -519,17 +548,17 @@ class SalesDelivery(Base):
     so_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id", ondelete="CASCADE"), index=True)
     line_id: Mapped[int | None] = mapped_column(ForeignKey("sales_order_lines.id", ondelete="SET NULL"), nullable=True)
     qty: Mapped[float] = mapped_column(Float)
-    delivered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    delivered_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, index=True)
     username: Mapped[str] = mapped_column(String(64), default="")
     note: Mapped[str] = mapped_column(String(300), default="")
 
 
-class Invoice(Base):
+class Invoice(Revisioned, Base):
     """Fatura. kind: sales (satış, bizim kestiğimiz) | purchase (alış, tedarikçinin faturası).
     status: draft | issued | cancelled; paid/partial/overdue come from the payments."""
     __tablename__ = "invoices"
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(10), default="sales", index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="sales", index=True)
     no: Mapped[str] = mapped_column(String(40), default="", index=True)     # supplier's number for purchase
     firm_id: Mapped[int | None] = mapped_column(ForeignKey("firms.id", ondelete="SET NULL"), nullable=True,
                                                 index=True)
@@ -546,10 +575,16 @@ class Invoice(Base):
     currency: Mapped[str] = mapped_column(String(8), default="TRY")
     tax_rate: Mapped[float] = mapped_column(Float, default=20.0)
     note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    discount_pct: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    # Issued before 1.5.10: its total keeps the old sum (lines rounded after adding up), a document never changes
+    legacy_total: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # A credit note (kind sales_credit or purchase_credit) and the invoice it takes goods back from
+    credit_of_id: Mapped[int | None] = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True,
+                                                     index=True)
     lines: Mapped[list["InvoiceLine"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.seq")
 
@@ -583,7 +618,7 @@ class Payment(Base):
     currency: Mapped[str] = mapped_column(String(8), default="TRY")
     method: Mapped[str] = mapped_column(String(30), default="Havale/EFT")
     note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     created_by: Mapped[str] = mapped_column(String(64), default="")
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -599,7 +634,7 @@ class ExchangeRate(Base):
     source: Mapped[str] = mapped_column(String(10), default="manual")
 
 
-class Employee(Base):
+class Employee(Revisioned, Base):
     __tablename__ = "employees"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
@@ -615,7 +650,7 @@ class Employee(Base):
     annual_leave_days: Mapped[float | None] = mapped_column(Float, nullable=True)   # None = company default
 
 
-class TimeEntry(Base):
+class TimeEntry(Revisioned, Base):
     """Çalışma saati: who worked how long on which project / work order. Cost = hours * hourly_cost
     at entry time (kept, so later rate changes do not rewrite history)."""
     __tablename__ = "time_entries"
@@ -630,10 +665,19 @@ class TimeEntry(Base):
     hourly_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str] = mapped_column(String(300), default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
-class Attendance(Base):
+class Holiday(Base):
+    """Resmi tatil: a day with fewer expected hours. half_day is the afternoon off (29 Ekim arifesi)."""
+    __tablename__ = "holidays"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, unique=True)
+    name: Mapped[str] = mapped_column(String(100), default="")
+    half_day: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class Attendance(Revisioned, Base):
     """Mesai: one shift of one employee. Times are the server's wall clock with no zone, as on a time sheet;
     work_date is the day the shift began, so a night shift belongs to its first day. No clock_out = still open."""
     __tablename__ = "attendance"
@@ -661,9 +705,9 @@ class LeaveRequest(Base):
     status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
     note: Mapped[str] = mapped_column(String(300), default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     decided_by: Mapped[str] = mapped_column(String(64), default="")
-    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     decision_note: Mapped[str] = mapped_column(String(300), default="")
 
 
@@ -680,9 +724,9 @@ class AttendanceRequest(Base):
     reason: Mapped[str] = mapped_column(String(300), default="")
     status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     decided_by: Mapped[str] = mapped_column(String(64), default="")
-    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     decision_note: Mapped[str] = mapped_column(String(300), default="")
 
 
@@ -692,7 +736,7 @@ class UserPref(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[object] = mapped_column(JSON)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
 
 
 class NotificationRead(Base):
@@ -700,7 +744,7 @@ class NotificationRead(Base):
     __tablename__ = "notification_reads"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ts: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class ProjectTemplate(Base):
@@ -711,7 +755,7 @@ class ProjectTemplate(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     payload: Mapped[object] = mapped_column(JSON)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class Photo(Base):
@@ -729,7 +773,7 @@ class Photo(Base):
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     caption: Mapped[str] = mapped_column(String(300), default="")
     uploaded_by: Mapped[str] = mapped_column(String(64), default="")
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    uploaded_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class ChatRoom(Base):
@@ -740,9 +784,9 @@ class ChatRoom(Base):
     name: Mapped[str] = mapped_column(String(120), default="")
     dm_key: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     # Time of the last message, for sorting the room list
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
     members: Mapped[list["ChatMember"]] = relationship(back_populates="room", cascade="all, delete-orphan")
 
@@ -755,7 +799,7 @@ class ChatMember(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)   # may rename the group and manage members
     last_read_id: Mapped[int] = mapped_column(Integer, default=0)
-    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    joined_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
     room: Mapped[ChatRoom] = relationship(back_populates="members")
     user: Mapped[User] = relationship()
@@ -777,4 +821,4 @@ class ChatMessage(Base):
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)

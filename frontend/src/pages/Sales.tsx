@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { api, download } from "../api/client";
 import { sys } from "../api/system";
 import { useAuth } from "../api/auth";
+import { saveRev } from "../api/conflict";
+import { sumMoney } from "../api/num";
 import { Page, PageHeader } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
@@ -12,7 +14,7 @@ import {
   CurrencyRate, FirmSelect, MoveHistory, ProjectSelect, QtyModal, addDays, fmtDay, fmtMoney, fmtQty, fmtRate, numOrNull, trIncludes, useFirms,
 } from "./erp/common";
 import {
-  LinesEditor, LinesTable, SO_ACTIONS, SO_COLORS, Stat, emptyLine, lineSum, linesBody, type DocLine, type SalesOrder,
+  LinesEditor, LinesTable, SO_ACTIONS, SO_COLORS, Stat, emptyLine, formTotals, linesBody, type DocLine, type SalesOrder,
 } from "./erp/commerce";
 
 type ListResp = { rows: SalesOrder[]; statuses: Record<string, string>; base: string };
@@ -40,7 +42,7 @@ export default function Sales() {
     () => (list.data?.rows ?? []).filter((r) => !q.trim() || trIncludes(`${r.no} ${r.firm_name} ${r.project_name ?? ""} ${r.note}`, q)),
     [list.data, q],
   );
-  const sum = (f: (r: SalesOrder) => boolean) => rows.filter(f).reduce((s, r) => s + (r.base_total ?? 0), 0);
+  const sum = (f: (r: SalesOrder) => boolean) => sumMoney(rows.filter(f).map((r) => r.base_total));
   const noRate = rows.filter((r) => r.base_total == null).length;
 
   return (
@@ -108,7 +110,7 @@ function OrderModal({ id, onClose, onOpen }: { id: number; onClose: () => void; 
   const toast = useToast();
   const refresh = useRefresh();
   const [editing, setEditing] = useState(false);
-  const [dialog, setDialog] = useState<"deliver" | "return" | "invoice" | null>(null);
+  const [dialog, setDialog] = useState<"deliver" | "return" | "invoice" | "close" | null>(null);
   const q = useQuery({ queryKey: ["sales-order", id], queryFn: () => api.get<SalesOrder>(`/sales-orders/${id}`) });
   const so = q.data;
   const act = useMutation({
@@ -128,6 +130,7 @@ function OrderModal({ id, onClose, onOpen }: { id: number; onClose: () => void; 
   });
   if (editing && so) return <OrderEditor order={so} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />;
   if (dialog === "invoice" && so) return <InvoiceDialog order={so} onClose={() => setDialog(null)} />;
+  if (dialog === "close" && so) return <CloseDialog order={so} onClose={() => setDialog(null)} />;
   if (dialog && so) return <DeliverDialog order={so} back={dialog === "return"} onClose={() => setDialog(null)} />;
   const busy = act.isPending || del.isPending || copy.isPending;
   const lines = so?.lines ?? [];
@@ -143,14 +146,15 @@ function OrderModal({ id, onClose, onOpen }: { id: number; onClose: () => void; 
         {canEdit && <button className="btn" disabled={busy} onClick={() => copy.mutate()}>Kopyala</button>}
         <span style={{ flex: 1 }} />
         {canEdit && so.status === "draft" && <button className="btn danger" disabled={busy} onClick={() => confirm(`${so.no} silinsin mi?`) && del.mutate()}>Sil</button>}
-        {canEdit && !["delivered", "cancelled"].includes(so.status) && <button className="btn" onClick={() => setEditing(true)}>Düzenle</button>}
+        {canEdit && !["delivered", "cancelled", "closed"].includes(so.status) && <button className="btn" onClick={() => setEditing(true)}>Düzenle</button>}
         {canEdit && so.next_statuses.map((s) => (
           <button key={s} className={s === "cancelled" || s === "lost" ? "btn danger" : s === "draft" ? "btn" : "btn primary"} disabled={busy}
             onClick={() => (s !== "cancelled" || confirm(`${so.no} iptal edilsin mi?`)) && act.mutate(s)}>{SO_ACTIONS[s] ?? s}</button>
         ))}
         {canEdit && shipped && <button className="btn" disabled={busy} onClick={() => setDialog("return")}>İade al</button>}
+        {canEdit && so.status === "partial" && <button className="btn" disabled={busy} onClick={() => setDialog("close")}>Eksik kapat</button>}
         {canEdit && shipping && <button className="btn primary" disabled={busy} onClick={() => setDialog("deliver")}>Sevk et</button>}
-        {can("finance", "edit") && ["confirmed", "partial", "delivered"].includes(so.status) && lines.some((l) => (l.billable ?? 0) > 0) && (
+        {can("finance", "edit") && ["confirmed", "partial", "delivered", "closed"].includes(so.status) && lines.some((l) => (l.billable ?? 0) > 0) && (
           <button className="btn primary" disabled={busy} onClick={() => setDialog("invoice")}>Fatura oluştur</button>
         )}
       </>}>
@@ -173,7 +177,7 @@ function OrderModal({ id, onClose, onOpen }: { id: number; onClose: () => void; 
           {so.note && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{so.note}</p>}
           <LinesTable lines={lines} currency={so.currency} subtotal={so.subtotal} discount={so.discount}
             discountPct={so.discount_pct} tax={so.tax} taxRate={so.tax_rate} total={so.total}
-            progress={["confirmed", "partial", "delivered"].includes(so.status)} />
+            progress={["confirmed", "partial", "delivered", "closed"].includes(so.status)} />
           {shipping && <p className="muted">Onaylı siparişin fiyatları değişmez. Değişiklik için iptal edip kopyasını açın.</p>}
           <MoveHistory title="Sevk ve iadeler" backLabel="iade" rows={(so.deliveries ?? []).map((d) => ({ ...d, at: d.delivered_at }))} />
         </>
@@ -182,20 +186,50 @@ function OrderModal({ id, onClose, onOpen }: { id: number; onClose: () => void; 
   );
 }
 
-function DeliverDialog({ order, back, onClose }: { order: SalesOrder; back: boolean; onClose: () => void }) {
+function CloseDialog({ order, onClose }: { order: SalesOrder; onClose: () => void }) {
   const toast = useToast();
   const refresh = useRefresh();
+  const [note, setNote] = useState("");
   const save = useMutation({
-    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string }) =>
-      api.post<SalesOrder>(`/sales-orders/${order.id}/${back ? "return" : "deliver"}`, body),
+    mutationFn: () => api.post<SalesOrder>(`/sales-orders/${order.id}/close`, { note }),
     onSuccess: (r) => { toast(`${r.no}: ${r.status_label}`); refresh(); onClose(); },
+    onError: (e) => toast(errText(e), true),
+  });
+  const left = (order.lines ?? []).filter((l) => (l.remaining ?? 0) > 0);
+  return (
+    <Modal title={`Eksik kapat: ${order.no}`} onClose={onClose}
+      footer={<>
+        <button className="btn" onClick={onClose}>Vazgeç</button>
+        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>Siparişi kapat</button>
+      </>}>
+      <p className="muted">Sevk edilenler kalır, kalan miktar sevk edilmeyecek. Fatura yalnızca sevk edilen miktara kadar kesilebilir, iade almak yine mümkündür.</p>
+      <ul>{left.map((l) => <li key={l.id}>{l.code || l.description}: {fmtQty(l.remaining)} {l.unit} sevk edilmeyecek</li>)}</ul>
+      <Field label="Not"><input maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+    </Modal>
+  );
+}
+
+function DeliverDialog({ order, back, onClose }: { order: SalesOrder; back: boolean; onClose: () => void }) {
+  const canBill = useAuth().can("finance", "edit");
+  const toast = useToast();
+  const refresh = useRefresh();
+  const [credit, setCredit] = useState(canBill);
+  const save = useMutation({
+    mutationFn: (body: { lines: { line_id: number; qty: number }[]; note: string; credit_note?: boolean }) =>
+      api.post<SalesOrder & { credits?: { no: string }[] }>(`/sales-orders/${order.id}/${back ? "return" : "deliver"}`, body),
+    onSuccess: (r) => {
+      const made = (r.credits ?? []).map((c) => c.no).join(", ");
+      toast(made ? `${r.no}: ${r.status_label}. Taslak alacak dekontu: ${made}` : `${r.no}: ${r.status_label}`);
+      refresh();
+      onClose();
+    },
     onError: (e) => toast(errText(e), true),
   });
   const open = (order.lines ?? []).filter((l) => (back ? (l.delivered_qty ?? 0) > 0 : (l.remaining ?? 0) > 0));
   return (
     <QtyModal title={`${back ? "Müşteriden iade" : "Sevk"}: ${order.no}`} qtyLabel={back ? "İade" : "Bu sevk"} submit={back ? "İade al" : "Sevk et"}
       intro={back
-        ? "Stoktan çıkmış mal stoğa geri girer. Kesilmiş fatura kendiliğinden düzelmez; gerekiyorsa iade faturası girin."
+        ? "Stoktan çıkmış mal stoğa geri girer. Faturalanmış miktar için aşağıdan taslak alacak dekontu oluşturabilirsiniz."
         : "Stok kartı olan kod stoktan düşer. Projeye verilmiş mal için yeniden stok düşülmez."}
       noteLabel="Not (irsaliye no vb.)" heads={["Sipariş", "Teslim", "Kalan"]} busy={save.isPending}
       rows={open.map((l) => ({
@@ -203,7 +237,14 @@ function DeliverDialog({ order, back, onClose }: { order: SalesOrder; back: bool
         cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.delivered_qty), fmtQty(l.remaining)],
         start: back ? 0 : l.remaining ?? 0, max: back ? l.delivered_qty : l.remaining,
       }))}
-      onSubmit={(lines, note) => save.mutate({ lines, note })} onClose={onClose} />
+      onSubmit={(lines, note) => save.mutate(back ? { lines, note, credit_note: credit } : { lines, note })} onClose={onClose}>
+      {back && canBill && (
+        <label className="row" style={{ marginTop: 10 }}>
+          <input type="checkbox" checked={credit} onChange={(e) => setCredit(e.target.checked)} />
+          Faturalanmış miktar için alacak dekontu oluştur (taslak olarak, Fatura ve ödeme ekranından kesilir)
+        </label>
+      )}
+    </QtyModal>
   );
 }
 
@@ -244,16 +285,15 @@ function OrderEditor({ order, onClose, onSaved }: { order?: SalesOrder; onClose:
   const [note, setNote] = useState(order?.note ?? "");
   const [lines, setLines] = useState<DocLine[]>(() => order?.lines?.map((l) => ({ ...l })) ?? [emptyLine()]);
   const [prices, setPrices] = useState<string[]>(() => lines.map((l) => (l.unit_price == null ? "" : String(l.unit_price))));
-  const sub = lineSum(lines, prices);
   const d = numOrNull(disc) ?? 0;
-  const total = sub * (1 - d / 100) * (1 + (numOrNull(tax) ?? 0) / 100);
+  const { total } = formTotals(lines, prices, numOrNull(tax) ?? 0, d);
 
   const save = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = { firm_id: firmId, firm_name: firmName, project_id: project,
         valid_until: validUntil || null, due_date: due || null, note };
       if (!pricesLocked) Object.assign(body, { currency, rate: numOrNull(rate), tax_rate: numOrNull(tax) ?? 0, discount_pct: d, lines: linesBody(lines, prices) });
-      return order ? api.put<SalesOrder>(`/sales-orders/${order.id}`, body) : api.post<SalesOrder>("/sales-orders", body);
+      return order ? saveRev(order.rev, (rev) => api.put<SalesOrder>(`/sales-orders/${order.id}`, { ...body, rev })) : api.post<SalesOrder>("/sales-orders", body);
     },
     onSuccess: (so) => { toast(order ? "Kaydedildi" : `${so.no} oluşturuldu`); refresh(); onSaved(so); },
     onError: (e) => toast(errText(e), true),

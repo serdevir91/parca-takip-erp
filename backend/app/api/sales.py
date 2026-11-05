@@ -11,8 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, SalesOrder, User
-from ..permissions import require
-from ..services import audit, commerce, fx, system
+from ..permissions import can, require
+from ..services import audit, commerce, conflict, fx, system
 from .deps import get_db, project_or_404
 
 sales_view, sales_edit = require("sales", "view"), require("sales", "edit")
@@ -57,6 +57,7 @@ class SoUpdate(BaseModel):
     discount_pct: float | None = Field(default=None, ge=0, le=100)
     note: str | None = None
     lines: list[LineIn] | None = None
+    rev: int | None = None
 
 
 class StatusIn(BaseModel):
@@ -70,6 +71,14 @@ class DeliverLine(BaseModel):
 
 class DeliverIn(BaseModel):
     lines: list[DeliverLine]
+    note: str = Field(default="", max_length=300)
+
+
+class ReturnIn(DeliverIn):
+    credit_note: bool = False
+
+
+class CloseIn(BaseModel):
     note: str = Field(default="", max_length=300)
 
 
@@ -149,7 +158,8 @@ def get_order(so_id: int, _: User = Depends(sales_view), db: Session = Depends(g
 def update_order(so_id: int, body: SoUpdate, me: User = Depends(sales_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     so = _so_or_404(db, so_id)
-    if so.status in ("delivered", "cancelled"):
+    conflict.claim(db, so, body.rev, me)
+    if so.status in ("delivered", "closed", "cancelled"):
         raise HTTPException(400, f"{commerce.SO_STATUS[so.status]} durumundaki sipariş düzenlenemez")
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
@@ -215,14 +225,27 @@ def deliver(so_id: int, body: DeliverIn, me: User = Depends(sales_edit), db: Ses
 
 
 @router.post("/sales-orders/{so_id}/return")
-def take_back(so_id: int, body: DeliverIn, me: User = Depends(sales_edit),
+def take_back(so_id: int, body: ReturnIn, me: User = Depends(sales_edit),
               db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Müşteriden iade: quantities are positive here."""
+    """Müşteriden iade: quantities are positive here. credit_note also drafts the alacak dekontu."""
     so = _so_or_404(db, so_id)
     items = _picked(so, body.lines)
     if any(q < 0 for _, q in items):
         raise HTTPException(400, "İade miktarı sıfırdan büyük olmalı")
+    if body.credit_note and not can(me, "finance", "edit"):
+        raise HTTPException(403, "Alacak dekontu için finans düzenleme yetkisi gerekli")
     commerce.deliver(db, me, so, [(l, -q) for l, q in items], body.note)
+    made = commerce.credits_for_return(db, me, so, items) if body.credit_note else []
+    db.commit()
+    return {**_out(db, so), "credits": [commerce.inv_out(c, with_lines=False) for c in made]}
+
+
+@router.post("/sales-orders/{so_id}/close")
+def close(so_id: int, body: CloseIn | None = None, me: User = Depends(sales_edit),
+          db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Siparişi eksik kapat: keep what was delivered, the rest will not ship."""
+    so = _so_or_404(db, so_id)
+    commerce.close_so(db, me, so, body.note if body else "")
     db.commit()
     return _out(db, so)
 

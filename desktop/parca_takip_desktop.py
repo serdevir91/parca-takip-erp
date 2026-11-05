@@ -16,6 +16,7 @@ Dev run on macOS/Linux/Windows:  python desktop/parca_takip_desktop.py   (needs 
 Bundle smoke test (CI):           LabERP.exe --smoke <empty folder>
 Window self-test (CI):            LabERP.exe --ui-test <result.json>   (fresh profile: setup page + JS bridge)
 Background self-test (CI):        LabERP.exe --tray-test <result.json>  (server profile: close hides, reopen, quit)
+Certificate self-test (CI):       LabERP.exe --pin-test <result.json>   (web view refuses a swapped server certificate)
 """
 from __future__ import annotations
 
@@ -69,6 +70,7 @@ INSTANCE_PORT = 47812         # loopback only: a second start asks the running a
 INSTANCE_HELLO = b"LABERP-SHOW\n"
 UI_TEST: Path | None = None   # --ui-test <result.json>: exit once the setup page talks to Python
 TRAY_TEST: Path | None = None  # --tray-test <result.json>: exercise the background mode, then quit
+PIN_TEST: Path | None = None  # --pin-test <result.json>: swap the certificate under the web view, then quit
 
 
 def config_dir() -> Path:
@@ -141,8 +143,8 @@ def http_json(url: str, timeout: float = 5, context: ssl.SSLContext | None = Non
 
 # ---------- HTTPS with the server's own certificate ----------
 # No certificate authority knows that certificate, so the app remembers it on first contact (the user compares
-# the fingerprint) and afterwards trusts only that one. WebView2 cannot be given a pin: it ignores certificate
-# errors, and _check_pin compares the certificate before every connect instead.
+# the fingerprint) and afterwards trusts only that one. _check_pin does that before connecting, and
+# guard_certificates makes the web view hold every later connection to the same pin.
 def unverified_context() -> ssl.SSLContext:
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -155,6 +157,41 @@ def pinned_context(der: bytes) -> ssl.SSLContext:
     ctx.check_hostname = False     # the address may change; the certificate itself is what is checked
     ctx.load_verify_locations(cadata=der)
     return ctx
+
+
+def guard_certificates(expected, refused) -> bool:
+    """Put the pin in charge of WebView2's certificate decision. False leaves pywebview's handler out of the picture.
+
+    WebView2 asks on every TLS connection whose certificate it cannot verify itself, and that is every connection
+    to a server with its own certificate. Its answer is remembered per host and certificate, so a different
+    certificate on the same address asks again. pywebview answers "allow" to all of them; this answers from the pin.
+    A certificate that a public authority signed for this host raises no question, so a pin cannot stop that one.
+    """
+    try:
+        import webview.platforms.winforms  # noqa: F401 - sets up .NET and picks the renderer before edgechromium loads
+        from webview.platforms import edgechromium
+
+        action = edgechromium.CoreWebView2ServerCertificateErrorAction
+        if not hasattr(edgechromium.EdgeChrome, "on_certificate_error"):
+            raise AttributeError("EdgeChrome.on_certificate_error")
+    except Exception:  # noqa: BLE001  (without the guard the web view keeps refusing, which is the safe side)
+        log.exception("certificate guard not installed")
+        return False
+
+    def on_certificate_error(_self, _sender, args) -> None:
+        seen = ""
+        try:
+            seen = hashlib.sha256(ssl.PEM_cert_to_DER_cert(args.ServerCertificate.ToPemEncoding().strip())).hexdigest()
+            allow = seen == expected()
+        except Exception:  # noqa: BLE001
+            log.exception("certificate check failed")
+            allow = False
+        args.set_Action(action.AlwaysAllow if allow else action.Cancel)
+        if not allow:
+            refused(seen)
+
+    edgechromium.EdgeChrome.on_certificate_error = on_certificate_error
+    return True
 
 
 def peer_certificate(url: str, timeout: float = 6) -> bytes:
@@ -352,6 +389,9 @@ class DesktopApp:
         self._hint_shown = False
         self._setup_html = (ASSETS / "setup.html").read_text(encoding="utf-8")
         self._on_setup = True    # False while the window shows a page of the server
+        self._guarded = False    # the web view answers certificate errors from the pin
+        self._refused = 0        # certificates the web view turned down
+        self._refused_last = ""
 
     # The API object is open to whatever page the window shows, and that page comes from a server. So what
     # setup.html needs works only while the window shows our own pages, and the rest only for the connected
@@ -591,6 +631,23 @@ class DesktopApp:
         self._on_setup = False
         self._window.load_url(url)
 
+    def _expected_fingerprint(self) -> str:
+        """The one certificate the web view may accept right now."""
+        if self._server is not None:
+            from app.services import tls
+
+            return tls.fingerprint(self._server.data_dir / "data")
+        return self._cfg.get("server_fingerprint") or ""
+
+    def _certificate_refused(self, seen: str) -> None:
+        self._refused += 1
+        log.warning("web view refused certificate %s", seen or "(unreadable)")
+        if PIN_TEST is None and seen != self._refused_last:   # one page load can open several connections
+            self._refused_last = seen
+            threading.Thread(target=self._fail, name="cert-refused", daemon=True, args=(
+                "GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlantı kesildi. Araya biri girmiş olabilir. "
+                "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin.",)).start()
+
     def _check_pin(self, url: str) -> str | None:
         """Why this https server must not be used, or None. The first contact asks the user."""
         c = self._cfg
@@ -784,6 +841,99 @@ class DesktopApp:
             self._server.stop()
         self._window.destroy()
 
+    def _pin_self_test(self) -> None:
+        """A local https server changes its certificate under the open web view; nothing may reach it after that."""
+        import http.server
+
+        from app.services import tls
+
+        seen: dict = {"hits": 0, "cookie": False}
+
+        class Page(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                seen["hits"] += 1
+                seen["cookie"] = seen["cookie"] or "probe=1" in self.headers.get("Cookie", "")
+                body = b"<!doctype html><title>pin-ok</title>ok"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Set-Cookie", "probe=1; Path=/; Secure; HttpOnly; SameSite=Strict")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        class Quiet(http.server.ThreadingHTTPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+            def handle_error(self, *_args) -> None:   # the refused handshake lands here
+                pass
+
+        def serve(folder: Path, port: int) -> Quiet:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            cert, key = tls.files(folder)
+            ctx.load_cert_chain(cert, key)
+            srv = Quiet(("127.0.0.1", port), Page)
+            srv.socket = ctx.wrap_socket(srv.socket, server_side=True, do_handshake_on_connect=False)
+            threading.Thread(target=srv.serve_forever, name="pin-https", daemon=True).start()
+            return srv
+
+        def stop(srv: Quiet) -> None:
+            srv.shutdown()
+            srv.server_close()
+
+        def until(cond, timeout: float) -> bool:
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                if cond():
+                    return True
+                time.sleep(0.2)
+            return False
+
+        result: dict = {"version": VERSION}
+        try:
+            result["guard"] = self._guarded
+            self._window.events.loaded.wait(60)
+            root = Path(tempfile.mkdtemp(prefix="laberp-pin"))
+            first, second = root / "a", root / "b"
+            for folder in (first, second):
+                folder.mkdir()
+                tls.enable(folder)
+            port = next(p for p in range(18200, 18300) if port_free(p))
+            url = f"https://127.0.0.1:{port}/"
+            self._cfg["server_fingerprint"] = tls.fingerprint(first)
+
+            srv = serve(first, port)
+            self._window.load_url(url)
+            result["pinned_loads"] = until(lambda: seen["hits"] >= 1, 30)
+            self._window.load_url(url + "?again")
+            result["cookie_kept"] = until(lambda: seen["cookie"], 15)
+            stop(srv)
+
+            seen["hits"], self._refused = 0, 0
+            srv = serve(second, port)
+            self._window.load_url(url + "?swapped")
+            result["refused"] = until(lambda: self._refused >= 1, 20)
+            time.sleep(2)
+            result["swapped_hits"] = seen["hits"]
+            stop(srv)
+
+            seen["hits"] = 0
+            srv = serve(first, port)
+            self._window.load_url(url + "?back")
+            result["pinned_again"] = until(lambda: seen["hits"] >= 1, 20)
+            stop(srv)
+            result["ok"] = all(result.get(k) for k in ("guard", "pinned_loads", "refused", "pinned_again")) \
+                and result["swapped_hits"] == 0
+        except Exception as e:  # noqa: BLE001
+            log.exception("pin test failed")
+            result["error"] = repr(e)
+        PIN_TEST.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        self._window.destroy()
+
     def _tray_self_test(self) -> None:
         import ctypes
 
@@ -955,7 +1105,9 @@ class DesktopApp:
 
         webview.settings["ALLOW_DOWNLOADS"] = True
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
-        webview.settings["IGNORE_SSL_ERRORS"] = True    # the server's own certificate; see _check_pin
+        # This setting only makes pywebview listen for certificate errors; guard_certificates decides the answer
+        self._guarded = IS_WIN and guard_certificates(self._expected_fingerprint, self._certificate_refused)
+        webview.settings["IGNORE_SSL_ERRORS"] = self._guarded
         server_mode = self._cfg.get("mode") == "server"
         first = self._setup_html if self._cfg.get("mode") not in ("server", "client") else self._loading_html()
         self._window = webview.create_window(
@@ -969,6 +1121,8 @@ class DesktopApp:
         icon = ASSETS / "icon.ico"
         if TRAY_TEST is not None:
             threading.Thread(target=self._tray_self_test, name="tray-test", daemon=True).start()
+        if PIN_TEST is not None:
+            threading.Thread(target=self._pin_self_test, name="pin-test", daemon=True).start()
         webview.start(self._on_start, private_mode=False, storage_path=str(config_dir() / "webview"),
                       icon=str(icon) if icon.is_file() else None)
 
@@ -1012,7 +1166,7 @@ def smoke(folder: Path) -> int:
 
 
 def main() -> None:
-    global UI_TEST, TRAY_TEST
+    global UI_TEST, TRAY_TEST, PIN_TEST
     setup_logging()
     log.info("start %s frozen=%s", VERSION, FROZEN)
     if len(sys.argv) >= 3 and sys.argv[1] == "--smoke":
@@ -1028,12 +1182,16 @@ def main() -> None:
         TRAY_TEST = Path(sys.argv[2])
         TRAY_TEST.unlink(missing_ok=True)
         threading.Timer(240, lambda: (log.error("tray-test: timed out"), os._exit(1))).start()
-    if IS_WIN and UI_TEST is None and TRAY_TEST is None and load_config().get("mode") == "server" and wake_running_app():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--pin-test":
+        PIN_TEST = Path(sys.argv[2])
+        PIN_TEST.unlink(missing_ok=True)
+        threading.Timer(180, lambda: (log.error("pin-test: timed out"), os._exit(1))).start()
+    if IS_WIN and UI_TEST is None and TRAY_TEST is None and PIN_TEST is None and load_config().get("mode") == "server" and wake_running_app():
         log.info("already running; its window was brought to the front")
         logging.shutdown()
         os._exit(0)
     DesktopApp().run()
-    result = UI_TEST or TRAY_TEST
+    result = UI_TEST or TRAY_TEST or PIN_TEST
     if result is not None:
         ok = result.is_file() and json.loads(result.read_text(encoding="utf-8")).get("ok")
         logging.shutdown()

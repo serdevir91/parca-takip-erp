@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..config import Settings, get_settings
 from ..permissions import MODULE_KEYS
 from .settings import get_setting
@@ -36,7 +37,8 @@ def defaults() -> dict[str, dict[str, Any]]:
                     "web": "", "tax_office": "", "tax_no": ""},
         "commerce": {"currency": "TRY", "vat": 20.0, "payment_days": 30, "quote_days": 15,
                      "pay_methods": ["Havale/EFT", "Nakit", "Kredi kartı", "Çek", "Senet", "Mahsup"],
-                     "no_po": "SA", "no_so": "SS", "no_invoice": "FT", "no_wo": "IE", "over_receipt_pct": 0.0},
+                     "no_po": "SA", "no_so": "SS", "no_invoice": "FT", "no_wo": "IE", "over_receipt_pct": 0.0,
+                     "balance_basis": "today"},
         "production": {"unit": "Adet", "spare_pct": 10.0, "work_hours": 8.0, "week_hours": 45.0, "break_minutes": 60,
                        "annual_leave_days": 14.0},
         "security": {"session_hours": e.jwt_expire_hours, "password_min": e.password_min_length,
@@ -112,7 +114,7 @@ def _number(v: Any, label: str, low: float, high: float, whole: bool = True) -> 
         raise HTTPException(400, f"{label} sayı olmalı") from e
     if not low <= n <= high or (whole and n != int(n)):
         kind = "tam sayı" if whole else "sayı"
-        raise HTTPException(400, f"{label} {low:g} ile {high:g} arasında bir {kind} olmalı")
+        raise HTTPException(400, f"{label} {num.text(low)} ile {num.text(high)} arasında bir {kind} olmalı")
     return int(n) if whole else n
 
 
@@ -134,6 +136,12 @@ def _company(v: dict[str, Any]) -> dict[str, Any]:
             "tax_no": _text(v["tax_no"], "Vergi numarası", 40)}
 
 
+def _basis(v: Any) -> str:
+    if v not in ("today", "doc"):
+        raise HTTPException(400, "Kur esası bugünkü kur veya belge kuru olmalı")
+    return v
+
+
 def _commerce(v: dict[str, Any]) -> dict[str, Any]:
     cur = _text(v["currency"], "Para birimi", 3, required=True).upper()
     if not re.fullmatch(r"[A-Z]{3}", cur):
@@ -150,7 +158,8 @@ def _commerce(v: dict[str, Any]) -> dict[str, Any]:
             "no_po": _doc_prefix(v["no_po"], "Satın alma öneki"), "no_so": _doc_prefix(v["no_so"], "Satış öneki"),
             "no_invoice": _doc_prefix(v["no_invoice"], "Fatura öneki"),
             "no_wo": _doc_prefix(v["no_wo"], "İş emri öneki"),
-            "over_receipt_pct": _number(v["over_receipt_pct"], "Fazla teslim payı", 0, 100, whole=False)}
+            "over_receipt_pct": _number(v["over_receipt_pct"], "Fazla teslim payı", 0, 100, whole=False),
+            "balance_basis": _basis(v["balance_basis"])}
 
 
 def _production(v: dict[str, Any]) -> dict[str, Any]:

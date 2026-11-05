@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, oauth2, user_from_token
+from ..auth import current_user, session_token, user_from_token
 from ..config import get_settings
 from ..models import Photo, StockItem, User
 from ..permissions import can
@@ -128,7 +128,7 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db), user: User = Depe
     return {"ok": True}
 
 
-def _file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+def _file_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:
     return user_from_token(token, db)
 
 

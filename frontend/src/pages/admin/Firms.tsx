@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { saveRev } from "../../api/conflict";
 import { useAuth } from "../../api/auth";
 import { fmtMoney } from "../erp/common";
 import { LedgerModal, useBalances } from "../erp/commerce";
@@ -8,6 +9,7 @@ import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal } from "./shared";
 
 type Firm = {
+  rev?: number;
   id: number; name: string; kind: string; kind_label: string; contact: string; note: string; active: boolean;
   phone: string; email: string; address: string; tax_office: string; tax_no: string; lead_days: number;
 };
@@ -148,7 +150,7 @@ function FirmForm({ firm, onClose, onSaved }: { firm?: Firm; onClose: () => void
     mutationFn: () => {
       const body = { name: name.trim(), kind, contact, note, active, phone, email, address, tax_office: taxOffice, tax_no: taxNo,
         lead_days: Math.max(0, Math.round(Number(leadDays) || 0)) };
-      return firm ? api.put<Firm>(`/admin/firms/${firm.id}`, body) : api.post<Firm>("/admin/firms", body);
+      return firm ? saveRev(firm.rev, (rev) => api.put<Firm>(`/admin/firms/${firm.id}`, { ...body, rev })) : api.post<Firm>("/admin/firms", body);
     },
     onSuccess: () => {
       toast(firm ? "Firma güncellendi" : "Firma eklendi");

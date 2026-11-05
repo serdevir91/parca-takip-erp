@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..core.bomparse import (ROOT_GROUP, ROW_ASSEMBLY, ROW_FASTENER, ROW_IN_PURCHASED, ROW_PART,
                              TEMIN_HAZIR, TEMIN_IMALAT, TEMIN_NONE, BomRow as CoreRow, ParsedBom)
 from ..core.fastener import FastenerMatch
@@ -260,7 +261,7 @@ class ProjectView:
                 it["names"].append(r.file_name)
         out = sorted(items.values(), key=fastener_sort_key)
         for it in out:
-            spare = int(-(-it["total_qty"] * float(it["spare_pct"] or 0) // 100))  # ceil
+            spare = num.ceil_units(it["total_qty"] * float(it["spare_pct"] or 0) / 100)
             it["spare_qty"] = spare
             it["order_qty"] = it["total_qty"] + spare
             it["total_price"] = round(it["order_qty"] * it["unit_price"], 2) if it["unit_price"] is not None else None

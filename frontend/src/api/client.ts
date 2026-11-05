@@ -1,8 +1,10 @@
-/** Thin fetch wrapper: JWT header, JSON, Turkish error messages from FastAPI `detail`. */
+/** Thin fetch wrapper: session cookie, JSON, Turkish error messages from FastAPI `detail`. */
 import { desktop, type DesktopFileRequest } from "./desktop";
 import { mobileApp } from "./mobile";
 
-const TOKEN_KEY = "erp_token";
+const LEGACY_TOKEN_KEY = "erp_token";
+/** The server refuses unsafe requests that ride on the cookie without it (backend/app/auth.py APP_HEADER). */
+export const APP_HEADERS = { "X-Requested-With": "LabERP" };
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
@@ -10,21 +12,23 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+let signedIn = false;
+export const isSignedIn = () => signedIn;
+export function setSignedIn(on: boolean): void {
+  signedIn = on;
 }
 
-export function setToken(token: string | null): void {
+/** Versions before 1.5.10 kept the token in localStorage. It moves into the cookie once, then it is gone from there. */
+export async function adoptLegacyToken(): Promise<void> {
+  let token: string | null = null;
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    token = localStorage.getItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
   } catch {
-    /* storage unavailable */
+    return;
   }
+  if (!token) return;
+  await fetch("/api/auth/session", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined);
 }
 
 let onUnauthorized: () => void = () => {};
@@ -44,8 +48,7 @@ function detailText(body: unknown, fallback: string): string {
 
 export async function request<T = unknown>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  headers.set("X-Requested-With", APP_HEADERS["X-Requested-With"]);
   let payload: BodyInit | undefined;
   if (body instanceof FormData || body instanceof URLSearchParams) payload = body;
   else if (body !== undefined) {
@@ -76,8 +79,7 @@ export function upload<T = unknown>(path: string, form: FormData, onProgress?: (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api${path}`);
-    const token = getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("X-Requested-With", APP_HEADERS["X-Requested-With"]);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
       let data: unknown = xhr.responseText;
@@ -95,13 +97,17 @@ export function upload<T = unknown>(path: string, form: FormData, onProgress?: (
   });
 }
 
-/** Download a protected file (Excel export, drawing) using the JWT and save it. */
+/** The native shells fetch files outside the web view, where the cookie is out of reach: each gets a short ticket. */
+export async function fileTicket(path: string): Promise<string> {
+  return (await api.post<{ token: string }>("/auth/file-ticket", { path })).token;
+}
+
+/** Download a protected file (Excel export, drawing) and save it. */
 export async function download(path: string, fallbackName: string): Promise<void> {
-  const token = getToken();
-  if (desktop()) return desktopFile({ path, token, filename: fallbackName, action: "save" });
+  if (desktop()) return desktopFile({ path, filename: fallbackName, action: "save" });
   const app = mobileApp();
-  if (app) return app.download(`${location.origin}/api${path}`, fallbackName, token ?? "");
-  const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (app) return app.download(`${location.origin}/api${path}`, fallbackName, await fileTicket(path));
+  const res = await fetch(`/api${path}`);
   if (!res.ok) {
     let body: unknown;
     try {
@@ -124,16 +130,15 @@ export async function download(path: string, fallbackName: string): Promise<void
 
 /** Fetch a protected binary (PDF, thumbnail) as an object URL. */
 export async function blobUrl(path: string): Promise<string> {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(`/api${path}`);
   if (!res.ok) throw new ApiError(res.status, `Dosya alınamadı (${res.status})`);
   return URL.createObjectURL(await res.blob());
 }
 
 /** Desktop app: the Python side fetches the file and saves it ("Farklı kaydet") or opens it. */
-export async function desktopFile(req: DesktopFileRequest): Promise<void> {
+export async function desktopFile(req: Omit<DesktopFileRequest, "token">): Promise<void> {
   const d = desktop();
   if (!d) throw new ApiError(0, "Masaüstü uygulaması bulunamadı");
-  const r = await d.file_request(req);
+  const r = await d.file_request({ ...req, token: await fileTicket(req.path) });
   if (!r.ok && !r.cancelled) throw new ApiError(r.status ?? 0, r.error || "İndirme başarısız");
 }

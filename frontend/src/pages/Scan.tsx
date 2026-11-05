@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import jsQR from "jsqr";
 import { Camera, Image as ImageIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { ApiError, api } from "../api/client";
 import { useAuth } from "../api/auth";
 import { Page } from "../components/Layout";
@@ -90,7 +91,7 @@ function CameraReader({ onRead, onClose }: { onRead: (text: string) => void; onC
 }
 
 export default function Scan() {
-  const { can } = useAuth();
+  const { can, isAdmin } = useAuth();
   const toast = useToast();
   const [text, setText] = useState("");
   const [payload, setPayload] = useState("");
@@ -162,7 +163,14 @@ export default function Scan() {
                 onChange={(e) => { void photo(e.target.files?.[0]); e.target.value = ""; }} />
             </label>
           </div>
-          {!liveCamera && <p className="muted" style={{ margin: "8px 0 0" }}>Canlı kamera yalnızca güvenli (HTTPS) bağlantıda açılır; burada QR kodun fotoğrafını çekin.</p>}
+          {!liveCamera && (
+            <div className="scan-note">
+              <b>Canlı kamera bu bağlantıda kapalı.</b> Tarayıcılar kamerayı yalnızca şifreli (HTTPS) bağlantıda açar; bu ekran düz HTTP ile açıldı. Fotoğraf ile okutma burada da çalışır.
+              {isAdmin
+                ? <> Canlı kamera için <Link to="/admin?tab=https">Yönetim › HTTPS</Link> sekmesinden HTTPS'i açın, sonra uygulamaya https:// adresiyle bağlanın.</>
+                : <> Canlı kamera için yöneticinizden Yönetim › HTTPS sekmesinden HTTPS'i açmasını isteyin.</>}
+            </div>
+          )}
         </div>
         {camera && <CameraReader onRead={read} onClose={() => setCamera(false)} />}
         {payload && res.isLoading && <Loading error={null} loading />}

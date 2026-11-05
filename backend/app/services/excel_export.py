@@ -478,7 +478,7 @@ def _write_summary(o: Worksheet, view: ProjectView, title: str, parts_last: int,
     for col, w in zip("ABCDEFGHIJKLMNOP", [30] + [11] * 15):
         o.column_dimensions[col].width = w
     ver = view.version
-    approved = ver.approved_at.strftime("%d.%m.%Y") if ver is not None and ver.approved_at else "-"
+    approved = ver.approved_at.astimezone().strftime("%d.%m.%Y") if ver is not None and ver.approved_at else "-"
     _title(o, title, f"{SHEET_PARTS}" + (f" ve {SHEET_FX_SUM}" if with_fx else "")
            + f"'ndeki seçimlere ve Temin Şekli'ne göre otomatik güncellenir. Güncel BOM: "
            f"{ver.filename if ver else '-'} (onay {approved}).", size=16)

@@ -434,10 +434,10 @@ def test_sales_partial_invoices_keep_discount_and_add_up(client, h):
     s = so(client, h, [L("A", 3, 100), L("B", 1, 50)], discount_pct=10, tax_rate=0)
     ok(deliver(client, h, s, 1, 1))
     a = ok(so_invoice(client, h, s), 201)
-    assert a["subtotal"] == 135
+    assert (a["subtotal"], a["discount"], a["total"]) == (150, 15, 135)
     ok(deliver(client, h, s, 2, 0))
     b = ok(so_invoice(client, h, s), 201)
-    assert a["subtotal"] + b["subtotal"] == s["total"] == 315
+    assert a["total"] + b["total"] == s["total"] == 315
     assert so_invoice(client, h, s).status_code == 400
 
 

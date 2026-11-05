@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { curSign } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, useProject } from "../components/Layout";
@@ -148,7 +149,7 @@ function WoForm({ wo, projectId, onClose }: { wo?: WorkOrder; projectId: number 
     mutationFn: () => {
       const body = { description: desc, qty: numOrNull(qty) ?? 0, firm_name: maker.trim(), start_date: start || null,
         due_date: due || null, unit_cost: numOrNull(cost), note };
-      return wo ? api.put<WorkOrder>(`/work-orders/${wo.id}`, body)
+      return wo ? saveRev(wo.rev, (rev) => api.put<WorkOrder>(`/work-orders/${wo.id}`, { ...body, rev }))
         : api.post<WorkOrder>("/work-orders", { ...body, project_id: project, part_no: partNo.trim() });
     },
     onSuccess: (w) => { toast(wo ? "İş emri güncellendi" : `${w.no} oluşturuldu`); refresh(); onClose(); },

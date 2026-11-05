@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { curSign, sys } from "../../api/system";
 import type { Project } from "../../types";
 import { Field, Modal } from "../admin/shared";
+import { money, qty } from "../../api/num";
 
 // ---------- types (backend/app/services/erp.py) ----------
 export type ItemKind = "part" | "fastener" | "other";
@@ -21,10 +22,10 @@ export type PurchaseOrder = {
   status: string; status_label: string; order_date: string | null; due_date: string | null; overdue: boolean;
   currency: string; rate: number | null; base_total: number | null; note: string; created_at: string | null;
   created_by: string; line_count: number; total: number; received_value: number; received_pct: number;
-  missing_price: number; lines?: PoLine[]; receipts?: Receipt[];
+  missing_price: number; lines?: PoLine[]; receipts?: Receipt[]; rev?: number; needs_rate?: boolean;
 };
 export type WorkOrder = {
-  id: number; no: string; project_id: number | null; project_name: string | null; part_no: string; description: string;
+  rev?: number; id: number; no: string; project_id: number | null; project_name: string | null; part_no: string; description: string;
   qty: number; done_qty: number; remaining: number; firm_name: string; subcontract: boolean; status: string;
   status_label: string; start_date: string | null; due_date: string | null; overdue: boolean; unit_cost: number | null;
   total_cost: number | null; note: string; created_at: string | null; created_by: string; ops_done: number; ops_total: number;
@@ -40,6 +41,7 @@ export type WoOp = {
   done_by: string; done_at: string | null; note: string;
 };
 export type StockItem = {
+  rev?: number;
   id: number; code: string; name: string; kind: ItemKind | string; kind_label: string; unit: string; qty: number;
   min_qty: number; unit_cost: number | null; value: number | null; low: boolean; location: string; note: string;
   updated_at: string | null; reorder_qty: number; preferred_firm_id: number | null;
@@ -72,15 +74,19 @@ export const WO_COLORS: Record<string, string> = {
 export const OP_COLORS: Record<string, string> = { pending: "E7E6E6", in_progress: "FFEB9C", done: "C6EFCE" };
 
 export const fmtQty = (n: number | null | undefined) =>
-  n == null ? "" : n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+  n == null ? "" : qty(n).toLocaleString("tr-TR", { maximumFractionDigits: 3 });
 export const fmtMoney = (n: number | null | undefined, cur = sys.currency) =>
-  n == null ? "" : `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curSign(cur)}`;
+  n == null ? "" : `${money(n).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curSign(cur)}`;
 export const fmtDay = (s: string | null | undefined) => {
   if (!s) return "";
   const d = new Date(`${s.slice(0, 10)}T00:00:00`);
   return isNaN(d.getTime()) ? s : d.toLocaleDateString("tr-TR");
 };
-export const today = () => new Date().toISOString().slice(0, 10);
+/** The local calendar day; toISOString would still say yesterday until 03:00 in Türkiye. */
+export const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 export const addDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 export const trIncludes = (hay: string, needle: string) =>
   hay.toLocaleLowerCase("tr-TR").includes(needle.trim().toLocaleLowerCase("tr-TR"));

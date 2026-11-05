@@ -106,7 +106,7 @@ export default function PartDetail({ pid, partNo, onClose }: { pid: number; part
                   ["Parça adı", p.part_name], ["Dosya adı", p.file_name], ["Tip", p.row_type], ["Seviye", p.levels?.join(", ") || p.level],
                   ["Ana grup", p.main_groups?.join(", ") || p.main_group], ["Üst montaj", p.parent_part_no],
                   ["Adet", fmtNum(p.qty)], ["Toplam adet", fmtNum(p.total_qty)], ["Malzeme", p.material],
-                  ["Ağırlık", fmtNum(p.weight)], ["Kaplama", p.coating], ["Rev", p.rev],
+                  ["Ağırlık (g)", fmtNum(p.weight)], ["Kaplama", p.coating], ["Rev", p.rev],
                   ["Temin şekli", p.procurement ?? p.procurement_override],
                   ["Temin (BOM)", p.procurement_csv], ["İlerleme", p.progress], ["Üretici", p.manufacturer],
                   ["Malzeme durumu", p.material_status], ["Durum notu", p.t35_note], ["Not", p.note],

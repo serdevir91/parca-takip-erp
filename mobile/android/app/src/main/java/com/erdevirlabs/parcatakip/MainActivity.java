@@ -23,6 +23,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
@@ -32,6 +33,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -41,8 +43,10 @@ import android.window.OnBackInvokedDispatcher;
 
 import androidx.core.content.FileProvider;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -98,6 +102,13 @@ public class MainActivity extends Activity {
         else if (!server().isEmpty()) web.loadUrl(server() + "/");
         else web.loadUrl(SETUP);
         ui.postDelayed(() -> checkUpdate(false), 4000);
+    }
+
+    /** The session cookie lives in the WebView's store, which only reaches the disk on its own schedule. */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        CookieManager.getInstance().flush();
     }
 
     @Override
@@ -189,6 +200,12 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                if (!downgrade(req.getUrl().toString())) return null;
+                return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", null, new ByteArrayInputStream(new byte[0]));
+            }
+
+            @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 pageOrigin = url.startsWith(SETUP) ? "setup" : originOf(url);
             }
@@ -268,9 +285,28 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /**
+     * True for a plain http address of a server known to be on https. The manifest cannot switch cleartext off per
+     * server: a LAN server starts on plain HTTP and its address is only known at run time, so the app refuses here.
+     * Forgetting the server is the way back to http, for a server that really turned HTTPS off.
+     */
+    private boolean downgrade(String url) {
+        Uri u = Uri.parse(url);
+        String host = u.getHost();
+        if (!"http".equalsIgnoreCase(u.getScheme()) || host == null) return false;
+        Uri saved = Uri.parse(server());
+        if ("https".equalsIgnoreCase(saved.getScheme()) && host.equalsIgnoreCase(saved.getHost())) return true;
+        String pin = "pin:https://" + host;
+        for (String key : prefs.getAll().keySet()) {
+            if (key.equals(pin) || key.startsWith(pin + ":")) return true;
+        }
+        return false;
+    }
+
     /** A remembered server keeps its pin; everything else goes by the system's trust store. */
     private HttpURLConnection open(String url) throws Exception {
-        HttpURLConnection c = open(url);
+        if (downgrade(url)) throw new IOException("Bu sunucu HTTPS kullanıyor, şifresiz bağlantı kurulmadı");
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         String pin = prefs.getString("pin:" + originOf(url), null);
         if (pin != null) Pin.apply(c, pin);
         return c;
@@ -743,6 +779,10 @@ public class MainActivity extends Activity {
             if (!setupPage()) return;
             String base = normalize(url);
             if (base.isEmpty()) return;
+            if (downgrade(base)) {
+                ui.post(() -> showSetup("error=" + enc("Bu sunucu HTTPS kullanıyor. https:// adresiyle bağlanın. Sunucuda HTTPS kapatıldıysa önce onu listeden silin")));
+                return;
+            }
             try {
                 JSONArray old = new JSONArray(prefs.getString("recent", "[]"));
                 JSONArray recent = new JSONArray().put(base);
@@ -766,8 +806,13 @@ public class MainActivity extends Activity {
                 JSONArray old = new JSONArray(prefs.getString("recent", "[]"));
                 JSONArray recent = new JSONArray();
                 for (int i = 0; i < old.length(); i++) if (!old.optString(i).equals(url)) recent.put(old.optString(i));
-                prefs.edit().putString("recent", recent.toString()).remove("pin:" + url).apply();
-                ui.post(() -> web.clearSslPreferences());
+                android.content.SharedPreferences.Editor edit = prefs.edit().putString("recent", recent.toString()).remove("pin:" + url);
+                if (url.equals(server())) edit.remove("server");
+                edit.apply();
+                ui.post(() -> {
+                    web.clearSslPreferences();
+                    CookieManager.getInstance().removeAllCookies(null);   // the session of that server goes with it
+                });
             } catch (Exception ignored) {
             }
         }

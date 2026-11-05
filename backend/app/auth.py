@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,17 @@ from .models import ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER, User
 from .services.system import apply_runtime
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+# The web session lives in an httpOnly cookie, out of reach of page scripts. A browser never lets plain http replace a
+# Secure cookie, so http and https sessions have their own names: turning HTTPS off must not lock anyone out.
+COOKIE_HTTP = "erp_session"
+COOKIE_HTTPS = "erp_session_s"
+# Unsafe requests must carry this header when they ride on the cookie. Another site cannot add it without a CORS
+# grant, which this server never gives, and SameSite alone does not help: another port of the same host is same-site.
+APP_HEADER = "x-requested-with"
+APP_HEADER_VALUE = "LabERP"
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+TICKET_SECONDS = 120
 
 # Roles allowed to change tracking data (progress, notes, procurement)
 EDIT_ROLES = (ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER)
@@ -47,10 +58,18 @@ def create_token(user: User) -> str:
                       algorithm="HS256")
 
 
-def _decode(token: str) -> tuple[int, int]:
+def create_ticket(user: User, path: str) -> str:
+    """A short token good for one API path. The native shells fetch files outside the web view, where the httpOnly
+    cookie is out of their reach, and they get one of these per download."""
+    exp = datetime.now(timezone.utc) + timedelta(seconds=TICKET_SECONDS)
+    return jwt.encode({"sub": str(user.id), "tv": user.token_version or 0, "exp": exp, "p": path},
+                      get_settings().jwt_secret, algorithm="HS256")
+
+
+def _decode(token: str) -> tuple[int, int, str | None]:
     try:
         payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-        return int(payload["sub"]), int(payload.get("tv", 0))
+        return int(payload["sub"]), int(payload.get("tv", 0)), payload.get("p")
     except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz veya süresi doldu")
 
@@ -59,7 +78,7 @@ def user_from_token(token: str | None, db: Session) -> User:
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Giriş yapılmadı")
     apply_runtime(db)
-    uid, tv = _decode(token)
+    uid, tv, _ = _decode(token)
     user = db.get(User, uid)
     if user is None or not user.active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Kullanıcı bulunamadı veya pasif")
@@ -68,7 +87,37 @@ def user_from_token(token: str | None, db: Session) -> User:
     return user
 
 
-def current_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+def is_https(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return (forwarded or request.url.scheme) == "https"
+
+
+def set_session(response: Response, request: Request, token: str) -> None:
+    secure = is_https(request)
+    response.set_cookie(COOKIE_HTTPS if secure else COOKIE_HTTP, token, max_age=get_settings().jwt_expire_hours * 3600,
+                        path="/api", httponly=True, secure=secure, samesite="strict")
+
+
+def clear_session(response: Response, request: Request) -> None:
+    response.delete_cookie(COOKIE_HTTP, path="/api", httponly=True, samesite="strict")
+    if is_https(request):
+        response.delete_cookie(COOKIE_HTTPS, path="/api", httponly=True, secure=True, samesite="strict")
+
+
+def session_token(request: Request, bearer: str | None = Depends(oauth2)) -> str | None:
+    """The token of this request: a Bearer header (scripts, native shells) or the session cookie (web views)."""
+    if bearer:
+        bound = _decode(bearer)[2]
+        if bound is not None and bound != request.url.path:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Bu bilet başka bir dosya için")
+        return bearer
+    token = request.cookies.get(COOKIE_HTTPS) or request.cookies.get(COOKIE_HTTP)
+    if token and request.method not in SAFE_METHODS and request.headers.get(APP_HEADER) != APP_HEADER_VALUE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "İstek reddedildi")
+    return token
+
+
+def current_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:
     return user_from_token(token, db)
 
 

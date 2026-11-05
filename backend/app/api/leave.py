@@ -12,8 +12,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..config import get_settings
 from ..core.attendance import working_days
+from ..services.holidays import off_days
 from ..models import Employee, LeaveRequest, User, utcnow
 from ..permissions import require
 from ..services import audit
@@ -57,9 +59,10 @@ def attendance_on() -> None:
         raise HTTPException(403, "Mesai takibi kapalı")
 
 
-def _year_days(r: LeaveRequest, year: int) -> int:
-    """Working days of a request inside one year; leave across New Year counts on both years, each for its part."""
-    return working_days(max(r.start_date, date(year, 1, 1)), min(r.end_date, date(year, 12, 31)))
+def _year_days(r: LeaveRequest, year: int, off: dict[date, float]) -> float:
+    """Working days of a request inside one year; leave across New Year counts on both years, each for its part.
+    `off` are the public holidays of the year, which leave does not use up."""
+    return working_days(max(r.start_date, date(year, 1, 1)), min(r.end_date, date(year, 12, 31)), off)
 
 
 def _entitled(db: Session, e: Employee) -> float:
@@ -74,8 +77,9 @@ def balance(db: Session, e: Employee, year: int) -> dict[str, Any]:
                                    LeaveRequest.status.in_(LIVE), LeaveRequest.start_date <= date(year, 12, 31),
                                    LeaveRequest.end_date >= date(year, 1, 1))
     held = {"pending": 0.0, "approved": 0.0}
+    off = off_days(db, date(year, 1, 1), date(year, 12, 31))
     for r in db.scalars(q):
-        held[r.status] += _year_days(r, year)
+        held[r.status] += _year_days(r, year, off)
     entitled = _entitled(db, e)
     return {"year": year, "entitled": entitled, "used": held["approved"], "pending": held["pending"],
             "remaining": entitled - held["approved"] - held["pending"]}
@@ -86,7 +90,7 @@ def _check_range(db: Session, e: Employee, body: LeaveIn) -> int:
         raise HTTPException(400, "Bitiş tarihi başlangıçtan önce olamaz")
     if (body.end_date - body.start_date).days > MAX_SPAN_DAYS:
         raise HTTPException(400, "Bir izin kaydı bir yıldan uzun olamaz; bölerek girin")
-    days = working_days(body.start_date, body.end_date)
+    days = working_days(body.start_date, body.end_date, off_days(db, body.start_date, body.end_date))
     if days == 0:
         raise HTTPException(400, "Seçilen aralıkta iş günü yok")
     clash = db.scalar(select(LeaveRequest).where(LeaveRequest.employee_id == e.id, LeaveRequest.status.in_(LIVE),
@@ -103,9 +107,10 @@ def _check_balance(db: Session, e: Employee, r: LeaveRequest) -> None:
         return
     for year in range(r.start_date.year, r.end_date.year + 1):
         b = balance(db, e, year)
-        free, need = b["entitled"] - b["used"], _year_days(r, year)
+        free = b["entitled"] - b["used"]
+        need = _year_days(r, year, off_days(db, date(year, 1, 1), date(year, 12, 31)))
         if need > free:
-            raise HTTPException(409, f"{year} yıllık izin bakiyesi yetersiz: kalan {free:g} gün, istenen {need:g} gün")
+            raise HTTPException(409, f"{year} yıllık izin bakiyesi yetersiz: kalan {num.text(free)} gün, istenen {num.text(need)} gün")
 
 
 def _out(r: LeaveRequest, name: str = "") -> dict[str, Any]:
@@ -118,7 +123,7 @@ def _out(r: LeaveRequest, name: str = "") -> dict[str, Any]:
 
 
 def _text(r: LeaveRequest, name: str) -> str:
-    return f"{name}: {KINDS.get(r.kind, r.kind)} {r.start_date:%d.%m.%Y} - {r.end_date:%d.%m.%Y} ({r.days:g} gün)"
+    return f"{name}: {KINDS.get(r.kind, r.kind)} {r.start_date:%d.%m.%Y} - {r.end_date:%d.%m.%Y} ({num.text(r.days)} gün)"
 
 
 def _new(db: Session, me: User, e: Employee, body: LeaveIn, status: str) -> LeaveRequest:
@@ -157,10 +162,11 @@ def leave_map(db: Session, first: date, last: date, employee_id: int | None = No
     if employee_id is not None:
         q = q.where(LeaveRequest.employee_id == employee_id)
     out: dict[int, dict[date, str]] = defaultdict(dict)
+    off = off_days(db, first, last)
     for r in db.scalars(q):
         d, stop = max(r.start_date, first), min(r.end_date, last)
         while d <= stop:
-            if d.weekday() < 5:
+            if d.weekday() < 5 and off.get(d, 0.0) < 1:
                 out[r.employee_id][d] = r.kind
             d += timedelta(days=1)
     return out

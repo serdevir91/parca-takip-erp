@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..models import (AuditLog, BomVersion, Invoice, Project, PurchaseOrder, SalesOrder, StockItem, TimeEntry, User,
                       WorkOrder)
 from ..permissions import can
@@ -37,7 +38,7 @@ def _count(db: Session, q: Any) -> int:
 
 def _sum(rows: Iterable[dict[str, Any]], key: str = "base_total") -> float:
     """In the base currency; a currency with no rate yet cannot be added in, as on the finance screen."""
-    return round(sum(r[key] or 0 for r in rows), 2)
+    return num.money(sum(r[key] or 0 for r in rows))
 
 
 @router.get("/overview")
@@ -64,8 +65,9 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
         low = list(db.scalars(select(StockItem).where(StockItem.min_qty > 0, StockItem.qty < StockItem.min_qty)
                               .order_by(StockItem.code)))
         out["stock"] = {"items": _count(db, select(StockItem.id)), "low": len(low),
-                        "value": round(db.scalar(select(func.sum(StockItem.qty * StockItem.unit_cost))
-                                                 .where(StockItem.qty > 0)) or 0.0, 2),
+                        "value": num.money(sum(num.money(q * c) for q, c in db.execute(
+                            select(StockItem.qty, StockItem.unit_cost)
+                            .where(StockItem.qty > 0, StockItem.unit_cost.is_not(None))))),
                         "low_items": [erp.stock_out(i) for i in low[:6]]}
     if can(me, "sales"):
         sos = list(db.scalars(select(SalesOrder).where(SalesOrder.status.in_(commerce.SO_OPEN))))
@@ -80,7 +82,8 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
         bal = commerce.balances(db)
         invs = list(db.scalars(select(Invoice).where(Invoice.status == "issued")))
         paid = commerce.paid_by_invoice(db, [i.id for i in invs])
-        due = [commerce.inv_out(i, paid.get(i.id, 0.0), False) for i in invs]
+        credited = commerce.credited_by_invoice(db, [i.id for i in invs])
+        due = [commerce.inv_out(i, paid.get(i.id, 0.0), False, credited=credited.get(i.id, 0.0)) for i in invs]
         due = [r for r in due if r["remaining"] > 0 and r["due_date"] and r["due_date"] <= (today + timedelta(days=7)).isoformat()]
         out["finance"] = {"receivable": _sum(bal, "base_receivable"), "payable": _sum(bal, "base_payable"),
                           "overdue_receivable": _sum(bal, "base_overdue_receivable"),
@@ -89,12 +92,12 @@ def overview(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dic
     if can(me, "hr"):
         since = today.replace(day=1)
         hours = db.scalar(select(func.sum(TimeEntry.hours)).where(TimeEntry.work_date >= since)) or 0.0
-        out["hr"] = {"month_hours": round(hours, 2)}
+        out["hr"] = {"month_hours": num.money(hours)}
     # last 30 days of activity, per day, for the trend chart; recent entries for the feed
     since = today - timedelta(days=29)
     per_day: dict[str, int] = defaultdict(int)
     for ts in db.scalars(select(AuditLog.ts).where(AuditLog.ts >= since)):
-        per_day[ts.date().isoformat()] += 1
+        per_day[ts.astimezone().date().isoformat()] += 1
     out["activity"] = [{"date": (since + timedelta(days=i)).isoformat(),
                         "count": per_day[(since + timedelta(days=i)).isoformat()]} for i in range(30)]
     names = dict(db.execute(select(Project.id, Project.name)).all())

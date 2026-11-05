@@ -138,7 +138,7 @@ function LeaveAsk({ onClose }: { onClose: () => void }) {
           <Field label="Bitiş"><input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
         <Field label="Not"><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
-        <p className="muted">Pazartesi ile cuma arasındaki günler sayılır. Yalnızca yıllık izin bakiyeden düşer.</p>
+        <p className="muted">Pazartesi ile cuma arasındaki günler sayılır, resmi tatiller sayılmaz. Yalnızca yıllık izin bakiyeden düşer.</p>
       </div>
     </Modal>
   );

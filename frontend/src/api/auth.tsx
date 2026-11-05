@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { setSys, type SystemDefaults } from "./system";
-import { api, getToken, setToken, setUnauthorizedHandler } from "./client";
+import { adoptLegacyToken, api, isSignedIn, setSignedIn, setUnauthorizedHandler } from "./client";
 import { loadPrefs } from "./prefs";
 
 export type Role = "admin" | "designer" | "planner" | "viewer" | string;
@@ -50,35 +50,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
-  const logout = useCallback(() => {
-    setToken(null);
+  const forget = useCallback(() => {
+    setSignedIn(false);
     setUser(null);
   }, []);
 
+  const logout = useCallback(() => {
+    void api.post("/auth/logout").catch(() => undefined);
+    forget();
+  }, [forget]);
+
   useEffect(() => {
-    setUnauthorizedHandler(logout);
-    if (!getToken()) {
-      setReady(true);
-      return;
-    }
-    api
-      .get<User>("/auth/me")
+    setUnauthorizedHandler(forget);
+    // The cookie cannot be read from here, so only the server can say whether there is a session.
+    adoptLegacyToken()
+      .then(() => api.get<User>("/auth/me"))
       .then(async (u) => {
+        setSignedIn(true);
         await loadPrefs();
         receive(u);
       })
-      .catch(() => setToken(null))
+      .catch(() => setSignedIn(false))
       .finally(() => setReady(true));
-  }, [logout, receive]);
+  }, [forget, receive]);
 
   const reloadUser = useCallback(() => {
-    if (getToken()) api.get<User>("/auth/me").then(receive).catch(() => undefined);
+    if (isSignedIn()) api.get<User>("/auth/me").then(receive).catch(() => undefined);
   }, [receive]);
 
   const login = useCallback(async (username: string, password: string) => {
     const form = new URLSearchParams({ username, password });
-    const r = await api.post<{ access_token: string; user: User }>("/auth/login", form);
-    setToken(r.access_token);
+    const r = await api.post<{ user: User }>("/auth/login", form);
+    setSignedIn(true);
     await loadPrefs();
     receive(r.user);
   }, [receive]);

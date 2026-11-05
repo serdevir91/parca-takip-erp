@@ -59,7 +59,7 @@ def first_day(*days: date | datetime | None) -> date:
     """The first of the given dates that is set (document date, then creation date), else today."""
     for d in days:
         if isinstance(d, datetime):
-            return d.date()
+            return (d.astimezone() if d.tzinfo else d).date()
         if d is not None:
             return d
     return date.today()

@@ -12,7 +12,7 @@ import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
 import { DesktopMenu } from "./DesktopMenu";
 import Profile from "./Profile";
-import Notifications from "./Notifications";
+import Notifications, { AdminWarnings } from "./Notifications";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
 import type { Project } from "../types";
 import type { ChatState } from "../pages/Chat";
@@ -279,6 +279,7 @@ export default function Layout() {
             <button className="btn sm" onClick={() => setProfile(true)}>Şifreyi değiştir</button>
           </div>
         )}
+        {user?.role === "admin" && <AdminWarnings />}
         <Outlet />
         {profile && <Profile onClose={() => setProfile(false)} />}
       </div>

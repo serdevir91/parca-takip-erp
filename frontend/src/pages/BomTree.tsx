@@ -502,7 +502,7 @@ export default function BomTree() {
               <label>Malzeme
                 <input value={node.material} maxLength={200} onChange={(e) => set("material", e.target.value)} />
               </label>
-              <label>Ağırlık (kg)
+              <label>Ağırlık (g)
                 <input type="number" min={0} step="any" value={node.weight ?? ""}
                   onChange={(e) => set("weight", e.target.value === "" ? null : Math.max(0, Number(e.target.value)))} />
               </label>

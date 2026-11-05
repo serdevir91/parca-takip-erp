@@ -1,4 +1,5 @@
-import { useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Settings } from "lucide-react";
@@ -11,6 +12,7 @@ import T35ConfigTab from "./admin/T35Config";
 import AuditLogTab from "./admin/AuditLog";
 import BackupsTab from "./admin/Backups";
 import HttpsTab from "./admin/Https";
+import HolidaysTab from "./admin/Holidays";
 import SystemSettingsTab from "./admin/SystemSettings";
 import MailSettingsTab from "./admin/MailSettings";
 
@@ -24,6 +26,7 @@ const TABS: { id: string; label: string; C: ComponentType }[] = [
   { id: "audit", label: "Denetim Kaydı", C: AuditLogTab },
   { id: "backups", label: "Yedekler", C: BackupsTab },
   { id: "https", label: "HTTPS", C: HttpsTab },
+  { id: "holidays", label: "Resmi Tatiller", C: HolidaysTab },
 ];
 const TAB_KEY = "admin.tab";
 
@@ -38,7 +41,12 @@ function readTab(): string {
 }
 
 export default function Admin() {
-  const [tab, setTab] = useState(readTab);
+  const [query] = useSearchParams();
+  const linked = query.get("tab");
+  const [tab, setTab] = useState(() => (TABS.some((t) => t.id === linked) ? linked! : readTab()));
+  useEffect(() => {
+    if (linked && TABS.some((t) => t.id === linked)) setTab(linked);
+  }, [linked]);
   const pick = (id: string) => {
     setTab(id);
     try {

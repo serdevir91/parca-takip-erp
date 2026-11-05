@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, api } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { curSign, sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
@@ -137,7 +138,7 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
         reorder_qty: numOrNull(reorderQty) ?? 0, preferred_firm_id: firm };
       // Only what changed: fields someone else edited meanwhile keep their value
       const changed = item && Object.fromEntries(Object.entries(body).filter(([k, v]) => v !== item[k as keyof typeof body]));
-      return item ? api.put<StockItem>(`/stock/${item.id}`, changed)
+      return item ? saveRev(item.rev, (rev) => api.put<StockItem>(`/stock/${item.id}`, { ...changed, rev }))
         : api.post<StockItem>("/stock", { ...body, code: code.trim(), qty: numOrNull(opening) ?? 0 });
     },
     onSuccess: () => { toast(item ? "Stok kartı güncellendi" : "Stok kartı açıldı"); refresh(); onClose(); },

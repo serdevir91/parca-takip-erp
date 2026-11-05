@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { LogIn, LogOut, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { useAuth } from "../api/auth";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
 import { Page, PageHeader } from "../components/Layout";
@@ -13,6 +14,7 @@ import { FixQueue, LeaveQueue, usePeople } from "./AttendanceQueues";
 import { MyFixes, MyHours, MyLeaves, fmtH, useAttRefresh as useRefresh } from "./SelfService";
 
 type Shift = {
+  rev?: number;
   id: number; employee_id: number; employee_name: string; work_date: string; start: string; end: string | null;
   next_day: boolean; break_minutes: number; hours: number; overtime: number; status: "open" | "forgot" | "done";
   note: string; corrected_by: string;
@@ -262,7 +264,7 @@ function ShiftModal({ shift, onClose }: { shift: Shift | null; onClose: () => vo
   const save = useMutation({
     mutationFn: () => {
       const body = { work_date: day, start, end: end || null, break_minutes: numOrNull(pause), note };
-      return shift ? api.put(`/attendance/${shift.id}`, body) : api.post("/attendance", { ...body, employee_id: emp });
+      return shift ? saveRev(shift.rev, (rev) => api.put(`/attendance/${shift.id}`, { ...body, rev })) : api.post("/attendance", { ...body, employee_id: emp });
     },
     onSuccess: () => done("Mesai kaydedildi"),
     onError: (e) => toast(errText(e), true),

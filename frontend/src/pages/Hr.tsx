@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { curSign, sys } from "../api/system";
 import { useAuth } from "../api/auth";
 import { Page, PageHeader } from "../components/Layout";
@@ -147,7 +148,7 @@ function TimeForm({ employees, entry, onClose }: { employees: Employee[]; entry?
   const save = useMutation({
     mutationFn: () => {
       const body = { work_date: date, hours: numOrNull(hours), project_id: project, work_order_id: wo, note };
-      return entry ? api.put<TimeEntry>(`/time-entries/${entry.id}`, body) : api.post<TimeEntry>("/time-entries", { ...body, employee_id: emp });
+      return entry ? saveRev(entry.rev, (rev) => api.put<TimeEntry>(`/time-entries/${entry.id}`, { ...body, rev })) : api.post<TimeEntry>("/time-entries", { ...body, employee_id: emp });
     },
     onSuccess: (t) => {
       toast(`${t.employee_name}: ${fmtH(t.hours)} kaydedildi`);
@@ -254,7 +255,7 @@ function EmployeeForm({ emp, onClose }: { emp?: Employee; onClose: () => void })
       const body = { name: f.name.trim(), title: f.title, department: f.department, phone: f.phone, email: f.email,
         hourly_cost: numOrNull(f.rate), start_date: f.start || null, note: f.note, user_id: f.user ? Number(f.user) : null,
         annual_leave_days: numOrNull(f.leave) };
-      return emp ? api.put<Employee>(`/employees/${emp.id}`, body) : api.post<Employee>("/employees", body);
+      return emp ? saveRev(emp.rev, (rev) => api.put<Employee>(`/employees/${emp.id}`, { ...body, rev })) : api.post<Employee>("/employees", body);
     },
     onSuccess: () => { toast("Personel kaydedildi"); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),

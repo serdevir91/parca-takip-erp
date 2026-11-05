@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, ProjectTemplate, PurchaseOrder,
                       SalesOrder, StockMove, TimeEntry, Tracking, User, WorkOrder, utcnow)
-from ..services import audit
+from ..services import audit, conflict
 from ..services import backup as backup_svc
 from ..permissions import can, require
 from .deps import admin, any_user, get_db, project_or_404
@@ -39,7 +39,7 @@ def project_out(db: Session, p: Project) -> dict[str, Any]:
                         .where(BomVersion.project_id == p.id, BomVersion.status == "pending")) or 0
     parts = db.scalar(select(func.count()).select_from(Tracking)
                       .where(Tracking.project_id == p.id, Tracking.archived.is_(False))) or 0
-    return {"id": p.id, "name": p.name, "root_part_no": p.root_part_no, "description": p.description,
+    return {"id": p.id, "rev": p.edit_rev, "name": p.name, "root_part_no": p.root_part_no, "description": p.description,
             "archived": p.archived, "created_at": p.created_at.isoformat() if p.created_at else None,
             "current_version_id": p.current_version_id, "current_version": version_brief(cur),
             "pending_versions": pending, "tracked_parts": parts}
@@ -67,6 +67,7 @@ class ProjectPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     root_part_no: str | None = None
     description: str | None = None
+    rev: int | None = None
 
 
 @router.get("")
@@ -115,7 +116,8 @@ def get_project(pid: int, db: Session = Depends(get_db), me: User = Depends(any_
 def update_project(pid: int, body: ProjectPatch, db: Session = Depends(get_db),
                    user: User = Depends(projects_edit)) -> dict:
     p = project_or_404(db, pid)
-    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    conflict.claim(db, p, body.rev, user)
+    changes = body.model_dump(exclude_unset=True, exclude_none=True, exclude={"rev"})
     if "name" in changes:
         changes["name"] = changes["name"].strip()
         if not changes["name"]:

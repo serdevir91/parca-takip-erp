@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { docTotals, money } from "../../api/num";
 import { sys } from "../../api/system";
 import { Loading, Modal } from "../admin/shared";
 import { fmtDay, fmtMoney, fmtQty, fmtRate, numOrNull } from "./common";
@@ -20,44 +21,49 @@ export type SalesOrder = Totals & {
   status: string; status_label: string; order_date: string | null; valid_until: string | null; due_date: string | null;
   expired: boolean; late: boolean; currency: string; rate: number | null; base_total: number | null; delivered_pct: number;
   tax_rate: number; discount_pct: number; discount: number; note: string; created_by: string; line_count: number;
-  invoiced: number; missing_price: number; next_statuses: string[]; lines?: DocLine[]; deliveries?: Delivery[];
+  invoiced: number; missing_price: number; next_statuses: string[]; lines?: DocLine[]; deliveries?: Delivery[]; rev?: number;
 };
 export type Payment = {
   id: number; direction: "in" | "out"; direction_label: string; firm_id: number | null; firm_name: string;
   invoice_id: number | null; invoice_no: string | null; pay_date: string | null; amount: number; currency: string;
   rate: number | null; base_amount: number | null; method: string; note: string; created_by: string;
 };
+export type InvoiceKind = "sales" | "purchase" | "sales_credit" | "purchase_credit";
 export type Invoice = Totals & {
-  id: number; kind: "sales" | "purchase"; kind_label: string; no: string; firm_id: number | null; firm_name: string;
+  id: number; kind: InvoiceKind; kind_label: string; no: string; firm_id: number | null; firm_name: string;
   project_id: number | null; project_name: string | null; sales_order_id: number | null; purchase_order_id: number | null;
   status: string; status_label: string; pay_state: string | null; pay_label: string; invoice_date: string | null;
   due_date: string | null; currency: string; rate: number | null; base_total: number | null; base_remaining: number | null;
   tax_rate: number; note: string; created_by: string; line_count: number; paid: number; remaining: number; lines?: DocLine[]; payments?: Payment[];
+  rev?: number; is_credit: boolean; credit_of_id: number | null; credit_of_no?: string | null; discount: number; discount_pct: number; credited: number;
+  credits?: { id: number; no: string; status: string; status_label: string; total: number }[];
 };
 export type Balance = {
   firm_id: number | null; firm_name: string; firm_kind: string | null; currency: string; sales: number; collected: number;
   purchases: number; paid: number; balance: number; receivable: number; payable: number;
   overdue_receivable: number; overdue_payable: number; rate: number | null; base_balance: number | null;
   base_receivable: number | null; base_payable: number | null; base_overdue_receivable: number | null;
-  base_overdue_payable: number | null;
+  base_overdue_payable: number | null; basis: BalanceBasis; fx_diff: number | null;
 };
+export type BalanceBasis = "today" | "doc";
+export const BASIS_TEXT: Record<BalanceBasis, string> = { today: "bugünkü kurla", doc: "belge tarihindeki kurla" };
 export type LedgerRow = {
   date: string | null; due_date: string | null; doc: "invoice" | "payment"; id: number; no: string; label: string;
   currency: string; debit: number; credit: number; balance: number; rate: number | null; base_amount: number | null;
 };
-type Ledger = { rows: LedgerRow[]; balance: Record<string, number>; base: string; base_balance: number; unconverted: string[] };
+type Ledger = { rows: LedgerRow[]; balance: Record<string, number>; base: string; basis: BalanceBasis; base_balance: number; fx_diff: number | null; unconverted: string[] };
 export type Employee = {
   id: number; name: string; title: string; department: string; phone: string; email: string; hourly_cost: number | null;
-  start_date: string | null; active: boolean; note: string; hours_30d: number; user_id: number | null; annual_leave_days: number | null;
+  start_date: string | null; active: boolean; note: string; hours_30d: number; user_id: number | null; annual_leave_days: number | null; rev?: number;
 };
 export type TimeEntry = {
-  id: number; employee_id: number; employee_name: string; work_date: string; hours: number; project_id: number | null;
+  rev?: number; id: number; employee_id: number; employee_name: string; work_date: string; hours: number; project_id: number | null;
   project_name: string | null; work_order_id: number | null; work_order_no: string | null; hourly_cost: number | null;
   cost: number | null; note: string; created_by: string;
 };
 
 export const SO_COLORS: Record<string, string> = {
-  draft: "E7E6E6", quoted: "BDD7EE", confirmed: "FFEB9C", partial: "FFD9A0", delivered: "C6EFCE", cancelled: "D9D9D9",
+  draft: "E7E6E6", quoted: "BDD7EE", confirmed: "FFEB9C", partial: "FFD9A0", delivered: "C6EFCE", closed: "C9DAF8", cancelled: "D9D9D9",
   lost: "F8CBAD",
 };
 export const INV_COLORS: Record<string, string> = { draft: "E7E6E6", issued: "BDD7EE", cancelled: "D9D9D9" };
@@ -67,12 +73,17 @@ export const SO_ACTIONS: Record<string, string> = {
   cancelled: "İptal et", draft: "Taslağa al",
 };
 
-export function useBalances(enabled = true) {
-  return useQuery({ queryKey: ["balances"], queryFn: () => api.get<Balance[]>("/balances"), enabled });
+export function useBalances(enabled = true, basis?: BalanceBasis) {
+  return useQuery({
+    queryKey: ["balances", basis ?? "setting"],
+    queryFn: () => api.get<Balance[]>(`/balances${basis ? `?basis=${basis}` : ""}`),
+    enabled,
+  });
 }
 
-export const lineSum = (lines: DocLine[], prices: string[]) =>
-  lines.reduce((s, l, i) => s + (numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0), 0);
+/** Totals of a form still being typed, by the same steps the server will use once it is saved. */
+export const formTotals = (lines: { qty: number }[], prices: string[], taxRate = 0, discountPct = 0) =>
+  docTotals(lines.map((l, i) => ({ qty: l.qty || 0, price: numOrNull(prices[i] ?? "") ?? 0 })), taxRate, discountPct);
 
 /** Editable document lines (sales order, invoice). Prices are kept as text so "12,5" can be typed. */
 export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys.currency }: {
@@ -93,7 +104,7 @@ export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys
               <td><input style={{ width: 80 }} type="number" min={0} step="any" value={l.qty} onChange={(e) => upd(i, { qty: Number(e.target.value) })} /></td>
               <td><input style={{ width: 110 }} inputMode="decimal" value={prices[i] ?? ""}
                 onChange={(e) => setPrices((p) => { const n = [...p]; n[i] = e.target.value; return n; })} /></td>
-              <td className="num">{fmtMoney((numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0), currency)}</td>
+              <td className="num">{fmtMoney(money((numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0)), currency)}</td>
               <td>
                 <button className="btn small" aria-label="Satırı sil" onClick={() => {
                   setLines((ls) => ls.filter((_, j) => j !== i));
@@ -177,8 +188,9 @@ export function LedgerModal({ firmId, firmName, onClose }: { firmId: number; fir
               </span>
             ))}
             {Object.keys(q.data.balance).some((c) => c !== q.data.base) && (
-              <span className="badge">Toplam: {fmtMoney(q.data.base_balance, q.data.base)} (bugünkü kurla)</span>
+              <span className="badge">Toplam: {fmtMoney(q.data.base_balance, q.data.base)} ({BASIS_TEXT[q.data.basis]})</span>
             )}
+            {!!q.data.fx_diff && <span className="badge" title="Belge kuruyla değer eksi bugünkü kurla değer">Kur farkı: {fmtMoney(q.data.fx_diff, q.data.base)}</span>}
             {!!q.data.unconverted.length && <span className="badge warn">Kuru olmayan: {q.data.unconverted.join(", ")} toplama katılmadı</span>}
             {!rows.length && <span className="muted">Kesilmiş fatura veya ödeme yok.</span>}
           </div>

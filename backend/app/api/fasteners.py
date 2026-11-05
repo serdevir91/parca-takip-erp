@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..core.fastener import _TPL, FastenerMatch, validate_rule
 from ..models import FastenerRule, FastenerSetting, User
 from ..services import audit, bomimport
@@ -100,7 +101,7 @@ def summary(pid: int, db: Session = Depends(get_db), user: User = Depends(fasten
         "items": items, "statuses": FASTENER_ORDER_STATUSES, "colors": FASTENER_COLORS,
         "totals": {"unique": len(items), "total_qty": sum(i["total_qty"] for i in items),
                    "order_qty": sum(i["order_qty"] for i in items),
-                   "total_price": round(sum(prices), 2) if prices else None,
+                   "total_price": num.money(sum(prices)) if prices else None,
                    "by_status": {s: sum(1 for i in items if i["order_status"] == s) for s in FASTENER_ORDER_STATUSES}},
     }
 

@@ -103,6 +103,13 @@ function Forms({ data }: { data: Data }) {
             <div className="adm-two">
               <Num f={f} set={set} k="over_receipt_pct" label="Fazla teslim payı (%)" hint="Mal kabulde sipariş miktarının en çok bu kadar üstü kabul edilir." />
             </div>
+            <Field label="Cari bakiye değerleme kuru"
+              hint="Bugünkü kur: açık bakiye günün kuruyla değerlenir. Belge kuru: her fatura ve ödeme kendi tarihindeki kurla kalır, kapanmış hesapta kur farkı görünür.">
+              <select value={String(f.balance_basis ?? "today")} onChange={(e) => set("balance_basis", e.target.value)}>
+                <option value="today">Bugünkü kur</option>
+                <option value="doc">Belge tarihindeki kur</option>
+              </select>
+            </Field>
             <Field label="Ödeme yöntemleri">
               <ListEditor value={f.pay_methods as string[]} onChange={(v) => set("pay_methods", v)} placeholder="Ödeme yöntemi" />
             </Field>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { cellText, FilterPopup, norm, parseNum, type ColFilter } from "./dgFilter";
 import { autofit, drawnColumns, headerText, isEmpty, type GridColumn, type GridProps } from "./dgTypes";
 import { useToast } from "./Toast";
+import { qty } from "../api/num";
 
 type Pos = { r: number; c: number };
 type Range = { r0: number; r1: number; c0: number; c1: number };
@@ -582,7 +583,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     return { count, nums, sum, min, max };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel?.r0, sel?.r1, sel?.c0, sel?.c1, rows, cols.length]);
-  const num = (n: number) => (+n.toFixed(4)).toLocaleString("tr-TR");
+  const num = (n: number) => qty(n).toLocaleString("tr-TR");
   const filterTo = (f: ColFilter) => { if (act) cols[act.c].setFilterValue(f); };
   const actCol = act ? (cols[act.c].columnDef as GridColumn<T>) : null;
 

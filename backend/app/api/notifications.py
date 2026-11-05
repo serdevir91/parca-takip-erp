@@ -8,20 +8,24 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ..models import (AttendanceRequest, BomVersion, Employee, Invoice, LeaveRequest, NotificationRead, Project,
+from ..core import numbers as num
+from ..models import (ROLE_ADMIN, AttendanceRequest, BomVersion, Employee, Invoice, LeaveRequest, NotificationRead, Project,
                       PurchaseOrder, SalesOrder, StockItem, User, WorkOrder)
+from ..auth import is_https
 from ..permissions import can
 from ..services import commerce, erp
+from ..services.settings import signup_enabled
 from .deps import any_user, get_db
 from .leave import KINDS
 
 router = APIRouter(tags=["notifications"])
 
+ADMIN_KIND = "Yönetim"
 DUE_SOON_DAYS = 7
 DECIDED_DAYS = 14
 LIMIT = 200
@@ -45,22 +49,23 @@ def _purchasing(db: Session, today: date) -> list[dict[str, Any]]:
 def _stock(db: Session) -> list[dict[str, Any]]:
     low = db.scalars(select(StockItem).where(StockItem.min_qty > 0, StockItem.qty < StockItem.min_qty))
     return [_item(f"low:{i.id}:{i.qty:g}", "Stok", f"Düşük stok {i.code}",
-                  f"{i.name}: {i.qty:g} kaldı, en az {i.min_qty:g}", "/stock") for i in low]
+                  f"{i.name}: {num.text(i.qty)} kaldı, en az {num.text(i.min_qty)}", "/stock") for i in low]
 
 
 def _finance(db: Session, today: date) -> list[dict[str, Any]]:
     invoices = list(db.scalars(select(Invoice).where(Invoice.status == "issued", Invoice.due_date.is_not(None),
                                                      Invoice.due_date <= today + timedelta(days=DUE_SOON_DAYS))))
     paid = commerce.paid_by_invoice(db, [i.id for i in invoices])
+    credited = commerce.credited_by_invoice(db, [i.id for i in invoices])
     out = []
     for inv in invoices:
-        r = commerce.inv_out(inv, paid.get(inv.id, 0.0), False)
+        r = commerce.inv_out(inv, paid.get(inv.id, 0.0), False, credited=credited.get(inv.id, 0.0))
         if r["remaining"] <= 0:
             continue
         late = inv.due_date < today
         out.append(_item(f"inv:{inv.id}:{inv.due_date}:{late}", "Finans",
                          f"{'Vadesi geçen' if late else 'Vadesi yaklaşan'} fatura {inv.no or inv.id}",
-                         f"{inv.firm_name}: {r['remaining']:g} {inv.currency}", "/finance", inv.due_date, late))
+                         f"{inv.firm_name}: {num.text(r['remaining'])} {inv.currency}", "/finance", inv.due_date, late))
     return out
 
 
@@ -113,9 +118,25 @@ def _mine(db: Session, me: User, today: date) -> list[dict[str, Any]]:
     return out
 
 
-def collect(db: Session, me: User) -> list[dict[str, Any]]:
+def _admin(db: Session, secure: bool) -> list[dict[str, Any]]:
+    """Settings an admin should look at. Nothing here changes them. Their kind puts them on a banner as well."""
+    out = []
+    if not secure:
+        out.append(_item("admin:https-off", ADMIN_KIND, "HTTPS kapalı",
+                         "Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın.",
+                         "/admin?tab=https", urgent=True))
+    if signup_enabled(db):
+        out.append(_item("admin:signup-on", ADMIN_KIND, "Hesap isteği açık",
+                         "Giriş ekranında herkes hesap isteyebilir. İstemiyorsanız Yönetim > Kullanıcılar sekmesinden "
+                         "kapatın.", "/admin?tab=users", urgent=True))
+    return out
+
+
+def collect(db: Session, me: User, secure: bool = True) -> list[dict[str, Any]]:
     today = date.today()
     out = _mine(db, me, today)
+    if me.role == ROLE_ADMIN:
+        out += _admin(db, secure)
     if can(me, "purchasing"):
         out += _purchasing(db, today)
     if can(me, "stock"):
@@ -134,11 +155,13 @@ def collect(db: Session, me: User) -> list[dict[str, Any]]:
 
 
 @router.get("/notifications")
-def notifications(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+def notifications(request: Request, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     read = set(db.scalars(select(NotificationRead.key).where(NotificationRead.user_id == me.id)))
-    items = [i for i in collect(db, me) if i["key"] not in read]
+    every = collect(db, me, is_https(request))
+    items = [i for i in every if i["key"] not in read]
     items.sort(key=lambda i: (not i["urgent"], i["date"] or "9999", i["key"]))
-    return {"count": len(items), "items": items[:LIMIT]}
+    # The bell can be cleared; the banner stays until the setting behind it changes
+    return {"count": len(items), "items": items[:LIMIT], "warnings": [i for i in every if i["kind"] == ADMIN_KIND]}
 
 
 class ReadIn(BaseModel):
@@ -146,8 +169,9 @@ class ReadIn(BaseModel):
 
 
 @router.post("/notifications/read")
-def mark_read(body: ReadIn, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, bool]:
-    live = {i["key"] for i in collect(db, me)}
+def mark_read(body: ReadIn, request: Request, me: User = Depends(any_user),
+              db: Session = Depends(get_db)) -> dict[str, bool]:
+    live = {i["key"] for i in collect(db, me, is_https(request))}
     # Dismissals of warnings that no longer exist have done their job; the rest stays
     db.execute(delete(NotificationRead).where(NotificationRead.user_id == me.id, NotificationRead.key.not_in(live)))
     have = set(db.scalars(select(NotificationRead.key).where(NotificationRead.user_id == me.id)))

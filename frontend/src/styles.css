@@ -492,6 +492,7 @@ div.chat-pick-row { cursor: default; }
 
 /* === Ürün ağacı === */
 .tree-start { max-width: 640px; }
+.tree-start select { max-width: 100%; min-width: 0; }
 .tree-start h3 { margin-top: 0; }
 .tree-start ol { margin: 0 0 14px; padding-left: 20px; line-height: 1.7; }
 .tree-bar { flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -832,6 +833,7 @@ div.chat-pick-row { cursor: default; }
 .scan { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 .scan form { display: flex; gap: 8px; }
 .scan form input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; }
+.scan-note { margin-top: 8px; padding: 8px 10px; border-left: 4px solid var(--warn); font-size: 13px; line-height: 1.45; }
 .scan-ways { display: flex; gap: 8px; flex-wrap: wrap; }
 .scan-ways .btn { flex: 1; min-height: 44px; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
 .scan-ways input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -861,6 +863,7 @@ div.chat-pick-row { cursor: default; }
 .label-print { display: none; }
 @media print {
   @page { size: A4; margin: 8mm; }
+  :root, html, body { color-scheme: light !important; }
   html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
   body > *:not(.label-print) { display: none !important; }
   .label-print { display: flex; flex-wrap: wrap; align-content: flex-start; }

@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..models import Firm, Project, StockItem, StockMove, User
-from ..services import audit, erp, reorder
+from ..services import audit, conflict, erp, reorder
 from ..permissions import require
 from .deps import get_db, project_or_404
 
@@ -43,6 +44,7 @@ class ItemUpdate(BaseModel):
     note: str | None = None
     reorder_qty: float | None = Field(default=None, ge=0)
     preferred_firm_id: int | None = None
+    rev: int | None = None
 
 
 class ReorderLine(BaseModel):
@@ -86,7 +88,7 @@ def list_stock(q: str = "", low: bool = False, _: User = Depends(stock_view),
     if low:
         rows = [r for r in rows if r["low"]]
     return {"rows": rows, "kinds": erp.ITEM_KINDS, "move_kinds": erp.MOVE_KINDS,
-            "total_value": round(sum(r["value"] or 0 for r in rows), 2), "low_count": sum(1 for r in rows if r["low"])}
+            "total_value": num.money(sum(r["value"] or 0 for r in rows)), "low_count": sum(1 for r in rows if r["low"])}
 
 
 @router.get("/stock/reorder")
@@ -127,7 +129,8 @@ def create_item(body: ItemIn, me: User = Depends(stock_edit), db: Session = Depe
 def update_item(item_id: int, body: ItemUpdate, me: User = Depends(stock_edit),
                 db: Session = Depends(get_db)) -> dict[str, Any]:
     i = _item_or_404(db, item_id)
-    changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
+    conflict.claim(db, i, body.rev, me)
+    changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set and k != "rev"}
     if "kind" in changes and changes["kind"] not in erp.ITEM_KINDS:
         raise HTTPException(400, "Geçersiz kalem türü")
     for k in ("name", "kind", "unit", "min_qty", "location", "note", "reorder_qty"):

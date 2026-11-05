@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Mail, Share2 } from "lucide-react";
 import { useState } from "react";
-import { api, ApiError, getToken, upload } from "../api/client";
+import { api, ApiError, fileTicket, upload } from "../api/client";
 import { useAuth } from "../api/auth";
 import { mobileApp } from "../api/mobile";
 import { Field, Modal } from "../pages/admin/shared";
@@ -14,8 +14,7 @@ type Recipient = { name: string; email: string; kind: string };
 
 async function fileBlob(f: MailFile): Promise<Blob> {
   if (f.blob) return f.blob;
-  const token = getToken();
-  const res = await fetch(`/api${f.path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(`/api${f.path}`);
   if (!res.ok) throw new ApiError(res.status, `${f.name} hazırlanamadı (${res.status})`);
   return res.blob();
 }
@@ -34,7 +33,7 @@ export async function shareFiles(files: MailFile[], title: string): Promise<bool
   const app = mobileApp();
   if (app?.share && app.shareData) {
     const f = files[0];
-    if (f.path) app.share(`${location.origin}/api${f.path}`, f.name, getToken() ?? "");
+    if (f.path) app.share(`${location.origin}/api${f.path}`, f.name, await fileTicket(f.path));
     else app.shareData(await toBase64(f.blob!), f.name, f.blob!.type || "application/octet-stream");
     return true;
   }

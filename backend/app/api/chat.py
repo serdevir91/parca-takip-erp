@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import oauth2, user_from_token
+from ..auth import session_token, user_from_token
 from ..config import get_settings
 from ..models import ChatMember, ChatMessage, ChatRoom, User, utcnow
 from ..permissions import can, require
@@ -324,7 +324,7 @@ def delete_message(message_id: int, db: Session = Depends(get_db), me: User = De
     return message_out(msg)
 
 
-def _file_user(token: str | None = Depends(oauth2), db: Session = Depends(get_db)) -> User:
+def _file_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:
     user = user_from_token(token, db)
     if not can(user, "chat", "view"):
         raise HTTPException(403, "Bu işlem için yetkiniz yok")

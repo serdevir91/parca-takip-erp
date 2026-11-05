@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, Invoice, Payment, Project, PurchaseOrder, User
 from ..permissions import require
-from ..services import audit, commerce, fx, system
+from ..services import audit, commerce, conflict, erp, fx, system
 from .deps import get_db, project_or_404
 
 finance_view, finance_edit = require("finance", "view"), require("finance", "edit")
@@ -55,6 +55,7 @@ class InvoiceUpdate(BaseModel):
     tax_rate: float | None = Field(default=None, ge=0, le=100)
     note: str | None = None
     lines: list[LineIn] | None = None
+    rev: int | None = None
 
 
 class InvoicePick(BaseModel):
@@ -95,7 +96,12 @@ def _inv_or_404(db: Session, inv_id: int) -> Invoice:
 def _out(db: Session, inv: Invoice) -> dict[str, Any]:
     p = db.get(Project, inv.project_id) if inv.project_id else None
     book = fx.Book(db)
-    out = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), True, p.name if p else None, book)
+    out = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), True, p.name if p else None,
+                           book, commerce.credited_by_invoice(db, [inv.id]).get(inv.id, 0.0))
+    out["credit_of_no"] = db.scalar(select(Invoice.no).where(Invoice.id == inv.credit_of_id)) if inv.credit_of_id else None
+    out["credits"] = [{"id": c.id, "no": c.no, "status": c.status, "status_label": commerce.INV_STATUS[c.status],
+                       "total": commerce.inv_totals(c)["total"]}
+                      for c in db.scalars(select(Invoice).where(Invoice.credit_of_id == inv.id).order_by(Invoice.id))]
     out["payments"] = [commerce.pay_out(x, inv.no, book) for x in
                        db.scalars(select(Payment).where(Payment.invoice_id == inv.id).order_by(Payment.pay_date))]
     return out
@@ -112,8 +118,8 @@ def list_invoices(kind: str | None = None, status: str | None = None, firm_id: i
                   project_id: int | None = None, pay_state: str | None = None,
                   _: User = Depends(finance_view), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     q = select(Invoice).order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
-    if kind:
-        q = q.where(Invoice.kind == kind)
+    if kind:    # a credit note belongs with the documents it takes back
+        q = q.where(Invoice.kind.in_([kind, *(k for k, of in commerce.CREDIT_OF.items() if of == kind)]))
     if status:
         q = q.where(Invoice.status == status)
     if firm_id is not None:
@@ -122,9 +128,11 @@ def list_invoices(kind: str | None = None, status: str | None = None, firm_id: i
         q = q.where(Invoice.project_id == project_id)
     invs = list(db.scalars(q))
     paid = commerce.paid_by_invoice(db, [i.id for i in invs])
+    credited = commerce.credited_by_invoice(db, [i.id for i in invs])
     names = dict(db.execute(select(Project.id, Project.name)).all())
     book = fx.Book(db)
-    rows = [commerce.inv_out(i, paid.get(i.id, 0.0), False, names.get(i.project_id or 0), book) for i in invs]
+    rows = [commerce.inv_out(i, paid.get(i.id, 0.0), False, names.get(i.project_id or 0), book, credited.get(i.id, 0.0))
+            for i in invs]
     if pay_state == "open":
         rows = [r for r in rows if r["pay_state"] in ("unpaid", "partial", "overdue")]
     elif pay_state:
@@ -176,6 +184,7 @@ def get_invoice(inv_id: int, _: User = Depends(finance_view), db: Session = Depe
 def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_edit),
                    db: Session = Depends(get_db)) -> dict[str, Any]:
     inv = _inv_or_404(db, inv_id)
+    conflict.claim(db, inv, body.rev, me)
     if inv.status != "draft":
         raise HTTPException(400, "Yalnızca taslak fatura düzenlenebilir")
     sent = body.model_fields_set
@@ -215,6 +224,7 @@ def invoice_status(inv_id: int, body: StatusIn, me: User = Depends(finance_edit)
                    db: Session = Depends(get_db)) -> dict[str, Any]:
     """draft -> issued (kesildi, counts in the balance) -> cancelled. A paid invoice cannot be cancelled."""
     inv = _inv_or_404(db, inv_id)
+    erp.lock_order(db, inv)
     allowed = {"draft": {"issued", "cancelled"}, "issued": {"cancelled"}}.get(inv.status, set())
     if body.status not in allowed:
         raise HTTPException(400, "Bu durum değişikliği yapılamaz")
@@ -222,6 +232,12 @@ def invoice_status(inv_id: int, body: StatusIn, me: User = Depends(finance_edit)
         raise HTTPException(400, "Satırı olmayan fatura kesilemez")
     if body.status == "cancelled" and commerce.paid_by_invoice(db, [inv.id]).get(inv.id):
         raise HTTPException(400, "Ödemesi girilmiş fatura iptal edilemez; önce ödemeleri silin")
+    if body.status == "cancelled" and commerce.credited_by_invoice(db, [inv.id]).get(inv.id):
+        raise HTTPException(400, "Alacak dekontu kesilmiş fatura iptal edilemez; önce dekontu iptal edin")
+    if body.status == "issued" and inv.credit_of_id:
+        source = db.get(Invoice, inv.credit_of_id)
+        if source is None or source.status != "issued":
+            raise HTTPException(400, "Karşılık gelen fatura kesili değil, dekont kesilemez")
     if body.status == "issued" and inv.rate is None:
         inv.rate = fx.rate_on(db, inv.currency, fx.first_day(inv.invoice_date, inv.created_at))
     audit.record(db, me, "invoice", inv.no, "status", inv.status, body.status, inv.project_id)
@@ -250,7 +266,7 @@ def invoice_xlsx(inv_id: int, _: User = Depends(finance_view), db: Session = Dep
             ("Firma", inv.firm_name), ("Adres", firm.address if firm else ""),
             ("Vergi dairesi / no", f"{firm.tax_office} {firm.tax_no}".strip() if firm else ""), ("Not", inv.note)]
     body = commerce.form_xlsx(commerce.INV_KINDS[inv.kind], info, inv.currency, inv.lines,
-                              commerce.totals(inv.lines, inv.tax_rate), inv.tax_rate,
+                              commerce.inv_totals(inv), inv.tax_rate, inv.discount_pct,
                               company=system.system(db)["company"])
     return Response(body, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(inv.no or 'fatura')}.xlsx"})
@@ -282,10 +298,13 @@ def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Sessio
             raise HTTPException(400, f"Faturaya bağlı ödeme faturanın para biriminde ({inv.currency}) girilir")
         if inv.status != "issued":
             raise HTTPException(400, "Ödeme yalnızca kesilmiş faturaya bağlanabilir")
+        if inv.kind in commerce.CREDIT_OF:
+            raise HTTPException(400, "Dekonta ödeme bağlanmaz; firmanın cari hesabına ödeme girin")
         want = "in" if inv.kind == "sales" else "out"
         if body.direction != want:
             raise HTTPException(400, "Satış faturasına tahsilat, alış faturasına ödeme girilir")
-        rest = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), False)["remaining"]
+        rest = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), False,
+                                credited=commerce.credited_by_invoice(db, [inv.id]).get(inv.id, 0.0))["remaining"]
         if body.amount > rest + commerce.EPS:
             raise HTTPException(400, f"Tutar faturanın kalan borcundan ({rest:,.2f}) büyük")
         firm_id = inv.firm_id
@@ -317,12 +336,14 @@ def delete_payment(pay_id: int, me: User = Depends(finance_edit), db: Session = 
 
 # ---------- current account ----------
 @router.get("/balances")
-def balances(_: User = Depends(finance_view), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    return commerce.balances(db)
+def balances(basis: str | None = None, _: User = Depends(finance_view),
+             db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    return commerce.balances(db, basis)
 
 
 @router.get("/firms/{firm_id}/ledger")
-def ledger(firm_id: int, _: User = Depends(finance_view), db: Session = Depends(get_db)) -> dict[str, Any]:
+def ledger(firm_id: int, basis: str | None = None, _: User = Depends(finance_view),
+           db: Session = Depends(get_db)) -> dict[str, Any]:
     firm = commerce.firm_or_404(db, firm_id)
     assert firm is not None
-    return {"firm": {"id": firm.id, "name": firm.name, "kind": firm.kind}, **commerce.ledger(db, firm_id)}
+    return {"firm": {"id": firm.id, "name": firm.name, "kind": firm.kind}, **commerce.ledger(db, firm_id, basis)}

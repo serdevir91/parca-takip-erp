@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A server on the local network stays on plain HTTP until HTTPS is turned on in Yönetim. HTTPS servers use a
-     self-signed certificate, which the app pins itself (Pin.java), so no anchor is added here. -->
+<!-- A server on the local network stays on plain HTTP until HTTPS is turned on in Yönetim, and its address is only
+     known at run time, so cleartext cannot be limited here. MainActivity.downgrade refuses http to any server known
+     to be on https. HTTPS servers use a self-signed certificate, which the app pins itself (Pin.java), so no anchor
+     is added here. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>

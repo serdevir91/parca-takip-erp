@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../api/client";
+import { saveRev } from "../../api/conflict";
 import { useAuth } from "../../api/auth";
 import LabelsModal from "../../components/Labels";
 import { errText, useToast } from "../../components/Toast";
@@ -52,9 +53,10 @@ function Materials({ wo, writable }: { wo: WorkOrder; writable: boolean }) {
   const [qty, setQty] = useState<Record<number, string>>({});
   const q = useQuery({ queryKey: ["work-orders", "materials", wo.id], queryFn: () => api.get<WoMaterial[]>(`/work-orders/${wo.id}/materials`) });
   const save = useMutation({
-    mutationFn: () => api.put(`/work-orders/${wo.id}/materials`, {
+    mutationFn: () => saveRev(wo.rev, (rev) => api.put(`/work-orders/${wo.id}/materials`, {
+      rev,
       rows: (draft ?? []).map((r) => ({ id: r.id ?? null, code: r.code, description: r.description, unit: r.unit, planned_qty: numOrNull(r.planned_qty) ?? 0 })),
-    }),
+    })),
     onSuccess: () => { toast("Malzeme listesi kaydedildi"); setDraft(null); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
@@ -159,9 +161,10 @@ function Ops({ wo, writable }: { wo: WorkOrder; writable: boolean }) {
   const [draft, setDraft] = useState<OpDraft[] | null>(null);
   const q = useQuery({ queryKey: ["work-orders", "ops", wo.id], queryFn: () => api.get<WoOp[]>(`/work-orders/${wo.id}/ops`) });
   const save = useMutation({
-    mutationFn: () => api.put(`/work-orders/${wo.id}/ops`, {
+    mutationFn: () => saveRev(wo.rev, (rev) => api.put(`/work-orders/${wo.id}/ops`, {
+      rev,
       rows: (draft ?? []).map((r) => ({ id: r.id ?? null, name: r.name, planned_hours: numOrNull(r.planned_hours), note: r.note })),
-    }),
+    })),
     onSuccess: () => { toast("Operasyonlar kaydedildi"); setDraft(null); refresh(); },
     onError: (e) => toast(errText(e), true),
   });

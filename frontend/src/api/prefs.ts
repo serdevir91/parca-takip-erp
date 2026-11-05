@@ -1,6 +1,6 @@
 // Screen settings (saved views, column layouts, theme) live in localStorage for speed and are mirrored to the
 // server, so they follow the user to another device. On sign-in the server's copy wins.
-import { api, getToken } from "./client";
+import { api, isSignedIn } from "./client";
 
 const SYNCED = /^(dg\.|parts\.|erp_theme$)/;
 const WAIT_MS = 800;
@@ -26,7 +26,7 @@ export function savePref(key: string): void {
     } catch {
       /* storage unavailable */
     }
-    if (!getToken()) return;
+    if (!isSignedIn()) return;
     const path = `/me/prefs/${encodeURIComponent(key)}`;
     void (value === null ? api.del(path) : api.put(path, { value })).catch(() => undefined);
   }, WAIT_MS));

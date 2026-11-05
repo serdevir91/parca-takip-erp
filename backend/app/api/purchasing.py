@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
-from ..services import audit, commerce, erp, fx, suppliers, system, xlsafe
+from ..services import audit, commerce, conflict, erp, fx, suppliers, system, xlsafe
 from ..permissions import can, require
 from .deps import any_user, get_db, project_or_404
 
@@ -73,6 +73,7 @@ class PoUpdate(BaseModel):
     rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)    # null = take it from the table again
     note: str | None = None
     lines: list[LineIn] | None = None
+    rev: int | None = None
 
 
 class StatusIn(BaseModel):
@@ -87,6 +88,11 @@ class ReceiveLine(BaseModel):
 class ReceiveIn(BaseModel):
     lines: list[ReceiveLine]
     note: str = Field(default="", max_length=300)
+    rate: float | None = Field(default=None, gt=0)      # typed on the receipt screen when the order has no rate
+
+
+class ReverseIn(ReceiveIn):
+    credit_note: bool = False
 
 
 class CloseIn(BaseModel):
@@ -166,6 +172,7 @@ def get_order(po_id: int, _: User = Depends(purchasing_view), db: Session = Depe
 def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
+    conflict.claim(db, po, body.rev, me)
     if po.status in ("received", "closed", "cancelled"):
         raise HTTPException(400, f"{erp.PO_STATUS[po.status]} durumundaki sipariş düzenlenemez")
     sent = body.model_fields_set
@@ -226,18 +233,22 @@ def _picked(po: PurchaseOrder, rows: list[ReceiveLine]) -> list[tuple[PurchaseOr
 @router.post("/purchase-orders/{po_id}/receive")
 def receive(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
-    erp.receive(db, me, po, _picked(po, body.lines), body.note)
+    erp.receive(db, me, po, _picked(po, body.lines), body.note, body.rate)
     db.commit()
     return _out(db, po)
 
 
 @router.post("/purchase-orders/{po_id}/reverse")
-def reverse(po_id: int, body: ReceiveIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Mal kabul geri alma, also the return of goods to the supplier."""
+def reverse(po_id: int, body: ReverseIn, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Mal kabul geri alma, also the return of goods to the supplier. credit_note also drafts the iade faturası."""
     po = _po_or_404(db, po_id)
-    erp.reverse_receipt(db, me, po, _picked(po, body.lines), body.note)
+    if body.credit_note and not can(me, "finance", "edit"):
+        raise HTTPException(403, "İade faturası için finans düzenleme yetkisi gerekli")
+    items = _picked(po, body.lines)
+    erp.reverse_receipt(db, me, po, items, body.note)
+    made = commerce.credits_for_return(db, me, po, items) if body.credit_note else []
     db.commit()
-    return _out(db, po)
+    return {**_out(db, po), "credits": [commerce.inv_out(c, with_lines=False) for c in made]}
 
 
 @router.post("/purchase-orders/{po_id}/close")

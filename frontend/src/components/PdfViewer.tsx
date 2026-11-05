@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Maximize, X, ZoomIn, ZoomOut } fro
 import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { ApiError, getToken } from "../api/client";
+import { ApiError } from "../api/client";
 import { errText } from "./Toast";
 import { useGestures } from "./viewer/gestures";
 import type { NavProps } from "./viewer/ImageLightbox";
@@ -15,10 +15,9 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
 const STEP = 1.25;
 
-/** Fetch a protected API file as raw bytes (JWT header). `path` is without the /api prefix. */
+/** Fetch a protected API file as raw bytes. `path` is without the /api prefix. */
 async function fetchBytes(path: string, signal: AbortSignal): Promise<ArrayBuffer> {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal });
+  const res = await fetch(`/api${path}`, { signal });
   if (!res.ok) throw new ApiError(res.status, res.status === 404 ? "Dosya bulunamadı" : `Dosya alınamadı (${res.status})`);
   return res.arrayBuffer();
 }

@@ -6,7 +6,7 @@ import DataGrid, { type GridColumn } from "../components/DataGrid";
 import PreviewThumb from "../components/viewer/Thumb";
 import Viewer, { type ViewItem } from "../components/viewer/Viewer";
 import { errText, useToast } from "../components/Toast";
-import { api, ApiError, blobUrl, desktopFile, download, getToken, upload } from "../api/client";
+import { api, ApiError, APP_HEADERS, blobUrl, desktopFile, download, upload } from "../api/client";
 import { desktop } from "../api/desktop";
 import { useAuth } from "../api/auth";
 import { LayoutGrid, List } from "lucide-react";
@@ -74,10 +74,8 @@ const viaLabel = (v: string | null | undefined) => (v ? VIA_LABELS[v] ?? v : "")
 
 /** POST that returns a file (zip); `download()` only does GET. */
 async function postDownload(path: string, body: unknown, fallbackName: string): Promise<void> {
-  const token = getToken();
-  if (desktop()) return desktopFile({ path, token, filename: fallbackName, action: "save", method: "POST", body });
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (desktop()) return desktopFile({ path, filename: fallbackName, action: "save", method: "POST", body });
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...APP_HEADERS };
   const res = await fetch(`/api${path}`, { method: "POST", headers, body: JSON.stringify(body) });
   if (!res.ok) {
     let msg = `İndirme başarısız (${res.status})`;

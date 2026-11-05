@@ -5,13 +5,14 @@ import logging
 import re
 from functools import lru_cache
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import create_token, dummy_verify, hash_password, verify_password
+from ..auth import (clear_session, create_ticket, create_token, dummy_verify, hash_password, oauth2, session_token,
+                    set_session, user_from_token, verify_password)
 from ..config import get_settings
 from ..db import SessionLocal
 from ..models import ROLE_ADMIN, ROLE_LABELS, ROLE_VIEWER, User
@@ -58,7 +59,8 @@ def check_password_rules(pw: str) -> None:
 
 
 @router.post("/login")
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)) -> dict:
+def login(request: Request, response: Response, form: OAuth2PasswordRequestForm = Depends(),
+          db: Session = Depends(get_db)) -> dict:
     system.apply_runtime(db)
     name = form.username.strip()
     ip = request.client.host if request.client else "?"
@@ -78,8 +80,37 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     if not u.active:
         raise HTTPException(403, "Hesabınız pasif. Yöneticinize başvurun.")
     loginguard.succeeded(name, ip)
-    return {"access_token": create_token(u), "token_type": "bearer",
-            "user": session_out(u, db)}
+    token = create_token(u)
+    set_session(response, request, token)
+    return {"access_token": token, "token_type": "bearer", "user": session_out(u, db)}
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response) -> dict:
+    clear_session(response, request)
+    return {"ok": True}
+
+
+@router.post("/session")
+def adopt_session(request: Request, response: Response, bearer: str | None = Depends(oauth2),
+                  db: Session = Depends(get_db)) -> dict:
+    """One-time move of a token left in localStorage by a version before the session cookie."""
+    token = session_token(request, bearer)
+    if not bearer or token is None:
+        raise HTTPException(401, "Giriş yapılmadı")
+    user_from_token(token, db)
+    set_session(response, request, token)
+    return {"ok": True}
+
+
+class TicketIn(BaseModel):
+    path: str = Field(min_length=2, max_length=1000, pattern=r"^/")
+
+
+@router.post("/file-ticket")
+def file_ticket(body: TicketIn, user: User = Depends(any_user)) -> dict:
+    """Token for one file download by the desktop or Android shell. `path` is the API path without /api."""
+    return {"token": create_ticket(user, "/api" + body.path.split("?", 1)[0])}
 
 
 @router.get("/options")
@@ -175,7 +206,8 @@ class PasswordChange(BaseModel):
 
 
 @router.post("/password")
-def change_password(body: PasswordChange, user: User = Depends(any_user), db: Session = Depends(get_db)) -> dict:
+def change_password(body: PasswordChange, request: Request, response: Response, user: User = Depends(any_user),
+                    db: Session = Depends(get_db)) -> dict:
     if not verify_password(body.old_password, user.password_hash):
         raise HTTPException(400, "Mevcut şifre hatalı")
     check_password_rules(body.new_password)
@@ -186,4 +218,6 @@ def change_password(body: PasswordChange, user: User = Depends(any_user), db: Se
     u.token_version = (u.token_version or 0) + 1  # other sessions of this user end
     audit.record(db, user, "user", u.id, "password", None, "değiştirildi")
     db.commit()
-    return {"ok": True, "access_token": create_token(u), "user": user_out(u)}
+    token = create_token(u)
+    set_session(response, request, token)
+    return {"ok": True, "access_token": token, "user": user_out(u)}

@@ -11,10 +11,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..core.attendance import default_break, is_forgotten, worked_hours
 from ..models import Attendance, Employee, LeaveRequest, Project, TimeEntry, User, WorkOrder
 from ..permissions import require
-from ..services import audit
+from ..services import audit, conflict
 from ..services.erp import WO_OPEN
 from ..services.system import system
 from .deps import any_user, get_db, project_or_404
@@ -52,6 +53,7 @@ class EmployeeUpdate(BaseModel):
     note: str | None = None
     user_id: int | None = None
     annual_leave_days: float | None = Field(default=None, ge=0, le=60)
+    rev: int | None = None
 
 
 class TimeIn(BaseModel):
@@ -69,13 +71,14 @@ class TimeEdit(BaseModel):
     project_id: int | None = None
     work_order_id: int | None = None
     note: str = Field(default="", max_length=300)
+    rev: int | None = None
 
 
 def _emp_out(e: Employee, hours_30d: float = 0.0) -> dict[str, Any]:
-    return {"id": e.id, "name": e.name, "title": e.title, "department": e.department, "phone": e.phone,
+    return {"id": e.id, "rev": e.edit_rev, "name": e.name, "title": e.title, "department": e.department, "phone": e.phone,
             "email": e.email, "hourly_cost": e.hourly_cost,
             "start_date": e.start_date.isoformat() if e.start_date else None, "active": e.active, "note": e.note,
-            "user_id": e.user_id, "annual_leave_days": e.annual_leave_days, "hours_30d": round(hours_30d, 2)}
+            "user_id": e.user_id, "annual_leave_days": e.annual_leave_days, "hours_30d": num.hours(hours_30d)}
 
 
 def _emp_or_404(db: Session, emp_id: int) -> Employee:
@@ -137,9 +140,9 @@ def my_card(me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict
     month = date.today().replace(day=1).isoformat()
     return {"employee": _emp_out(e, sum(r["hours"] for r in rows
                                         if r["work_date"] >= (date.today() - timedelta(days=30)).isoformat())),
-            "rows": rows, "total_hours": round(sum(r["hours"] for r in rows), 2),
-            "month_hours": round(sum(r["hours"] for r in rows if r["work_date"] >= month), 2),
-            "total_cost": round(sum(r["cost"] or 0.0 for r in rows), 2)}
+            "rows": rows, "total_hours": num.hours(sum(r["hours"] for r in rows)),
+            "month_hours": num.hours(sum(r["hours"] for r in rows if r["work_date"] >= month)),
+            "total_cost": num.money(sum(r["cost"] or 0.0 for r in rows))}
 
 
 def _attended(db: Session, emp_id: int, day: date) -> tuple[float | None, bool, bool]:
@@ -159,24 +162,24 @@ def _attended(db: Session, emp_id: int, day: date) -> tuple[float | None, bool, 
         else:
             running = True
             total += worked_hours(a.clock_in, now, default_break(a.clock_in, now, standard))
-    return round(total, 2), running, forgot
+    return num.hours(total), running, forgot
 
 
 def _day_hours(db: Session, emp_id: int, day: date, own_id: int = 0) -> float:
     q = select(TimeEntry.hours).where(TimeEntry.employee_id == emp_id, TimeEntry.work_date == day,
                                       TimeEntry.id != own_id)
-    return round(sum(db.scalars(q)), 2)
+    return num.hours(sum(db.scalars(q)))
 
 
 def _check_day(db: Session, emp_id: int, day: date, hours: float, own_id: int = 0) -> None:
-    total = round(_day_hours(db, emp_id, day, own_id) + hours, 2)
+    total = num.hours(_day_hours(db, emp_id, day, own_id) + hours)
     attended, _, forgot = _attended(db, emp_id, day)
     if attended is None:
         if total > 24:
-            raise HTTPException(400, f"Bir güne en çok 24 saat yazılabilir; toplam {total:g} saat oluyor")
+            raise HTTPException(400, f"Bir güne en çok 24 saat yazılabilir; toplam {num.text(total)} saat oluyor")
     elif total > attended:
         hint = " Çıkışınız unutulmuş; önce mesai düzeltme talebi açın." if forgot else ""
-        raise HTTPException(400, f"Bu günkü net mesainiz {attended:g} saat; toplam {total:g} saat yazılamaz.{hint}")
+        raise HTTPException(400, f"Bu günkü net mesainiz {num.text(attended)} saat; toplam {num.text(total)} saat yazılamaz.{hint}")
 
 
 def _check_recent(day: date) -> None:
@@ -255,10 +258,10 @@ def my_time(day: date | None = None, me: User = Depends(any_user), db: Session =
                          .order_by(TimeEntry.id))
     rows = [_my_time_out(t, *_names(db, t)) for t in entries]
     attended, running, forgot = _attended(db, e.id, day)
-    allocated = round(sum(r["hours"] for r in rows), 2)
+    allocated = num.hours(sum(r["hours"] for r in rows))
     limit = 24.0 if attended is None else attended
     return {"employee": {"id": e.id, "name": e.name}, "day": day.isoformat(), "attended": attended, "open": running,
-            "forgot": forgot, "allocated": allocated, "remaining": round(max(limit - allocated, 0.0), 2),
+            "forgot": forgot, "allocated": allocated, "remaining": num.hours(max(limit - allocated, 0.0)),
             "editable": date.today() - timedelta(days=SELF_EDIT_DAYS) <= day <= date.today() and e.active,
             "edit_days": SELF_EDIT_DAYS, "rows": rows}
 
@@ -338,7 +341,8 @@ def create_employee(body: EmployeeIn, me: User = Depends(hr_edit), db: Session =
 def update_employee(emp_id: int, body: EmployeeUpdate, me: User = Depends(hr_edit),
                     db: Session = Depends(get_db)) -> dict[str, Any]:
     e = _emp_or_404(db, emp_id)
-    changes = {k: getattr(body, k) for k in body.model_fields_set
+    conflict.claim(db, e, body.rev, me)
+    changes = {k: getattr(body, k) for k in body.model_fields_set - {"rev"}
                if getattr(body, k) is not None or k in ("hourly_cost", "start_date", "user_id", "annual_leave_days")}
     if "user_id" in changes:
         _check_user(db, changes["user_id"], e.id)
@@ -364,10 +368,10 @@ def delete_employee(emp_id: int, me: User = Depends(hr_edit), db: Session = Depe
 
 
 def _time_out(t: TimeEntry, emp: str, project: str | None, wo: str | None) -> dict[str, Any]:
-    return {"id": t.id, "employee_id": t.employee_id, "employee_name": emp, "work_date": t.work_date.isoformat(),
+    return {"id": t.id, "rev": t.edit_rev, "employee_id": t.employee_id, "employee_name": emp, "work_date": t.work_date.isoformat(),
             "hours": t.hours, "project_id": t.project_id, "project_name": project, "work_order_id": t.work_order_id,
             "work_order_no": wo, "hourly_cost": t.hourly_cost,
-            "cost": round(t.hours * t.hourly_cost, 2) if t.hourly_cost is not None else None,
+            "cost": num.money(t.hours * t.hourly_cost) if t.hourly_cost is not None else None,
             "note": t.note, "created_by": t.created_by}
 
 
@@ -393,9 +397,9 @@ def list_time(employee_id: int | None = None, project_id: int | None = None, dat
         acc = by_project[r["project_name"] or "(Proje dışı)"]
         acc[0] += r["hours"]
         acc[1] += r["cost"] or 0.0
-    return {"rows": rows, "total_hours": round(sum(r["hours"] for r in rows), 2),
-            "total_cost": round(sum(r["cost"] or 0.0 for r in rows), 2),
-            "by_project": sorted(({"name": k, "hours": round(h, 2), "cost": round(c, 2)}
+    return {"rows": rows, "total_hours": num.hours(sum(r["hours"] for r in rows)),
+            "total_cost": num.money(sum(r["cost"] or 0.0 for r in rows)),
+            "by_project": sorted(({"name": k, "hours": num.hours(h), "cost": num.money(c)}
                                   for k, (h, c) in by_project.items()), key=lambda x: -x["hours"])}
 
 
@@ -430,6 +434,7 @@ def edit_time(entry_id: int, body: TimeEdit, me: User = Depends(hr_edit), db: Se
     t = db.get(TimeEntry, entry_id)
     if t is None:
         raise HTTPException(404, "Kayıt bulunamadı")
+    conflict.claim(db, t, body.rev, me)
     project_id, wo = _target(db, body)
     audit.record_changes(db, me, t, {"work_date": body.work_date, "hours": body.hours, "project_id": project_id,
                                      "work_order_id": wo.id if wo else None, "note": body.note},

@@ -10,7 +10,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..models import Project, User, WorkOrder, WorkOrderMaterial, WorkOrderOp
-from ..services import audit, erp, womaterials
+from ..services import audit, conflict, erp, womaterials
 from ..permissions import can, require
 from .deps import get_db, project_or_404
 
@@ -39,6 +39,7 @@ class WoUpdate(BaseModel):
     due_date: date | None = None
     unit_cost: float | None = Field(default=None, ge=0)
     note: str | None = None
+    rev: int | None = None
 
 
 class StatusIn(BaseModel):
@@ -66,6 +67,7 @@ class MaterialIn(BaseModel):
 
 class MaterialsIn(BaseModel):
     rows: list[MaterialIn]
+    rev: int | None = None
 
 
 class IssueIn(BaseModel):
@@ -82,6 +84,7 @@ class OpIn(BaseModel):
 
 class OpsIn(BaseModel):
     rows: list[OpIn]
+    rev: int | None = None
 
 
 def _wo_or_404(db: Session, wo_id: int) -> WorkOrder:
@@ -159,9 +162,10 @@ def create_work_order(body: WoIn, me: User = Depends(workorders_edit), db: Sessi
 def update_work_order(wo_id: int, body: WoUpdate, me: User = Depends(workorders_edit),
                       db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
+    conflict.claim(db, w, body.rev, me)
     if w.status in erp.WO_FINAL:
         raise HTTPException(400, f"{erp.WO_STATUS[w.status]} durumundaki iş emri düzenlenemez")
-    changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
+    changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set and k != "rev"}
     for k in ("description", "qty", "firm_name", "note"):
         if k in changes and changes[k] is None:
             del changes[k]
@@ -215,6 +219,7 @@ def get_materials(wo_id: int, me: User = Depends(workorders_view), db: Session =
 def put_materials(wo_id: int, body: MaterialsIn, me: User = Depends(workorders_edit),
                   db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     w = _wo_or_404(db, wo_id)
+    conflict.claim(db, w, body.rev, me)
     womaterials.set_materials(db, me, w, [r.model_dump() for r in body.rows])
     db.commit()
     return _materials_out(db, me, w)
@@ -248,6 +253,7 @@ def get_ops(wo_id: int, _: User = Depends(workorders_view), db: Session = Depend
 def put_ops(wo_id: int, body: OpsIn, me: User = Depends(workorders_edit),
             db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     w = _wo_or_404(db, wo_id)
+    conflict.claim(db, w, body.rev, me)
     womaterials.set_ops(db, me, w, [r.model_dump() for r in body.rows])
     db.commit()
     return [womaterials.op_out(o) for o in womaterials.ops(db, w)]

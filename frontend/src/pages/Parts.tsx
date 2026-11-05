@@ -378,7 +378,7 @@ export default function Parts() {
       { id: "qty", accessorKey: "qty", header: "Adet", size: w("qty", 70), cell: ({ getValue }) => fmt(getValue() as number) },
       { id: "total_qty", accessorKey: "total_qty", header: "Toplam Adet", size: w("total_qty", 95), cell: ({ getValue }) => fmt(getValue() as number) },
       { id: "material", accessorKey: "material", header: "Malzeme", size: w("material", 130) },
-      { id: "weight", accessorKey: "weight", header: "Ağırlık", size: w("weight", 80), cell: ({ getValue }) => fmt(getValue() as number | null) },
+      { id: "weight", accessorKey: "weight", header: "Ağırlık (g)", size: w("weight", 80), cell: ({ getValue }) => fmt(getValue() as number | null) },
       {
         id: "procurement", header: "Temin Şekli", size: w("procurement", 120),
         accessorFn: (r) => r.procurement ?? r.procurement_override ?? "",

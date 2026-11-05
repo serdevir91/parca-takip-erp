@@ -11,11 +11,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core import numbers as num
 from ..core.attendance import (MAX_SHIFT_HOURS, day_balance, default_break, is_forgotten, week_start,
                                weekly_overtime, worked_hours)
 from ..models import Attendance, AttendanceRequest, Employee, User, utcnow
 from ..permissions import require
-from ..services import audit
+from ..services import audit, conflict
+from ..services.holidays import off_days
 from ..services.system import system
 from .deps import any_user, get_db
 from .hr import _active_card, _lock_card, _my_card
@@ -36,6 +38,7 @@ class ShiftIn(BaseModel):
     end: time | None = None
     break_minutes: int | None = Field(default=None, ge=0, le=600)
     note: str = Field(default="", max_length=300)
+    rev: int | None = None
 
 
 class ShiftNew(ShiftIn):
@@ -75,7 +78,7 @@ def _rows(shifts: list[Attendance], names: dict[int, str], first: date, last: da
         if not first <= a.work_date <= last:
             continue
         status = "done" if a.clock_out else "forgot" if is_forgotten(a.clock_in, a.clock_out, now) else "open"
-        out.append({"id": a.id, "employee_id": a.employee_id, "employee_name": names.get(a.employee_id, ""),
+        out.append({"id": a.id, "rev": a.edit_rev, "employee_id": a.employee_id, "employee_name": names.get(a.employee_id, ""),
                     "work_date": a.work_date.isoformat(), "start": a.clock_in.strftime("%H:%M"),
                     "end": a.clock_out.strftime("%H:%M") if a.clock_out else None,
                     "clock_in": a.clock_in.isoformat(timespec="seconds"),
@@ -103,18 +106,18 @@ def _month(month: str | None) -> tuple[date, date]:
 
 
 def _sum(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"hours": round(sum(r["hours"] for r in rows), 2), "overtime": round(sum(r["overtime"] for r in rows), 2),
+    return {"hours": num.hours(sum(r["hours"] for r in rows)), "overtime": num.hours(sum(r["overtime"] for r in rows)),
             "days": len({r["work_date"] for r in rows if r["status"] == "done"}),
             "forgot": sum(r["status"] == "forgot" for r in rows)}
 
 
 def _balance(rows: list[dict[str, Any]], e: Employee, first: date, last: date, work_hours: float,
-             leaves: dict[date, str]) -> dict[str, Any]:
+             leaves: dict[date, str], off: dict[date, float]) -> dict[str, Any]:
     """Expected hours against shifts and approved leave. `rows` are this person's output rows of the period."""
     worked: dict[date, float] = defaultdict(float)
     for r in rows:
         worked[date.fromisoformat(r["work_date"])] += r["hours"]
-    return day_balance(first, last, date.today(), work_hours, dict(worked), leaves, e.start_date, e.active)
+    return day_balance(first, last, date.today(), work_hours, dict(worked), leaves, e.start_date, e.active, off)
 
 
 def _leave_rows(leaves: dict[date, str], e: Employee) -> list[dict[str, Any]]:
@@ -145,7 +148,7 @@ def my_shifts(month: str | None = None, me: User = Depends(any_user), db: Sessio
     rows = _rows(_load(db, first, last, e.id), {e.id: e.name}, first, last, week_hours)
     shift = _open_shift(db, e.id)
     leaves = leave_map(db, first, last, e.id)[e.id]
-    summary = {**_sum(rows), **_balance(rows, e, first, last, _work_hours(db), leaves)}
+    summary = {**_sum(rows), **_balance(rows, e, first, last, _work_hours(db), leaves, off_days(db, first, last))}
     return {"employee": {"id": e.id, "name": e.name}, "rows": rows, "leave_days": _leave_rows(leaves, e),
             "summary": summary, "week_hours": week_hours,
             "open": {"id": shift.id, "clock_in": shift.clock_in.isoformat(timespec="seconds")} if shift else None}
@@ -199,12 +202,13 @@ def list_shifts(date_from: date | None = None, date_to: date | None = None, empl
     inside = set(db.scalars(select(Attendance.employee_id).where(Attendance.clock_out.is_(None),
                                                                  Attendance.clock_in >= since)))
     leaves = leave_map(db, first, last, employee_id)
+    off = off_days(db, first, last)
     work_hours = _work_hours(db)
     # Active people with no shift stay in the list: who did not come is part of the answer
     summary = [{"employee_id": e.id, "name": e.name, "department": e.department, "inside": e.id in inside,
-                **_sum(by_emp[e.id]), **_balance(by_emp[e.id], e, first, last, work_hours, leaves[e.id])}
+                **_sum(by_emp[e.id]), **_balance(by_emp[e.id], e, first, last, work_hours, leaves[e.id], off)}
                for e in people if (e.active or by_emp[e.id] or leaves[e.id]) and employee_id in (None, e.id)]
-    total = {**_sum(rows), **{k: round(sum(p[k] for p in summary), 2)
+    total = {**_sum(rows), **{k: num.hours(sum(p[k] for p in summary))
                               for k in ("expected", "covered", "missing_days", "short")}}
     return {"rows": rows, "people": summary, "total": total, "inside": len(inside),
             "leave_days": [x for e in people for x in _leave_rows(leaves[e.id], e)],
@@ -284,6 +288,7 @@ def edit_shift(shift_id: int, body: ShiftIn, me: User = Depends(att_edit), db: S
     a = db.get(Attendance, shift_id)
     if a is None:
         raise HTTPException(404, "Mesai bulunamadı")
+    conflict.claim(db, a, body.rev, me)
     _save_shift(db, me, a.employee_id, body, a)
     db.commit()
     return {"id": a.id}

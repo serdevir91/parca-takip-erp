@@ -1,12 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, X } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { errText, useToast } from "./Toast";
 
 type Item = { key: string; kind: string; title: string; detail: string; link: string; date: string | null; urgent: boolean };
 const QK = ["notifications"];
+type Feed = { count: number; items: Item[]; warnings?: Item[] };
+const fetchFeed = () => api.get<Feed>("/notifications");
+
+/** Admin-only state of the installation. It stays until the cause is fixed, whatever was read in the bell. */
+export function AdminWarnings() {
+  const q = useQuery({ queryKey: QK, queryFn: fetchFeed, refetchInterval: 60_000 });
+  return (
+    <>
+      {(q.data?.warnings ?? []).map((w) => (
+        <div key={w.key} className="card alerts" role="alert" style={{ margin: "8px 16px" }}>
+          <b>{w.title}</b> {w.detail}{" "}
+          <Link className="btn sm" to={w.link}>Ayarı aç</Link>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export default function Notifications() {
   const qc = useQueryClient();
@@ -15,7 +32,7 @@ export default function Notifications() {
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: QK,
-    queryFn: () => api.get<{ count: number; items: Item[] }>("/notifications"),
+    queryFn: fetchFeed,
     refetchInterval: 60_000,
   });
   const read = useMutation({

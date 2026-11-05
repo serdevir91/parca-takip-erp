@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { saveRev } from "../api/conflict";
 import { useAuth } from "../api/auth";
 import { FolderKanban } from "lucide-react";
 import { Page, PageHeader } from "../components/Layout";
@@ -19,7 +20,7 @@ export default function Projects() {
   const toast = useToast();
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
-  const [form, setForm] = useState<{ id?: number; name: string; root_part_no: string; description: string; template_id?: number } | null>(null);
+  const [form, setForm] = useState<{ id?: number; rev?: number; name: string; root_part_no: string; description: string; template_id?: number } | null>(null);
   const [asTemplate, setAsTemplate] = useState<{ project_id: number; name: string; note: string } | null>(null);
   const [dropping, setDropping] = useState(false);
   const go = useNavigate();
@@ -32,7 +33,7 @@ export default function Projects() {
   const done = () => qc.invalidateQueries({ queryKey: ["projects"] });
   const save = useMutation({
     mutationFn: (f: NonNullable<typeof form>) =>
-      f.id ? api.patch<Project>(`/projects/${f.id}`, f) : api.post<Project>("/projects", f),
+      f.id ? saveRev(f.rev, (rev) => api.patch<Project>(`/projects/${f.id}`, { ...f, rev })) : api.post<Project>("/projects", f),
     onSuccess: (p, f) => {
       toast("Proje kaydedildi");
       setForm(null);
@@ -91,7 +92,7 @@ export default function Projects() {
             <div className="row" style={{ marginTop: 10 }}>
               <Link className="btn small" to={`/p/${p.id}`}>Özet</Link>
               <Link className="btn small" to={`/p/${p.id}/parts`}>Parçalar</Link>
-              {canEdit && <button className="btn small" onClick={() => setForm({ id: p.id, name: p.name, root_part_no: p.root_part_no, description: p.description })}>Düzenle</button>}
+              {canEdit && <button className="btn small" onClick={() => setForm({ id: p.id, rev: p.rev, name: p.name, root_part_no: p.root_part_no, description: p.description })}>Düzenle</button>}
               {canEdit && <button className="btn small" onClick={() => setAsTemplate({ project_id: p.id, name: p.name, note: "" })}>Şablon yap</button>}
               {isAdmin && (
                 <button className="btn small" onClick={() => (p.archived || confirm(`“${p.name}” arşivlensin mi?`)) && archive.mutate(p)}>
