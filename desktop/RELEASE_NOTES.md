@@ -1,6 +1,15 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.11 yenilikleri
+
+- **Proje silme:** Windows sunucuda "Kalıcı olarak sil" hata veriyor, proje silinmiyordu. Sorun silmeden önce alınan yedekteydi, düzeltildi.
+- **Yedekleme (Windows):** SQLite kullanan Windows kurulumlarında yedek hiç tamamlanmıyordu; gece yedeği dahil. Artık tamamlanır. Geri yükleme de aynı nedenle başarısız oluyordu, o da düzeldi.
+- **Yedek alınamazsa:** Proje silinmez ve neden ekranda yazar. Yönetici isterse "Yedeksiz kalıcı olarak sil" ile devam eder, bu denetim kaydına yazılır.
+- **Yedek sürerken silme:** Başka yedek sürüyorsa proje artık yedeksiz silinmez.
+- **Çok uzun metin, çok büyük sayı:** PostgreSQL'de "Internal Server Error" yerine anlaşılır uyarı gelir. Bağlantılı kayıt çakışmaları da açıkça yazılır.
+- **Yükselttikten sonra:** Windows sunucuda Yönetim › Yedekleme ekranından elle yedek alın ve dosyanın listede göründüğünü denetleyin.
+
 ## 1.5.10 yenilikleri
 
 - **Tek yuvarlama kuralı:** Tutar 2, miktar 3 ondalık, her zaman yarım yukarı. Ekran, Excel ve fatura aynı sonucu verir. Bağlantı elemanı yedek miktarı da Excel ile aynı çıkar.

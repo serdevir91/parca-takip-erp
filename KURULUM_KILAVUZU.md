@@ -171,6 +171,8 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | Telefon: "Bu sunucu HTTPS kullanıyor" uyarısı | Sunucuya `https://` ile bağlanın. Sunucuda HTTPS kapatıldıysa önce sunucuyu Son kullanılanlar listesinden silin. |
 | Barkod ekranında canlı kamera yok | Tarayıcı düz HTTP'de kamerayı açmaz. Yönetim › HTTPS ile HTTPS'i açın veya fotoğrafla okutun. |
 | 1.5.10'a geçince herkes çıkış yaptı | Beklenen durum: oturum çerezine geçildi, bir kez yeniden giriş yapılır. |
+| Proje kalıcı olarak silinmiyor | Windows sunucuyu 1.5.11'e yükseltin. Silmeden önce alınan yedek eski sürümlerde tamamlanmıyordu. |
+| Yedek alınamadı, proje silinmedi | Ekrandaki nedeni okuyun, çoğunlukla disk doludur veya yedek klasörüne yazılamıyordur. Yedeksiz silinen proje geri getirilemez. |
 | Beklenen mesai tatil gününü sayıyor | Yönetim › Resmi Tatiller ekranından tatili ekleyin. Dini bayramlar her yıl elle girilir. |
 | Giriş: "Hesabınız yönetici onayı bekliyor" | Yönetici Yönetim › Kullanıcılar ekranından onaylamalı. |
 | Giriş: "Hesabınız pasif" | Yönetici hesabı pasif yapmış; Kullanıcılar ekranından tekrar aktif yapılabilir. |

@@ -315,6 +315,10 @@ Start-ScheduledTask ParcaTakipERP
 ```
 
 Yedek dosyası `C:\ParcaTakipVeri\yedek` içinde değilse tam yolunu yazın. Yönetim > Yedekleme ekranı da çalışır.
+
+1.5.11'den eski Windows kurulumlarında yedekler tamamlanmıyordu. `yedek` klasöründe yalnızca `erp_*.tar.partial`
+dosyaları ve `erp_bk_*` klasörleri varsa 1.5.11'e geçin ve elle yedek alın. Yeni yedek `erp_*.tar` adıyla görünür.
+Eski artıklar saklama süresi dolunca kendiliğinden silinir.
 **Yedek klasörünü düzenli olarak başka bir diske kopyalayın.**
 
 ### Linux / macOS
