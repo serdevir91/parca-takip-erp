@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { whenDesktopShell } from "../api/desktop";
 import { mobileApp, onBack } from "../api/mobile";
 import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
@@ -113,6 +114,50 @@ function useLiveSync() {
 
 /** Chat has its own poll (chat writes do not bump the global rev): unread badge, "(n)" in the tab title,
  *  a toast for new messages outside the chat screen, and a refetch of open chat screens. */
+type AlertFeed = {
+  last_id: number;
+  messages: { id: number; link: string; text: string; title: string }[];
+  items: { key: string; title: string; detail: string; link: string }[];
+};
+const ALERT_POLL_MS = 30_000;
+const ALERT_MAX = 3; // more than this in one poll becomes a single summary
+
+/** Windows notifications in the desktop app. The window keeps polling while it is hidden in the tray;
+ *  what is already there at start stays silent, and nothing pops up over a window in use. */
+function useDesktopAlerts() {
+  const nav = useNavigate();
+  useEffect(() => {
+    let stopped = false;
+    let timer: number | undefined;
+    let after = 0;
+    let seen: Set<string> | null = null;
+    (window as unknown as { __erpOpen?: (link: string) => void }).__erpOpen = (link) => nav(link);
+    const show = (notify: (t: string, b: string, l: string) => unknown, rows: { title: string; text: string; link: string }[], summary: string) => {
+      if (rows.length > ALERT_MAX) void notify("LAB ERP", `${rows.length} ${summary}`, rows[0].link);
+      else for (const r of rows) void notify(r.title, r.text, r.link);
+    };
+    void whenDesktopShell().then((shell) => {
+      if (stopped || !shell?.notify) return;
+      const notify = shell.notify.bind(shell);
+      const tick = async () => {
+        try {
+          const f = await api.get<AlertFeed>(`/notifications/feed?after=${after}`);
+          const fresh = seen ? f.items.filter((i) => !seen?.has(i.key)) : [];
+          seen = new Set(f.items.map((i) => i.key));
+          after = f.last_id;
+          if (!document.hasFocus()) {
+            show(notify, f.messages, "yeni mesaj");
+            show(notify, fresh.map((i) => ({ title: i.title, text: i.detail, link: i.link })), "yeni uyarı");
+          }
+        } catch { /* server unreachable: the next poll catches up */ }
+        if (!stopped) timer = window.setTimeout(() => void tick(), ALERT_POLL_MS);
+      };
+      void tick();
+    });
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [nav]);
+}
+
 function useChatPoll(enabled: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -157,6 +202,7 @@ export default function Layout() {
   const { project } = useProject();
   const live = useLiveSync();
   const unread = useChatPoll(can("chat"));
+  useDesktopAlerts();
   const signups = useQuery({
     queryKey: ["admin", "signups"],
     queryFn: () => api.get<{ pending: number }>("/admin/signups/count"),

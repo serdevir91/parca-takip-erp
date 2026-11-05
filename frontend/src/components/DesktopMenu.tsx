@@ -76,8 +76,8 @@ export function DesktopMenu() {
           {note && <div className="error">{note}</div>}
           {info?.background ? (
             <>
-              <button role="menuitem" className="btn small" onClick={() => run("quit")}>Pencereyi kapat (sunucu çalışır)</button>
-              <div className="desk-menu-info muted">Sunucuyu durdurmak için saatin yanındaki gizli simgelerden LAB ERP simgesine sağ tıklayın.</div>
+              <button role="menuitem" className="btn small" onClick={() => run("quit")}>Pencereyi kapat ({info.mode === "server" ? "sunucu çalışır" : "bildirimler gelir"})</button>
+              <div className="desk-menu-info muted">{info.mode === "server" ? "Sunucuyu durdurmak" : "Tamamen kapatmak"} için saatin yanındaki gizli simgelerden LAB ERP simgesine sağ tıklayın.</div>
             </>
           ) : (
             <button role="menuitem" className="btn small danger" onClick={() => run("quit")}>Uygulamayı kapat</button>

@@ -1,7 +1,7 @@
 {
   "name": "parca-takip-erp-frontend",
   "private": true,
-  "version": "1.5.11",
+  "version": "1.5.12",
   "type": "module",
   "scripts": {
     "dev": "vite",

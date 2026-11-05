@@ -387,6 +387,7 @@ class DesktopApp:
         self._listener: socket.socket | None = None   # wake_running_app() connects here
         self._quitting = False   # False: the close button only hides the window while the tray is up
         self._hint_shown = False
+        self._notify_link = ""   # page of the last notification, opened by the tray icon
         self._setup_html = (ASSETS / "setup.html").read_text(encoding="utf-8")
         self._on_setup = True    # False while the window shows a page of the server
         self._guarded = False    # the web view answers certificate errors from the pin
@@ -737,27 +738,39 @@ class DesktopApp:
                 return self._fail(f"Sunucu başlatılamadı: {e}")
             self._server = srv
             self._base = srv.local_url
-            self._start_background()
+        self._start_background()
         self._cfg.pop("_error", None)
         log.info("opening %s", self._base)
         self._open_server(self._base + "/")
         return None
 
-    # --- background mode: the server outlives the window until "Sunucuyu durdur ve çık" in the tray ---
+    # --- background mode: the app outlives the window until the tray's quit item. A server keeps serving,
+    # and both server and client keep delivering notifications from the hidden window. ---
+    def _tray_title(self) -> str:
+        return f"{APP_NAME} sunucusu çalışıyor" if self._server else f"{APP_NAME} çalışıyor"
+
+    def _tray_address(self, _item=None) -> str:
+        if not self._server:
+            return ""
+        return "Adres: " + (", ".join(f"{ip}:{self._server.port}" for ip in lan_addresses()) or "ağ bağlantısı yok")
+
     def _start_background(self) -> None:
-        if not IS_WIN or self._tray is not None:
+        if not IS_WIN:
+            return
+        if self._tray is not None:   # a client switched to server from the settings page
+            self._tray.title = self._tray_title()
+            self._tray.update_menu()
             return
         try:
             import pystray
             from PIL import Image
 
-            addresses = ", ".join(f"{ip}:{self._server.port}" for ip in lan_addresses()) or "ağ bağlantısı yok"
-            self._tray = pystray.Icon("LabERP", Image.open(ASSETS / "icon.ico"), f"{APP_NAME} sunucusu çalışıyor",
-                                      pystray.Menu(
-                pystray.MenuItem(f"{APP_NAME} penceresini aç", lambda icon, item: self._show_window(), default=True),
-                pystray.MenuItem(f"Adres: {addresses}", None, enabled=False),
+            self._tray = pystray.Icon("LabERP", Image.open(ASSETS / "icon.ico"), self._tray_title(), pystray.Menu(
+                pystray.MenuItem(f"{APP_NAME} penceresini aç", lambda icon, item: self._open_from_tray(), default=True),
+                pystray.MenuItem(self._tray_address, None, enabled=False, visible=lambda item: self._server is not None),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Sunucuyu durdur ve çık", lambda icon, item: self._tray_quit())))
+                pystray.MenuItem(lambda item: "Sunucuyu durdur ve çık" if self._server else "Çık",
+                                 lambda icon, item: self._tray_quit())))
             self._tray.run_detached()
             self._window.native.FormClosing += self._on_form_closing
         except Exception:  # noqa: BLE001 - the app still works, only without the background mode
@@ -783,17 +796,28 @@ class DesktopApp:
         self._window.hide()
         if not self._hint_shown:
             self._hint_shown = True
-            self._tray.notify("Sunucu arka planda çalışmaya devam ediyor. Kapatmak için saatin yanındaki gizli "
-                              f"simgelerden {APP_NAME} simgesine sağ tıklayın.", APP_NAME)
+            what = "Sunucu" if self._server else "Uygulama"
+            self._tray.notify(f"{what} arka planda çalışmaya devam ediyor, bildirimler gelir. Kapatmak için saatin "
+                              f"yanındaki gizli simgelerden {APP_NAME} simgesine sağ tıklayın.", APP_NAME)
 
     def _show_window(self) -> None:
         self._window.show()
         if str(self._window.native.WindowState) == "Minimized":
             self._window.restore()
 
+    def _open_from_tray(self) -> None:
+        """The balloon cannot be clicked through pystray, so the tray icon opens what it last announced."""
+        self._show_window()
+        link, self._notify_link = self._notify_link, ""
+        if link:
+            self._window.evaluate_js(f"window.__erpOpen && window.__erpOpen({json.dumps(link)})")
+
     def _tray_quit(self) -> None:
         import ctypes
 
+        if self._server is None:
+            self._leave()
+            return
         text = "Sunucu durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. Kapatılsın mı?"
         # OK/Cancel, warning icon, always on top: the window may be hidden, so it cannot own this dialog
         if ctypes.windll.user32.MessageBoxW(None, text, APP_NAME, 0x1 | 0x30 | 0x40000 | 0x10000) == 1:
@@ -948,6 +972,7 @@ class DesktopApp:
         result: dict = {"version": VERSION}
         try:
             result["tray"] = until(lambda: self._tray is not None and self._tray.visible, 90)
+            result["notified"] = self.notify(APP_NAME, "Bildirim testi", "/chat")["ok"]
             hwnd = ctypes.c_void_p(int(self._window.native.Handle.ToInt64()))
             user32 = ctypes.windll.user32
             user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
@@ -961,7 +986,7 @@ class DesktopApp:
             second = subprocess.run([sys.executable], timeout=60, check=False)
             result["second_start_exit"] = second.returncode
             result["reopened"] = until(visible)
-            result["ok"] = all(result[k] for k in ("tray", "shown", "hidden", "server_alive", "reopened")) \
+            result["ok"] = all(result[k] for k in ("tray", "notified", "shown", "hidden", "server_alive", "reopened")) \
                 and second.returncode == 0
         except Exception as e:  # noqa: BLE001
             log.exception("tray test failed")
@@ -1056,6 +1081,15 @@ class DesktopApp:
                 threading.Timer(0.1, self._window.destroy).start()
         else:
             return {"ok": False, "error": f"Bilinmeyen işlem: {name}"}
+        return {"ok": True}
+
+    def notify(self, title: str, body: str, link: str = "") -> dict:
+        """Show a Windows notification. The page decides when: it polls /notifications/feed while hidden too."""
+        self._app_only()
+        if self._tray is None:
+            return {"ok": False}
+        self._notify_link = link if str(link).startswith("/") else ""
+        self._tray.notify(str(body)[:250], str(title)[:60])   # Shell_NotifyIcon limits: 256 and 64 characters
         return {"ok": True}
 
     def set_theme(self, theme: dict) -> dict:
@@ -1202,7 +1236,7 @@ def main() -> None:
         PIN_TEST = Path(sys.argv[2])
         PIN_TEST.unlink(missing_ok=True)
         threading.Timer(180, lambda: (log.error("pin-test: timed out"), os._exit(1))).start()
-    if IS_WIN and UI_TEST is None and TRAY_TEST is None and PIN_TEST is None and load_config().get("mode") == "server" and wake_running_app():
+    if IS_WIN and UI_TEST is None and TRAY_TEST is None and PIN_TEST is None and load_config().get("mode") in ("server", "client") and wake_running_app():
         log.info("already running; its window was brought to the front")
         logging.shutdown()
         os._exit(0)

@@ -85,6 +85,8 @@ Mac veya Linux sunucuda elle kurulum: [README.md › Docker'sız kurulum](README
 1. Telefonda `LabERP-x.y.z.apk` dosyasını indirip açın. "Bilinmeyen kaynaklar" izni sorulursa
    tarayıcıya izin verin.
 2. Uygulama ağdaki sunucuyu kendisi arar. Bulunan sunucuya dokunun ya da adresi yazın.
+3. Bildirim izni sorulursa izin verin. Yeni mesajlar uygulama kapalıyken de bildirilir. Telefonun sunucuya
+   ulaşabilmesi gerekir. Bildirim geç geliyorsa telefon ayarlarından LAB ERP için pil kısıtlamasını kaldırın.
 
 ### Tarayıcı
 
@@ -165,6 +167,8 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | "Ağda sunucu ara" hiçbir şey bulmuyor | Sunucu bilgisayarda uygulama açık mı? Aynı Wi-Fi'da mısınız? Adresi elle yazmayı deneyin. |
 | "Sunucuya ulaşılamadı" | Sunucuda Windows Güvenlik Duvarı'nda "LAB ERP" (veya Python) için **Özel** ağ izni olmalı. Ağ profili **Özel** olmalı. |
 | Telefon bağlanamıyor, bilgisayar bağlanıyor | Modemde "misafir ağı" veya "AP/istemci yalıtımı" açık olabilir; telefonu ana Wi-Fi ağına bağlayın. |
+| Evde bağlanıyor, iş ağında diğer cihazlar bağlanamıyor | 1) Sunucu bilgisayarın ağ profilini **Özel** yapın: Ayarlar › Ağ ve İnternet › Wi-Fi veya Ethernet › ağ özellikleri. Kurulumdaki güvenlik duvarı izni **Ortak** profilde çalışmaz. Şirket bilgisayarında bunu BT yapabilir. 2) Telefon aynı Wi-Fi'da olmalı, misafir ağı ve mobil veri olmamalı. 3) Telefon tarayıcısında `http://<sunucu-ip>:<port>` adresini deneyin; adres saatin yanındaki LAB ERP simgesinin menüsünde yazar. Şirket ağları otomatik aramayı çoğu zaman engeller, adresi elle yazın. 4) Tarayıcı da açamıyorsa ağda istemci yalıtımı veya port engeli vardır; BT'den bu port için izin isteyin. BT izin verirse Tailscale gibi bir VPN de çözümdür. |
+| Mesaj bildirimi gelmiyor | Android: bildirim izni açık mı, telefon sunucuya ulaşıyor mu, oturum açık mı? Windows: Windows bildirimleri ve "Rahatsız etmeyin" ayarına bakın. Uygulamanın saatin yanındaki gizli simgelerde çalışması gerekir. |
 | Adres değişti | Uygulamalar sunucuyu kendileri yeniden arar. Olmazsa "Sunucuyu değiştir" ile yeni adresi seçin. Kalıcı çözüm: modemde sabit IP. |
 | Giriş ekranında **Hesap oluştur** yok | Yönetici Yönetim › Kullanıcılar ekranından hesap isteklerini açmalı. |
 | Telefon: "Sunucunun sertifikası değişmiş" uyarısı | Sunucunun HTTPS sertifikası değişmiş. Değişikliği siz yaptıysanız "Sunucuyu değiştir" ile sunucuyu unutup yeniden bağlanın. Yapmadıysanız bağlanmayın, ağı kontrol edin. |

@@ -20,6 +20,7 @@ from ..auth import is_https
 from ..permissions import can
 from ..services import commerce, erp
 from ..services.settings import signup_enabled
+from . import chat
 from .deps import any_user, get_db
 from .leave import KINDS
 
@@ -162,6 +163,16 @@ def notifications(request: Request, me: User = Depends(any_user), db: Session = 
     items.sort(key=lambda i: (not i["urgent"], i["date"] or "9999", i["key"]))
     # The bell can be cleared; the banner stays until the setting behind it changes
     return {"count": len(items), "items": items[:LIMIT], "warnings": [i for i in every if i["kind"] == ADMIN_KIND]}
+
+
+@router.get("/notifications/feed")
+def feed(request: Request, after: int = 0, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """What the desktop and phone turn into system notifications: new messages after `after`, and the open items
+    of the bell. Each device remembers the keys it has announced. Nothing is marked as read here."""
+    out = chat.feed(db, me, after) if can(me, "chat") else {"last_id": 0, "messages": []}
+    read = set(db.scalars(select(NotificationRead.key).where(NotificationRead.user_id == me.id)))
+    items = [i for i in collect(db, me, is_https(request)) if i["key"] not in read and i["kind"] != ADMIN_KIND]
+    return {**out, "items": [{k: i[k] for k in ("key", "kind", "title", "detail", "link")} for i in items[:LIMIT]]}
 
 
 class ReadIn(BaseModel):

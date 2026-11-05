@@ -24,6 +24,7 @@ type DesktopShell = {
   app_info(): Promise<DesktopInfo>;
   app_action(name: DesktopAction): Promise<{ ok: boolean; error?: string }>;
   set_theme(t: { dark: boolean; caption: string; text: string }): Promise<{ ok: boolean }>;
+  notify?(title: string, body: string, link: string): Promise<{ ok: boolean }>; // desktop app 1.5.12+
 };
 
 /** Desktop app 1.5+ (themed "Uygulama" menu and title bar); older apps keep their native menu bar. */

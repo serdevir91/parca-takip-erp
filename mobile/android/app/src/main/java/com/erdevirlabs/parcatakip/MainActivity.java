@@ -3,6 +3,7 @@ package com.erdevirlabs.parcatakip;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -73,6 +74,10 @@ public class MainActivity extends Activity {
     private static final int REQ_FILES = 1;
     private static final int REQ_CAMERA = 2;
     private static final int REQ_CHOOSER_CAMERA = 3;
+    private static final int REQ_NOTIFY = 4;
+    static final String EXTRA_LINK = "link";
+    /** Read by AlertService: while the app is on screen it shows new things itself. */
+    static volatile boolean onScreen;
 
     private WebView web;
     private FrameLayout root;
@@ -99,15 +104,50 @@ public class MainActivity extends Activity {
         setupBack();
 
         if (state != null) web.restoreState(state);
-        else if (!server().isEmpty()) web.loadUrl(server() + "/");
+        else if (!server().isEmpty()) web.loadUrl(server() + linkOf(getIntent(), "/"));
         else web.loadUrl(SETUP);
         ui.postDelayed(() -> checkUpdate(false), 4000);
+    }
+
+    /** A tapped notification reaches the running app here. */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String link = linkOf(intent, null);
+        if (link != null && !server().isEmpty()) web.loadUrl(server() + link);
+    }
+
+    private static String linkOf(Intent intent, String fallback) {
+        String link = intent.getStringExtra(EXTRA_LINK);
+        return link != null && link.startsWith("/") ? link : fallback;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        onScreen = true;
+        getSystemService(NotificationManager.class).cancelAll();
+        startAlerts();
+    }
+
+    /** Android 13+ asks the user once; AlertService stays off while notifications are not allowed. */
+    private void startAlerts() {
+        if (server().isEmpty()) return;
+        if (Build.VERSION.SDK_INT >= 33 && !prefs.getBoolean("notify_asked", false)
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            prefs.edit().putBoolean("notify_asked", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
+            return;
+        }
+        AlertService.sync(this);
     }
 
     /** The session cookie lives in the WebView's store, which only reaches the disk on its own schedule. */
     @Override
     protected void onPause() {
         super.onPause();
+        onScreen = false;
         CookieManager.getInstance().flush();
     }
 
@@ -291,10 +331,14 @@ public class MainActivity extends Activity {
      * Forgetting the server is the way back to http, for a server that really turned HTTPS off.
      */
     private boolean downgrade(String url) {
+        return downgrade(prefs, url);
+    }
+
+    private static boolean downgrade(SharedPreferences prefs, String url) {
         Uri u = Uri.parse(url);
         String host = u.getHost();
         if (!"http".equalsIgnoreCase(u.getScheme()) || host == null) return false;
-        Uri saved = Uri.parse(server());
+        Uri saved = Uri.parse(prefs.getString("server", ""));
         if ("https".equalsIgnoreCase(saved.getScheme()) && host.equalsIgnoreCase(saved.getHost())) return true;
         String pin = "pin:https://" + host;
         for (String key : prefs.getAll().keySet()) {
@@ -305,7 +349,11 @@ public class MainActivity extends Activity {
 
     /** A remembered server keeps its pin; everything else goes by the system's trust store. */
     private HttpURLConnection open(String url) throws Exception {
-        if (downgrade(url)) throw new IOException("Bu sunucu HTTPS kullanıyor, şifresiz bağlantı kurulmadı");
+        return open(prefs, url);
+    }
+
+    static HttpURLConnection open(SharedPreferences prefs, String url) throws Exception {
+        if (downgrade(prefs, url)) throw new IOException("Bu sunucu HTTPS kullanıyor, şifresiz bağlantı kurulmadı");
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         String pin = prefs.getString("pin:" + originOf(url), null);
         if (pin != null) Pin.apply(c, pin);
@@ -794,6 +842,7 @@ public class MainActivity extends Activity {
                 prefs.edit().putString("server", base).apply();
             }
             ui.post(() -> {
+                startAlerts();
                 web.clearHistory();
                 web.loadUrl(base + "/");
             });

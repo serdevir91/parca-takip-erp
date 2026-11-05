@@ -787,6 +787,7 @@ class ChatRoom(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     # Time of the last message, for sorting the room list
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    pinned_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # no FK: added by ALTER on SQLite
 
     members: Mapped[list["ChatMember"]] = relationship(back_populates="room", cascade="all, delete-orphan")
 
@@ -822,3 +823,25 @@ class ChatMessage(Base):
     thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    edited_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    reply_to_id: Mapped[int | None] = mapped_column(Integer, nullable=True)      # no FK: added by ALTER on SQLite
+    forwarded_from: Mapped[str | None] = mapped_column(String(120), nullable=True)   # who wrote the original
+
+
+class ChatHidden(Base):
+    """A message one user deleted for themself. Everybody else keeps seeing it."""
+    __tablename__ = "chat_hidden"
+    __table_args__ = (UniqueConstraint("message_id", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+
+class ChatReaction(Base):
+    """One emoji per user and message."""
+    __tablename__ = "chat_reactions"
+    __table_args__ = (UniqueConstraint("message_id", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    emoji: Mapped[str] = mapped_column(String(16))

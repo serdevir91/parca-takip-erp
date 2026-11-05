@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, Check, CheckCheck, Download, FileText, MessageCircle, Paperclip, Plus, Search, Send, Settings2, Trash2,
-  User as UserIcon, Users, X,
+  ArrowLeft, Check, CheckCheck, CheckSquare, ChevronDown, Copy, CornerUpLeft, Download, FileText, Forward, MessageCircle,
+  Paperclip, Pencil, Pin, PinOff, Plus, Search, Send, Settings2, Trash2, User as UserIcon, Users, X,
 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, download, upload } from "../api/client";
 import { useAuth } from "../api/auth";
@@ -20,13 +20,35 @@ type Member = ChatUser & { is_admin: boolean; active: boolean };
 type Room = {
   id: number; kind: "direct" | "group"; name: string; is_admin: boolean; members: Member[];
   last_message: string; last_at: string | null; last_id: number; unread: number; created_by: number | null;
+  pinned: Quote | null;
 };
+type Quote = { id: number; user_name: string; deleted: boolean; text: string };
+type Reaction = { emoji: string; count: number; mine: boolean; names: string[] };
 type FileInfo = { name: string; size: number; type: string; image: boolean };
 type Msg = {
   id: number; room_id: number; user_id: number | null; user_name: string; kind: "text" | "system";
   body: string; file: FileInfo | null; deleted: boolean; created_at: string | null;
+  edited_at: string | null; reply_to: Quote | null; forwarded_from: string | null; reactions: Reaction[];
 };
 type MsgPage = { messages: Msg[]; more: boolean; last_read_id: number; read_by_all: number };
+
+const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const EDIT_MS = 48 * 3600 * 1000;
+const summary = (m: Msg) => m.body || (m.file ? `📎 ${m.file.name}` : "");
+const editable = (m: Msg) => !m.deleted && !m.forwarded_from && !!m.created_at && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
+
+/** navigator.clipboard needs HTTPS, and a LAN server is often plain HTTP. */
+async function copyText(text: string) {
+  if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return; }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
+}
 
 const isPdf = (name: string) => name.toLowerCase().endsWith(".pdf");
 const initial = (s: string) => (s || "?").slice(0, 1).toLocaleUpperCase("tr-TR");
@@ -121,6 +143,12 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
   const [over, setOver] = useState(false);
   const [settings, setSettings] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
+  const [replying, setReplying] = useState<Msg | null>(null);
+  const [editing, setEditing] = useState<Msg | null>(null);
+  const [menu, setMenu] = useState<{ m: Msg; x: number; y: number } | null>(null);
+  const [deleting, setDeleting] = useState<Msg[] | null>(null);
+  const [forwarding, setForwarding] = useState<number[] | null>(null);
+  const [picked, setPicked] = useState<Set<number> | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -198,20 +226,47 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
     if (arr.length) setFiles((f) => [...f, ...arr]);
   };
 
+  const put = (m: Msg) => setMsgs((old) => old.map((x) => (x.id === m.id ? m : x)));
+  const roomsChanged = () => void qc.invalidateQueries({ queryKey: ["chat", "rooms"] });
+  const cancelCompose = () => {
+    if (editing) setText("");
+    setEditing(null);
+    setReplying(null);
+  };
+  const startEdit = (m: Msg) => {
+    setReplying(null);
+    setEditing(m);
+    setText(m.body);
+    input.current?.focus();
+  };
+  const saveEdit = async () => {
+    if (!editing || busy) return;
+    try {
+      put(await api.patch<Msg>(`/chat/messages/${editing.id}`, { body: text.trim() }));
+      setEditing(null);
+      setText("");
+      roomsChanged();
+    } catch (e) { toast(errText(e), true); }
+  };
+
   const send = async () => {
+    if (editing) { await saveEdit(); return; }
     const body = text.trim();
     if ((!body && !files.length) || busy) return;
     stick.current = true;
+    const replyTo = replying ? String(replying.id) : null;
     try {
       if (!files.length) {
         const f = new FormData();
         f.append("body", body);
+        if (replyTo) f.append("reply_to", replyTo);
         setBusy("Gönderiliyor…");
         await upload(`${base}/messages`, f);
       } else {
         for (const [i, file] of files.entries()) {
           const f = new FormData();
           f.append("body", i === 0 ? body : "");
+          if (replyTo && i === 0) f.append("reply_to", replyTo);
           f.append("file", file, file.name);
           if (isImageFile(file)) {
             const t = await makeThumb(file);
@@ -224,6 +279,7 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
       }
       setText("");
       setFiles([]);
+      setReplying(null);
     } catch (e) {
       toast(errText(e), true);
     } finally {
@@ -234,14 +290,52 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
     }
   };
 
-  const remove = async (m: Msg) => {
-    if (!confirm("Mesaj silinsin mi? Herkes için silinir.")) return;
+  const remove = async (list: Msg[], scope: "all" | "me") => {
+    setDeleting(null);
+    setPicked(null);
     try {
-      const out = await api.del<Msg>(`/chat/messages/${m.id}`);
-      setMsgs((old) => old.map((x) => (x.id === m.id ? out : x)));
-      void qc.invalidateQueries({ queryKey: ["chat", "rooms"] });
+      for (const m of list) {
+        const out = await api.del<Msg>(`/chat/messages/${m.id}?scope=${scope}`);
+        if (scope === "all") put(out);
+        else setMsgs((old) => old.filter((x) => x.id !== m.id));
+      }
+      roomsChanged();
     } catch (e) { toast(errText(e), true); }
   };
+  const react = async (m: Msg, emoji: string) => {
+    try { put(await api.put<Msg>(`/chat/messages/${m.id}/reaction`, { emoji })); } catch (e) { toast(errText(e), true); }
+  };
+  const pin = async (id: number | null) => {
+    try {
+      await api.post(`${base}/pin`, { message_id: id });
+      roomsChanged();
+    } catch (e) { toast(errText(e), true); }
+  };
+  const copy = async (list: Msg[]) => {
+    try {
+      await copyText(list.map(summary).join("\n"));
+      toast("Kopyalandı");
+    } catch (e) { toast(errText(e), true); }
+  };
+  const jump = (id: number) => {
+    const el = document.getElementById(`chat-m-${id}`);
+    if (!el) { toast("Mesaj yüklü değil. “Daha eski mesajlar” ile açın."); return; }
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.add("flash");
+    window.setTimeout(() => el.classList.remove("flash"), 1500);
+  };
+  const openMenu = (e: ReactMouseEvent, m: Msg) => {
+    e.preventDefault();
+    setMenu({ m, x: e.clientX, y: e.clientY });
+  };
+  const toggle = (id: number) => setPicked((old) => {
+    const next = new Set(old);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next.size ? next : null;
+  });
+  const pickedMsgs = picked ? msgs.filter((m) => picked.has(m.id)) : [];
+  const canDeleteAll = (m: Msg) => canWrite && !m.deleted && (m.user_id === user?.id || (room.kind === "group" && room.is_admin));
+  const canPin = canWrite && (room.kind === "direct" || room.is_admin);
 
   const viewable = useMemo(() => msgs.filter((m) => m.file && (m.file.image || isPdf(m.file.name))), [msgs]);
   const items: ViewItem[] = viewable.map((m) => ({
@@ -263,7 +357,15 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
     <div className={`chat-room-pane${over ? " drop" : ""}`}
       onDragOver={(e) => { if (canWrite && e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }} onDrop={onDrop}>
-      <header className="chat-head">
+      {picked ? (
+        <header className="chat-head chat-picking">
+          <button className="icon-btn" onClick={() => setPicked(null)} aria-label="Seçimi bırak"><X size={18} /></button>
+          <b style={{ flex: 1 }}>{picked.size} mesaj seçili</b>
+          <button className="icon-btn" onClick={() => void copy(pickedMsgs).then(() => setPicked(null))} title="Kopyala" aria-label="Kopyala"><Copy size={18} /></button>
+          {canWrite && <button className="icon-btn" disabled={pickedMsgs.some((m) => m.deleted)} onClick={() => setForwarding(pickedMsgs.map((m) => m.id))} title="İlet" aria-label="İlet"><Forward size={18} /></button>}
+          <button className="icon-btn" onClick={() => setDeleting(pickedMsgs)} title="Sil" aria-label="Sil"><Trash2 size={18} /></button>
+        </header>
+      ) : <header className="chat-head">
         <button className="icon-btn chat-back" onClick={onBack} aria-label="Sohbetler"><ArrowLeft size={18} /></button>
         <span className={`chat-avatar${room.kind === "group" ? " group" : ""}`}>{room.kind === "group" ? <Users size={16} /> : initial(room.name)}</span>
         <div className="chat-head-text">
@@ -273,7 +375,16 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
         {room.kind === "group" && (
           <button className="icon-btn" onClick={() => setSettings(true)} title="Grup ayarları" aria-label="Grup ayarları"><Settings2 size={18} /></button>
         )}
-      </header>
+      </header>}
+      {room.pinned && (
+        <div className="chat-pinned">
+          <Pin size={15} />
+          <button className="chat-pinned-text" onClick={() => jump(room.pinned!.id)}>
+            <b>Sabitlenmiş mesaj</b><span>{room.pinned.user_name}: {room.pinned.text}</span>
+          </button>
+          {canPin && <button className="icon-btn" onClick={() => void pin(null)} title="Sabitlemeyi kaldır" aria-label="Sabitlemeyi kaldır"><X size={15} /></button>}
+        </div>
+      )}
       <div className="chat-msgs" ref={scroller} onScroll={onScroll}>
         {more && <div className="chat-more"><button className="btn small" onClick={() => void older()}>Daha eski mesajlar</button></div>}
         {loading && <div className="muted chat-sys">Yükleniyor…</div>}
@@ -289,22 +400,38 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
             <Fragment key={m.id}>
               {newDay && <div className="chat-day"><span>{dayLabel(m.created_at)}</span></div>}
               {m.kind === "system" ? <div className="chat-sys">{m.body} · {timeOf(m.created_at)}</div> : (
-                <div className={`chat-msg${mine ? " mine" : ""}`}>
-                  <div className={`chat-bubble${m.deleted ? " deleted" : ""}`}>
+                <div id={`chat-m-${m.id}`} className={`chat-msg${mine ? " mine" : ""}${picked?.has(m.id) ? " picked" : ""}`}
+                  onClick={picked ? () => toggle(m.id) : undefined}>
+                  {picked && <input type="checkbox" className="chat-check" readOnly checked={picked.has(m.id)} tabIndex={-1} aria-label="Mesajı seç" />}
+                  <div className={`chat-bubble${m.deleted ? " deleted" : ""}`} onContextMenu={picked ? undefined : (e) => openMenu(e, m)}>
+                    {!picked && <button className="chat-more-btn" onClick={(e) => openMenu(e, m)} title="Mesaj işlemleri" aria-label="Mesaj işlemleri"><ChevronDown size={15} /></button>}
                     {head && <div className="chat-author">{m.user_name}</div>}
                     {m.deleted ? <i className="muted">Bu mesaj silindi</i> : <>
+                      {m.forwarded_from && <div className="chat-forwarded"><Forward size={12} /> İletildi: {m.forwarded_from}</div>}
+                      {m.reply_to && (
+                        <button className="chat-quote" onClick={(e) => { e.stopPropagation(); jump(m.reply_to!.id); }}>
+                          <b>{m.reply_to.user_name}</b>
+                          <span>{m.reply_to.deleted ? "Bu mesaj silindi" : m.reply_to.text}</span>
+                        </button>
+                      )}
                       {m.file && <Attachment m={m} onOpen={() => openFile(m)} />}
                       {m.body && <div className="chat-text">{m.body}</div>}
                     </>}
                     <div className="chat-meta">
+                      {m.edited_at && <span>düzenlendi</span>}
                       {timeOf(m.created_at)}
                       {mine && !m.deleted && (m.id <= readAll
                         ? <CheckCheck size={14} className="seen" aria-label="Görüldü" />
                         : <Check size={14} aria-label="Gönderildi" />)}
-                      {mine && !m.deleted && canWrite && (
-                        <button className="chat-del" onClick={() => void remove(m)} title="Sil" aria-label="Mesajı sil"><Trash2 size={13} /></button>
-                      )}
                     </div>
+                    {!!m.reactions.length && (
+                      <div className="chat-reactions">
+                        {m.reactions.map((r) => (
+                          <button key={r.emoji} className={r.mine ? "on" : ""} title={r.names.join(", ")} disabled={!canWrite}
+                            onClick={(e) => { e.stopPropagation(); void react(m, r.emoji); }}>{r.emoji} {r.count}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -314,6 +441,16 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
       </div>
       {canWrite ? (
         <div className="chat-compose">
+          {(replying || editing) && (
+            <div className="chat-context">
+              {editing ? <Pencil size={15} /> : <CornerUpLeft size={15} />}
+              <div className="chat-context-text">
+                <b>{editing ? "Mesajı düzenle" : replying!.user_name}</b>
+                <span>{summary(editing ?? replying!)}</span>
+              </div>
+              <button className="icon-btn" onClick={cancelCompose} aria-label="Vazgeç"><X size={15} /></button>
+            </div>
+          )}
           {!!files.length && (
             <div className="chat-files">
               {files.map((f, i) => (
@@ -326,19 +463,128 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
           )}
           {busy && <div className="muted chat-busy">{busy}</div>}
           <div className="chat-compose-row">
-            <button className="icon-btn" onClick={() => pick.current?.click()} disabled={!!busy} title="Dosya ekle" aria-label="Dosya ekle"><Paperclip size={19} /></button>
+            <button className="icon-btn" onClick={() => pick.current?.click()} disabled={!!busy || !!editing} title="Dosya ekle" aria-label="Dosya ekle"><Paperclip size={19} /></button>
             <input ref={pick} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
             <textarea ref={input} rows={1} value={text} placeholder="Mesaj yazın…" title="Enter: gönder · Shift+Enter: yeni satır"
               onChange={(e) => setText(e.target.value)} onPaste={onPaste} maxLength={10000}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} />
-            <button className="btn primary chat-send" onClick={() => void send()} disabled={!!busy || (!text.trim() && !files.length)} aria-label="Gönder"><Send size={17} /></button>
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
+                if (e.key === "Escape") cancelCompose();
+                if (e.key === "ArrowUp" && !text && !editing) {
+                  const last = [...msgs].reverse().find((m) => m.user_id === user?.id && m.kind === "text" && editable(m));
+                  if (last) { e.preventDefault(); startEdit(last); }
+                }
+              }} />
+            <button className="btn primary chat-send" onClick={() => void send()} disabled={!!busy || (!text.trim() && !files.length && !editing?.file)} aria-label={editing ? "Kaydet" : "Gönder"}><Send size={17} /></button>
           </div>
         </div>
       ) : <div className="muted chat-compose">Sohbet için yalnızca okuma yetkiniz var.</div>}
       {over && <div className="chat-drop">Göndermek için dosyaları bırakın</div>}
       {viewing !== null && viewing >= 0 && items.length > 0 && <Viewer items={items} start={viewing} onClose={() => setViewing(null)} />}
       {settings && <GroupSettings room={room} onClose={() => setSettings(false)} onLeft={onLeft} />}
+      {menu && (
+        <MessageMenu at={menu} onClose={() => setMenu(null)} canWrite={canWrite}
+          onReact={(emoji) => void react(menu.m, emoji)}
+          actions={[
+            ...(canWrite && !menu.m.deleted ? [{ icon: <CornerUpLeft size={16} />, label: "Yanıtla", run: () => { setEditing(null); setReplying(menu.m); input.current?.focus(); } }] : []),
+            ...(!menu.m.deleted ? [{ icon: <Copy size={16} />, label: "Kopyala", run: () => void copy([menu.m]) }] : []),
+            ...(canWrite && !menu.m.deleted ? [{ icon: <Forward size={16} />, label: "İlet", run: () => setForwarding([menu.m.id]) }] : []),
+            ...(canPin && !menu.m.deleted ? [room.pinned?.id === menu.m.id
+              ? { icon: <PinOff size={16} />, label: "Sabitlemeyi kaldır", run: () => void pin(null) }
+              : { icon: <Pin size={16} />, label: "Sabitle", run: () => void pin(menu.m.id) }] : []),
+            ...(canWrite && menu.m.user_id === user?.id && editable(menu.m) ? [{ icon: <Pencil size={16} />, label: "Düzenle", run: () => startEdit(menu.m) }] : []),
+            { icon: <CheckSquare size={16} />, label: "Seç", run: () => setPicked(new Set([menu.m.id])) },
+            { icon: <Trash2 size={16} />, label: "Sil", danger: true, run: () => setDeleting([menu.m]) },
+          ]} />
+      )}
+      {deleting && (
+        <Modal title={deleting.length > 1 ? `${deleting.length} mesaj silinsin mi?` : "Mesaj silinsin mi?"} onClose={() => setDeleting(null)}
+          footer={<>
+            <button className="btn" onClick={() => setDeleting(null)}>Vazgeç</button>
+            <button className="btn" onClick={() => void remove(deleting, "me")}>Benden sil</button>
+            {deleting.every(canDeleteAll) && <button className="btn danger" onClick={() => void remove(deleting, "all")}>Herkesten sil</button>}
+          </>}>
+          <p className="muted" style={{ margin: 0 }}>
+            “Benden sil” yalnızca sizin ekranınızdan kaldırır.
+            {deleting.every(canDeleteAll) ? " “Herkesten sil” mesajı ve dosyasını herkesten kaldırır, geri alınamaz." : ""}
+          </p>
+        </Modal>
+      )}
+      {forwarding && <ForwardModal ids={forwarding} onClose={() => setForwarding(null)} onDone={() => { setForwarding(null); setPicked(null); void refresh(); }} />}
     </div>
+  );
+}
+
+type MenuAction = { icon: JSX.Element; label: string; danger?: boolean; run: () => void };
+
+/** Fixed to the viewport: the message list scrolls and would cut a menu inside the bubble. */
+function MessageMenu({ at, actions, canWrite, onReact, onClose }: {
+  at: { m: Msg; x: number; y: number }; actions: MenuAction[]; canWrite: boolean; onReact: (emoji: string) => void; onClose: () => void;
+}) {
+  const left = Math.max(8, Math.min(at.x, window.innerWidth - 228));
+  const top = Math.max(8, Math.min(at.y, window.innerHeight - (actions.length * 38 + 66)));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="chat-menu-back" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }}>
+      <div className="chat-menu" role="menu" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
+        {canWrite && !at.m.deleted && (
+          <div className="chat-menu-emoji">
+            {REACTIONS.map((r) => (
+              <button key={r} className={at.m.reactions.some((x) => x.mine && x.emoji === r) ? "on" : ""} aria-label={`Tepki ${r}`}
+                onClick={() => { onReact(r); onClose(); }}>{r}</button>
+            ))}
+          </div>
+        )}
+        {actions.map((a) => (
+          <button key={a.label} role="menuitem" className={a.danger ? "danger" : ""} onClick={() => { onClose(); a.run(); }}>{a.icon} {a.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ForwardModal({ ids, onClose, onDone }: { ids: number[]; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const rooms = useQuery({ queryKey: ["chat", "rooms"], queryFn: () => api.get<Room[]>("/chat/rooms") });
+  const [filter, setFilter] = useState("");
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const f = filter.trim().toLocaleLowerCase("tr-TR");
+  const list = (rooms.data ?? []).filter((r) => !f || r.name.toLocaleLowerCase("tr-TR").includes(f));
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.post("/chat/forward", { message_ids: ids, room_ids: [...sel] });
+      toast(sel.size > 1 ? `${sel.size} sohbete iletildi` : "İletildi");
+      void qc.invalidateQueries({ queryKey: ["chat"] });
+      onDone();
+    } catch (e) { toast(errText(e), true); setBusy(false); }
+  };
+  return (
+    <Modal title={ids.length > 1 ? `${ids.length} mesajı ilet` : "Mesajı ilet"} onClose={onClose}
+      footer={<>
+        <button className="btn" onClick={onClose}>Vazgeç</button>
+        <button className="btn primary" disabled={busy || !sel.size} onClick={() => void go()}>İlet ({sel.size})</button>
+      </>}>
+      <input type="search" autoFocus placeholder="Sohbet ara…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+      {rooms.isError && <div className="error">{errText(rooms.error)}</div>}
+      {rooms.isSuccess && !list.length && <div className="empty">Sohbet yok.</div>}
+      <div className="chat-pick">
+        {list.map((r) => (
+          <button key={r.id} className={`chat-pick-row${sel.has(r.id) ? " on" : ""}`}
+            onClick={() => setSel((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
+            <span className={`chat-avatar${r.kind === "group" ? " group" : ""}`}>{r.kind === "group" ? <Users size={16} /> : initial(r.name)}</span>
+            <span className="chat-room-text"><b>{r.name}</b></span>
+            <input type="checkbox" readOnly checked={sel.has(r.id)} tabIndex={-1} />
+          </button>
+        ))}
+      </div>
+    </Modal>
   );
 }
 

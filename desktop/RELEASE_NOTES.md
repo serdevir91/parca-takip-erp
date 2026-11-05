@@ -1,6 +1,14 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.12 yenilikleri
+
+- **Sohbet:** Mesaj düzenleme (48 saat), benden veya herkesten silme, yanıtlama, iletme, tepki, sabitleme, kopyalama ve çoklu seçim eklendi. Menü sağ tıkla veya mesajdaki oktan açılır.
+- **Android bildirimi:** Uygulama kapalıyken de yeni mesaj ve uyarı bildirimi gelir. Bildirime dokununca ilgili ekran açılır. Sunucuya ulaşılabilmesi gerekir. Ekran kapalıyken gecikme olabilir.
+- **Windows bildirimi:** Pencere kapalı veya arka plandayken bildirim gelir. İstemci modunda da pencere kapatılınca uygulama saatin yanındaki gizli simgelerde çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Çık" seçilir.
+- **Bağlantı elemanı stoğu:** Stok › Bağlantı elemanları sekmesi eklendi. BOM'daki civata ve somunlar kendiliğinden listelenir, stok ve açık ihtiyaç yan yana görünür. Giriş, çıkış, sayım ve projeye verme tek pencereden yapılır. Min. stok, raf ve QR etiket desteklenir.
+- **Okunmamış sayısı:** Silinmiş mesajlar artık okunmamış sayısına girmez.
+
 ## 1.5.11 yenilikleri
 
 - **Proje silme:** Windows sunucuda "Kalıcı olarak sil" hata veriyor, proje silinmiyordu. Sorun silmeden önce alınan yedekteydi, düzeltildi.

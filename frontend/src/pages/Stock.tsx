@@ -11,6 +11,7 @@ import { Page } from "../components/Layout";
 import Photos from "../components/Photos";
 import { errText, useToast } from "../components/Toast";
 import { Field, Loading, Modal, fmtDate } from "./admin/shared";
+import FastenerStock from "./erp/FastenerStock";
 import { FirmSelect, ITEM_KINDS, ProjectSelect, fmtMoney, fmtQty, numOrNull, useFirms, type ReorderRow, type StockItem, type StockMove } from "./erp/common";
 
 type ListResp = { rows: StockItem[]; total_value: number; low_count: number };
@@ -22,17 +23,18 @@ const lowStyle = (r: StockItem): CSSProperties | undefined =>
 /** Stok / depo: stock cards, manual moves and the ledger. */
 export default function Stock() {
   const { can } = useAuth();
-  const [tab, setTab] = useState<"items" | "moves" | "reorder">("items");
+  const [tab, setTab] = useState<"items" | "fasteners" | "moves" | "reorder">("items");
   return (
     <Page full>
       <div className="toolbar">
         <div className="tabs" role="tablist" style={{ margin: 0 }}>
           <button role="tab" aria-selected={tab === "items"} className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>Stok kartları</button>
+          <button role="tab" aria-selected={tab === "fasteners"} className={tab === "fasteners" ? "active" : ""} onClick={() => setTab("fasteners")}>Bağlantı elemanları</button>
           <button role="tab" aria-selected={tab === "moves"} className={tab === "moves" ? "active" : ""} onClick={() => setTab("moves")}>Son hareketler</button>
           {can("purchasing") && <button role="tab" aria-selected={tab === "reorder"} className={tab === "reorder" ? "active" : ""} onClick={() => setTab("reorder")}>Sipariş önerileri</button>}
         </div>
       </div>
-      {tab === "items" ? <Items /> : tab === "moves" ? <MovesTab /> : <Reorder />}
+      {tab === "items" ? <Items /> : tab === "fasteners" ? <FastenerStock /> : tab === "moves" ? <MovesTab /> : <Reorder />}
     </Page>
   );
 }
@@ -40,7 +42,7 @@ export default function Stock() {
 function useRefresh() {
   const qc = useQueryClient();
   return () => {
-    for (const k of ["stock", "stock-moves", "requirements", "costs", "parts"]) void qc.invalidateQueries({ queryKey: [k] });
+    for (const k of ["stock", "fastener-stock", "stock-moves", "requirements", "costs", "parts"]) void qc.invalidateQueries({ queryKey: [k] });
   };
 }
 

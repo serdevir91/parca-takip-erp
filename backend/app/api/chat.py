@@ -4,7 +4,8 @@ Clients poll GET /chat/state (a few bytes) and refetch rooms/messages only when 
 Chat writes are left out of the global live-sync counter (services/sync.SKIP_PATHS)."""
 from __future__ import annotations
 
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import session_token, user_from_token
 from ..config import get_settings
-from ..models import ChatMember, ChatMessage, ChatRoom, User, utcnow
+from ..models import ChatHidden, ChatMember, ChatMessage, ChatReaction, ChatRoom, User, utcnow
 from ..permissions import can, require
 from ..services import uploads
 from .deps import get_db
@@ -31,6 +32,9 @@ MAX_THUMB_MB = 2
 BLOCKED_EXT = {"exe", "msi", "bat", "cmd", "com", "scr", "pif", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
                "hta", "lnk", "jar", "reg", "dll", "html", "htm", "xhtml", "svg", "shtml", "mht", "mhtml"}
 PAGE = 60
+EDIT_HOURS = 48
+REACTIONS = ("👍", "❤️", "😂", "😮", "😢", "🙏")
+FEED_LIMIT = 20
 
 
 def display(u: User | None) -> str:
@@ -57,13 +61,63 @@ def _active_user(db: Session, user_id: int) -> User:
     return u
 
 
-def message_out(m: ChatMessage) -> dict[str, Any]:
+def _hidden(me: User) -> Any:
+    """Ids of the messages this user deleted for themself."""
+    return select(ChatHidden.message_id).where(ChatHidden.user_id == me.id)
+
+
+def _summary(m: ChatMessage) -> str:
+    return m.body or (f"📎 {m.file_name}" if m.file_name else "")
+
+
+def _quote(m: ChatMessage | None) -> dict[str, Any] | None:
+    """The short form shown above a reply and in the pinned bar."""
+    if m is None:
+        return None
+    return {"id": m.id, "user_name": m.username, "deleted": m.deleted, "text": "" if m.deleted else _summary(m)[:200]}
+
+
+def message_out(m: ChatMessage, reply: ChatMessage | None = None,
+                reactions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     f = None
     if m.file_name and not m.deleted:
         f = {"name": m.file_name, "size": m.file_size or 0, "type": m.file_type or "",
              "image": uploads.ext_of(m.file_name) in uploads.PREVIEW_EXTS or m.thumb_path is not None}
     return {"id": m.id, "room_id": m.room_id, "user_id": m.user_id, "user_name": m.username, "kind": m.kind,
-            "body": "" if m.deleted else m.body, "file": f, "deleted": m.deleted, "created_at": _iso(m.created_at)}
+            "body": "" if m.deleted else m.body, "file": f, "deleted": m.deleted, "created_at": _iso(m.created_at),
+            "edited_at": None if m.deleted else _iso(m.edited_at), "reply_to": _quote(reply),
+            "forwarded_from": None if m.deleted else m.forwarded_from,
+            "reactions": [] if m.deleted else reactions or []}
+
+
+def messages_out(db: Session, rows: list[ChatMessage], me: User) -> list[dict[str, Any]]:
+    """Messages with their quotes and reactions, two queries for the whole page."""
+    ids = {m.reply_to_id for m in rows if m.reply_to_id}
+    quoted = {m.id: m for m in db.scalars(select(ChatMessage).where(ChatMessage.id.in_(ids)))} if ids else {}
+    marks: dict[int, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for r, u in db.execute(select(ChatReaction, User).outerjoin(User, User.id == ChatReaction.user_id)
+                           .where(ChatReaction.message_id.in_([m.id for m in rows])).order_by(ChatReaction.id)):
+        one = marks[r.message_id].setdefault(r.emoji, {"emoji": r.emoji, "count": 0, "mine": False, "names": []})
+        one["count"] += 1
+        one["mine"] = one["mine"] or r.user_id == me.id
+        one["names"].append(display(u))
+    return [message_out(m, quoted.get(m.reply_to_id or 0), list(marks[m.id].values())) for m in rows]
+
+
+def _one(db: Session, m: ChatMessage, me: User) -> dict[str, Any]:
+    return messages_out(db, [m], me)[0]
+
+
+def _touch(db: Session, room_id: int) -> None:
+    """Changes everybody's /state key, so an edit, a deletion or a reaction shows up."""
+    db.get(ChatRoom, room_id).updated_at = utcnow()
+
+
+def _text_message(db: Session, message_id: int) -> ChatMessage:
+    msg = db.get(ChatMessage, message_id)
+    if msg is None or msg.kind != "text":
+        raise HTTPException(404, "Mesaj bulunamadı")
+    return msg
 
 
 def _system(db: Session, room: ChatRoom, user: User, text: str) -> ChatMessage:
@@ -79,24 +133,28 @@ def room_out(db: Session, room: ChatRoom, me: User, unread: int = 0) -> dict[str
     mine = next((m for m in members if m.user_id == me.id), None)
     others = [m for m in members if m.user_id != me.id]
     name = room.name if room.kind == "group" else (display(others[0].user) if others else "Ben")
-    last = db.scalar(select(ChatMessage).where(ChatMessage.room_id == room.id).order_by(ChatMessage.id.desc()).limit(1))
+    last = db.scalar(select(ChatMessage).where(ChatMessage.room_id == room.id, ChatMessage.id.not_in(_hidden(me)))
+                     .order_by(ChatMessage.id.desc()).limit(1))
+    pinned = db.get(ChatMessage, room.pinned_id) if room.pinned_id else None
     preview = ""
     if last is not None:
-        preview = "Mesaj silindi" if last.deleted else (last.body or (f"📎 {last.file_name}" if last.file_name else ""))
+        preview = "Mesaj silindi" if last.deleted else _summary(last)
         if last.kind == "text" and room.kind == "group":
             preview = f"{'Siz' if last.user_id == me.id else last.username}: {preview}"
     return {"id": room.id, "kind": room.kind, "name": name, "is_admin": bool(mine and mine.is_admin),
             "members": [{"id": m.user_id, "name": display(m.user), "username": m.user.username if m.user else "",
                          "is_admin": m.is_admin, "active": bool(m.user and m.user.active)} for m in members],
             "last_message": preview[:120], "last_at": _iso(last.created_at if last else room.created_at),
-            "last_id": last.id if last else 0, "unread": unread, "created_by": room.created_by}
+            "last_id": last.id if last else 0, "unread": unread, "created_by": room.created_by,
+            "pinned": _quote(pinned)}
 
 
 def _unread_by_room(db: Session, me: User) -> dict[int, int]:
     rows = db.execute(
         select(ChatMessage.room_id, func.count())
         .join(ChatMember, (ChatMember.room_id == ChatMessage.room_id) & (ChatMember.user_id == me.id))
-        .where(ChatMessage.id > ChatMember.last_read_id, ChatMessage.user_id != me.id, ChatMessage.kind == "text")
+        .where(ChatMessage.id > ChatMember.last_read_id, ChatMessage.user_id != me.id, ChatMessage.kind == "text",
+               ChatMessage.deleted.is_(False), ChatMessage.id.not_in(_hidden(me)))
         .group_by(ChatMessage.room_id)).all()
     return {r: n for r, n in rows}
 
@@ -114,6 +172,26 @@ def state(db: Session = Depends(get_db), me: User = Depends(chat_view)) -> dict[
     unread = _unread_by_room(db, me)
     return {"key": f"{last_id}:{n_rooms}:{_iso(touched) or ''}:{reads}", "unread": sum(unread.values()),
             "last_id": last_id}
+
+
+def feed(db: Session, me: User, after: int) -> dict[str, Any]:
+    """New messages for the desktop and phone notifications. after=0 answers only where the end is, so a device
+    that starts up does not announce the whole history. What was read on another device is left out."""
+    rooms = select(ChatMember.room_id).where(ChatMember.user_id == me.id)
+    last_id = db.scalar(select(func.max(ChatMessage.id)).where(ChatMessage.room_id.in_(rooms))) or 0
+    if after <= 0:
+        return {"last_id": last_id, "messages": []}
+    rows = db.execute(
+        select(ChatMessage, ChatRoom)
+        .join(ChatRoom, ChatRoom.id == ChatMessage.room_id)
+        .join(ChatMember, (ChatMember.room_id == ChatMessage.room_id) & (ChatMember.user_id == me.id))
+        .where(ChatMessage.id > after, ChatMessage.id > ChatMember.last_read_id, ChatMessage.user_id != me.id,
+               ChatMessage.kind == "text", ChatMessage.deleted.is_(False), ChatMessage.id.not_in(_hidden(me)))
+        .order_by(ChatMessage.id.desc()).limit(FEED_LIMIT)).all()
+    return {"last_id": last_id, "messages": [
+        {"id": m.id, "room_id": m.room_id, "link": f"/chat?r={m.room_id}", "text": _summary(m)[:200],
+         "title": f"{m.username} · {r.name}" if r.kind == "group" else m.username}
+        for m, r in reversed(rows)]}
 
 
 @router.get("/users")
@@ -243,7 +321,7 @@ def leave(room_id: int, db: Session = Depends(get_db), me: User = Depends(chat_v
 def messages(room_id: int, after: int | None = None, before: int | None = None, limit: int = PAGE,
              db: Session = Depends(get_db), me: User = Depends(chat_view)) -> dict[str, Any]:
     mine = _member(db, room_id, me)
-    q = select(ChatMessage).where(ChatMessage.room_id == room_id)
+    q = select(ChatMessage).where(ChatMessage.room_id == room_id, ChatMessage.id.not_in(_hidden(me)))
     limit = max(1, min(limit, 200))
     if after is not None:
         rows = db.scalars(q.where(ChatMessage.id > after).order_by(ChatMessage.id).limit(500)).all()
@@ -255,14 +333,14 @@ def messages(room_id: int, after: int | None = None, before: int | None = None, 
         more = len(rows) > limit
         rows = rows[-limit:]
     others = [m.last_read_id for m in mine.room.members if m.user_id != me.id]
-    return {"messages": [message_out(m) for m in rows], "more": more, "last_read_id": mine.last_read_id,
+    return {"messages": messages_out(db, list(rows), me), "more": more, "last_read_id": mine.last_read_id,
             # For "seen" ticks on my messages: everybody else has read up to this id
             "read_by_all": min(others) if others else 0}
 
 
 @router.post("/rooms/{room_id}/messages", status_code=201)
-async def send(room_id: int, body: str = Form(""), file: UploadFile | None = File(None),
-               thumb: UploadFile | None = File(None), db: Session = Depends(get_db),
+async def send(room_id: int, body: str = Form(""), reply_to: int | None = Form(None),
+               file: UploadFile | None = File(None), thumb: UploadFile | None = File(None), db: Session = Depends(get_db),
                me: User = Depends(chat_edit)) -> dict[str, Any]:
     mine = _member(db, room_id, me)
     text = body.strip()
@@ -271,7 +349,11 @@ async def send(room_id: int, body: str = Form(""), file: UploadFile | None = Fil
         raise HTTPException(400, "Boş mesaj gönderilemez")
     if len(text) > 10000:
         raise HTTPException(400, "Mesaj çok uzun (en fazla 10.000 karakter)")
-    msg = ChatMessage(room_id=room_id, user_id=me.id, username=display(me), body=text)
+    if reply_to is not None:
+        quoted = db.get(ChatMessage, reply_to)
+        if quoted is None or quoted.room_id != room_id or quoted.kind != "text":
+            raise HTTPException(400, "Yanıtlanan mesaj bu sohbette yok")
+    msg = ChatMessage(room_id=room_id, user_id=me.id, username=display(me), body=text, reply_to_id=reply_to)
     if has_file:
         assert file is not None
         if uploads.ext_of(uploads.safe_name(file.filename)) in BLOCKED_EXT:
@@ -292,7 +374,7 @@ async def send(room_id: int, body: str = Form(""), file: UploadFile | None = Fil
     db.flush()
     mine.last_read_id = msg.id
     db.commit()
-    return message_out(msg)
+    return _one(db, msg, me)
 
 
 class ReadIn(BaseModel):
@@ -308,20 +390,141 @@ def mark_read(room_id: int, body: ReadIn, db: Session = Depends(get_db), me: Use
     return {"last_read_id": mine.last_read_id}
 
 
-@router.delete("/messages/{message_id}")
-def delete_message(message_id: int, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
-    msg = db.get(ChatMessage, message_id)
-    if msg is None or msg.kind != "text":
-        raise HTTPException(404, "Mesaj bulunamadı")
+class EditIn(BaseModel):
+    body: str = Field(max_length=10000)
+
+
+@router.patch("/messages/{message_id}")
+def edit_message(message_id: int, body: EditIn, db: Session = Depends(get_db),
+                 me: User = Depends(chat_edit)) -> dict[str, Any]:
+    msg = _text_message(db, message_id)
     _member(db, msg.room_id, me)
     if msg.user_id != me.id:
+        raise HTTPException(403, "Yalnızca kendi mesajınızı düzenleyebilirsiniz")
+    if msg.deleted:
+        raise HTTPException(400, "Silinmiş mesaj düzenlenemez")
+    if msg.forwarded_from:
+        raise HTTPException(400, "İletilen mesaj düzenlenemez")
+    if utcnow() - msg.created_at > timedelta(hours=EDIT_HOURS):
+        raise HTTPException(400, f"Mesaj yalnızca ilk {EDIT_HOURS} saat içinde düzenlenebilir")
+    text = body.body.strip()
+    if not text and not msg.file_name:
+        raise HTTPException(400, "Boş mesaj gönderilemez")
+    if text != msg.body:
+        msg.body, msg.edited_at = text, utcnow()
+        _touch(db, msg.room_id)
+        db.commit()
+    return _one(db, msg, me)
+
+
+@router.delete("/messages/{message_id}")
+def delete_message(message_id: int, scope: str = Query("all", pattern="^(all|me)$"), db: Session = Depends(get_db),
+                   me: User = Depends(chat_view)) -> dict[str, Any]:
+    """scope=me hides the message from this user only. scope=all deletes it for everybody: the author, or a group
+    admin for anyone's message. The row stays as "Bu mesaj silindi", the file goes."""
+    msg = _text_message(db, message_id)
+    mine = _member(db, msg.room_id, me)
+    if scope == "me":
+        if db.scalar(select(ChatHidden).where(ChatHidden.message_id == msg.id, ChatHidden.user_id == me.id)) is None:
+            db.add(ChatHidden(message_id=msg.id, user_id=me.id))
+            db.commit()
+        return _one(db, msg, me)
+    if not can(me, "chat", "edit"):
+        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+    if msg.user_id != me.id and not (mine.room.kind == "group" and mine.is_admin):
         raise HTTPException(403, "Yalnızca kendi mesajınızı silebilirsiniz")
     paths = (msg.file_path, msg.thumb_path)
     msg.deleted, msg.body, msg.file_path, msg.thumb_path = True, "", None, None
-    db.get(ChatRoom, msg.room_id).updated_at = utcnow()   # changes everybody's /state key, so the deletion shows up
+    if mine.room.pinned_id == msg.id:
+        mine.room.pinned_id = None
+    _touch(db, msg.room_id)
     db.commit()
     uploads.remove(*paths)
-    return message_out(msg)
+    return _one(db, msg, me)
+
+
+class ForwardIn(BaseModel):
+    message_ids: list[int] = Field(min_length=1, max_length=50)
+    room_ids: list[int] = Field(min_length=1, max_length=20)
+
+
+@router.post("/forward", status_code=201)
+def forward(body: ForwardIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, int]:
+    """Copies messages into other rooms, oldest first. A copy has its own file, so deleting the original leaves it."""
+    sources = []
+    for mid in sorted(set(body.message_ids)):
+        msg = _text_message(db, mid)
+        _member(db, msg.room_id, me)
+        if msg.deleted:
+            raise HTTPException(400, "Silinmiş mesaj iletilemez")
+        sources.append(msg)
+    targets = [_member(db, rid, me) for rid in dict.fromkeys(body.room_ids)]
+    sent = 0
+    for mine in targets:
+        folder = get_settings().chat_dir / str(mine.room_id)
+        for src in sources:
+            copy = ChatMessage(room_id=mine.room_id, user_id=me.id, username=display(me), body=src.body,
+                               forwarded_from=src.forwarded_from or src.username)
+            if src.file_path:
+                try:
+                    copy.file_path = str(uploads.clone(src.file_path, folder))
+                    if src.thumb_path:
+                        copy.thumb_path = str(uploads.clone(src.thumb_path, folder / "thumbs"))
+                except OSError as e:
+                    raise HTTPException(404, f"{src.file_name}: dosya kopyalanamadı") from e
+                copy.file_name, copy.file_size, copy.file_type = src.file_name, src.file_size, src.file_type
+            db.add(copy)
+            db.flush()
+            mine.last_read_id = copy.id
+            sent += 1
+        mine.room.updated_at = utcnow()
+    db.commit()
+    return {"sent": sent}
+
+
+class ReactIn(BaseModel):
+    emoji: str = ""
+
+
+@router.put("/messages/{message_id}/reaction")
+def react(message_id: int, body: ReactIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
+    """The same emoji again, or an empty one, takes the reaction back."""
+    if body.emoji and body.emoji not in REACTIONS:
+        raise HTTPException(400, "Bu tepki kullanılamıyor")
+    msg = _text_message(db, message_id)
+    _member(db, msg.room_id, me)
+    if msg.deleted:
+        raise HTTPException(400, "Silinmiş mesaja tepki verilemez")
+    row = db.scalar(select(ChatReaction).where(ChatReaction.message_id == msg.id, ChatReaction.user_id == me.id))
+    if row is not None and (not body.emoji or row.emoji == body.emoji):
+        db.delete(row)
+    elif row is not None:
+        row.emoji = body.emoji
+    elif body.emoji:
+        db.add(ChatReaction(message_id=msg.id, user_id=me.id, emoji=body.emoji))
+    _touch(db, msg.room_id)
+    db.commit()
+    return _one(db, msg, me)
+
+
+class PinIn(BaseModel):
+    message_id: int | None = None
+
+
+@router.post("/rooms/{room_id}/pin")
+def pin(room_id: int, body: PinIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
+    """One pinned message per room. In a group only its admins pin."""
+    mine = _member(db, room_id, me)
+    if mine.room.kind == "group" and not mine.is_admin:
+        raise HTTPException(403, "Grupta mesajı yalnızca yöneticiler sabitler")
+    if body.message_id is not None:
+        msg = _text_message(db, body.message_id)
+        if msg.room_id != room_id or msg.deleted:
+            raise HTTPException(400, "Bu mesaj sabitlenemez")
+    mine.room.pinned_id = body.message_id
+    mine.room.updated_at = utcnow()
+    db.commit()
+    return room_out(db, mine.room, me)
 
 
 def _file_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:

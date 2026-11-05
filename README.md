@@ -212,6 +212,7 @@ otomatik oturum açma ayarlayın veya Linux kurulumu tercih edin.
 - *Sanallaştırma kapalı*: BIOS'ta Intel VT-x / AMD-V (SVM) seçeneğini açın.
 - *"Windows container modunda"*: Sistem tepsisindeki Docker simgesine sağ tıklayıp "Switch to Linux containers" seçin.
 - *Diğer bilgisayarlar erişemiyor*: Ağ profili "Ortak" ise "Özel" yapın, güvenlik duvarı kuralını kontrol edin.
+  Şirket ağı için [kurulum kılavuzunun sorun giderme tablosuna](KURULUM_KILAVUZU.md#sorun-giderme) bakın.
 
 ### Masaüstü uygulaması (Windows)
 
@@ -498,6 +499,11 @@ stoktan, satın alma siparişiyle veya iş emriyle karşılanır, maliyet projey
 - Grubu kuran kişi grup yöneticisidir. Yönetici grubu yeniden adlandırır, üye ekler veya çıkarır, başka
   üyeleri yönetici yapar. Son yönetici ayrılırsa en eski üye yönetici olur. Gruba sonradan eklenen kişi
   eski mesajları görür.
+- Mesaja sağ tıklayın ya da mesajdaki oka dokunun: yanıtla, kopyala, ilet, sabitle, düzenle (48 saat), seç, sil.
+  "Benden sil" yalnızca sizin ekranınızdan kaldırır, "Herkesten sil" mesajı herkesten kaldırır. Grup yöneticisi
+  başkasının mesajını da herkesten silebilir ve mesaj sabitleyebilir. Kısayollar: Esc iptal, yukarı ok son mesajı düzenler.
+- Yeni mesaj ve uyarılar Android ve Windows uygulamasında sistem bildirimi olarak gelir. Android yaklaşık 30 saniyede
+  bir sunucuya sorar. Ekran kapalıyken bu süre 10 dakikaya kadar uzayabilir. Uygulamanın sunucuya ulaşması gerekir.
 - Dosyalar sunucunun veri klasöründe (`chat/`, fotoğraflar `photos/`) tutulur ve yedeğe dahildir.
 
 ## Yedekleme ve geri yükleme

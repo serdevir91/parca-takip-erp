@@ -1,6 +1,8 @@
 """Plain file storage for photos and chat attachments: stream to disk with a size limit, no versioning."""
 from __future__ import annotations
 
+import os
+import shutil
 import uuid
 from pathlib import Path
 
@@ -58,6 +60,18 @@ async def store(file: UploadFile, folder: Path, max_mb: int) -> tuple[Path, int]
         path.unlink(missing_ok=True)
         raise
     return path, size
+
+
+def clone(src: str, folder: Path) -> Path:
+    """A second file with the same content under a new name. A hard link costs no disk; deleting one leaves the other."""
+    folder.mkdir(parents=True, exist_ok=True)
+    source = Path(src)
+    path = folder / (uuid.uuid4().hex + source.suffix)
+    try:
+        os.link(source, path)
+    except OSError:
+        shutil.copy2(source, path)
+    return path
 
 
 def remove(*paths: str | None) -> None:
