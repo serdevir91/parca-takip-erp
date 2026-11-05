@@ -498,6 +498,8 @@ label.dw-qrow { cursor: pointer; }
 .chat-menu-emoji { display: flex; justify-content: space-between; padding: 2px 2px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 .chat-menu-emoji button { border: 0; border-radius: 50%; background: transparent; font-size: 18px; width: 32px; height: 32px; padding: 0; cursor: pointer; }
 .chat-menu-emoji button:hover, .chat-menu-emoji button.on { background: var(--surface-2); }
+/* The menu opens under the finger; a long press on Android would select its text. */
+.chat-menu, .chat-menu-back { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .chat-image { display: block; padding: 0; border: 0; border-radius: 8px; overflow: hidden; cursor: zoom-in; width: min(280px, 60vw); height: 200px; margin: 2px 0 4px; background: var(--surface-2); }
 .chat-image .thumb-img { object-fit: cover; }
 .chat-file { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 2px 0 4px; border-radius: 8px; background: var(--surface-2); color: var(--muted); min-width: 220px; }
