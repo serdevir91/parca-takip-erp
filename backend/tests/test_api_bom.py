@@ -266,7 +266,7 @@ def test_purge_while_a_backup_runs_keeps_the_project(client, admin_headers, monk
 def test_backup_file_errors_are_backup_errors(tmp_path, monkeypatch):
     from app.services import backup
     blocked = tmp_path / "yedek"
-    blocked.write_text("klasör değil, dosya")
+    blocked.write_text("klasör değil, dosya", encoding="utf-8")
     with pytest.raises(backup.BackupError, match="Yedek dosyası yazılamadı"):
         backup.create_backup(database_url=f"sqlite:///{tmp_path}/x.db", data_dir=tmp_path, backup_dir=blocked)
 

@@ -1,4 +1,5 @@
 """Regression tests for the findings of the security audit."""
+import os
 import sqlite3
 import tarfile
 import time
@@ -90,7 +91,7 @@ def test_backup_has_no_signing_key_and_is_private(tmp_path):
     db = tmp_path / "b.db"
     db.write_bytes(b"")
     info = backup.create_backup(f"sqlite:///{db}", data, tmp_path / "bk", keep_days=30)
-    assert info.path.stat().st_mode & 0o077 == 0
+    assert os.name == "nt" or info.path.stat().st_mode & 0o077 == 0   # Windows has no mode bits
     with tarfile.open(info.path) as t:
         names = t.getnames()
     assert "data/resim.pdf" in names and "data/.jwt_secret" not in names

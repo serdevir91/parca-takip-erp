@@ -241,7 +241,7 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
         if manifest["db_kind"] == "sqlite":
             if url.get_backend_name() != "sqlite":
                 raise BackupError("SQLite yedeği PostgreSQL'e geri yüklenemez")
-            with sqlite3.connect(dump) as s, sqlite3.connect(url.database) as d:
+            with closing(sqlite3.connect(dump)) as s, closing(sqlite3.connect(url.database)) as d:
                 s.backup(d)
         else:
             if url.get_backend_name() != "postgresql":

@@ -1,5 +1,6 @@
 """Security closures of 1.5.9: mail rights, sealed SMTP password, project reads, grid export, chat uploads."""
 import json
+import os
 
 import pytest
 
@@ -144,7 +145,7 @@ def test_https_files_stay_out_of_backups_and_can_be_switched(client, admin_heade
     assert client.get("/api/tls/cert").status_code == 200
     again = client.put("/api/admin/https", json={"enabled": True}, headers=admin_headers).json()
     assert again["fingerprint"] == r["fingerprint"]           # never replaced: clients pin it
-    assert (tls.files()[1].stat().st_mode & 0o777) == 0o600
+    assert os.name == "nt" or (tls.files()[1].stat().st_mode & 0o777) == 0o600   # Windows has no mode bits
     assert "tls" in backup._not_data(tls.folder().parent, "sqlite:///x.db", tmp_path)
     assert client.put("/api/admin/https", json={"enabled": False}, headers=admin_headers).json()["fingerprint"] == ""
     assert client.get("/api/tls/cert").status_code == 404
