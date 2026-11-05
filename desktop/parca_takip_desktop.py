@@ -1135,6 +1135,16 @@ def open_folder(path: Path) -> None:
         subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)])
 
 
+def smoke_purge(base: str, token: str) -> dict:
+    """Add a project and delete it for good: the delete takes a backup first, which only this run does on Windows."""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "X-Requested-With": "LabERP"}
+    project = http_json(base + "/api/projects", 10, data=b'{"name": "Smoke"}', headers=headers)
+    try:
+        return http_json(f"{base}/api/projects/{project['id']}/purge", 120, data=b"{}", headers=headers)
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "status": e.code, "body": e.read().decode("utf-8", "replace")[:500]}
+
+
 def smoke(folder: Path) -> int:
     """CI check of the frozen bundle without a window: server start, SPA, login, a read, pdfium import."""
     result: dict = {"version": VERSION}
@@ -1151,11 +1161,12 @@ def smoke(folder: Path) -> int:
         token = http_json(base + "/api/auth/login", 10, data=body)["access_token"]
         projects = http_json(base + "/api/projects", 10, headers={"Authorization": f"Bearer {token}"})
         result["login"] = isinstance(projects, list)
+        result["purge"] = smoke_purge(base, token)
         import pypdfium2
         import webview  # noqa: F401 - the GUI layer must be in the bundle too
 
         result["pdfium"] = pypdfium2.PdfDocument.new() is not None
-        ok = all(result.get(k) for k in ("health", "spa", "login", "pdfium"))
+        ok = all(result.get(k) for k in ("health", "spa", "login", "pdfium")) and result["purge"].get("ok")
     except Exception as e:  # noqa: BLE001
         log.exception("smoke failed")
         result["error"] = repr(e)
