@@ -1,6 +1,24 @@
 Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
 Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
 
+## 1.5.10 yenilikleri
+
+- **Tek yuvarlama kuralı:** Tutar 2, miktar 3 ondalık, her zaman yarım yukarı. Ekran, Excel ve fatura aynı sonucu verir. Bağlantı elemanı yedek miktarı da Excel ile aynı çıkar.
+- **Ağırlık:** Ürün ağacı ve Excel artık aynı birimi kullanır, etiketler birimi yazar. Eski taslaklarda kg diye yazılmış değerler kendiliğinden çevrilmez, kontrol edin.
+- **Saatler:** Kayıt zamanları ekranda yerel saatle görünür.
+- **Telefon:** Ürün ağacı ekranı dar ekranda taşmıyor.
+- **Oturum çerezi:** Oturum artık tarayıcı belleğinde değil, betiklerin okuyamadığı httpOnly çerezde durur. Sürüm yükselince herkes bir kez yeniden giriş yapar.
+- **Yönetici uyarıları:** HTTPS kapalıysa ve hesap isteği ayarı açıksa yönetici ekranda uyarı görür. Ayarlar kendiliğinden değişmez.
+- **Sertifika sabitleme:** Masaüstü her bağlantıda sertifikayı denetler. Android, HTTPS'e geçmiş sunucuya düz HTTP ile bağlanmaz.
+- **Çakışma uyarısı:** Stok, personel, mesai, iş emri, firma, proje, sipariş ve fatura formlarında başkasının kaydının üzerine sessizce yazılmaz. Toplu düzenleme bilerek üzerine yazar.
+- **Resmi tatiller:** Yönetim › Resmi Tatiller ekranından düzenlenir. Beklenen mesai ve izin günleri tatilleri düşer. Dini bayramları yönetici girer.
+- **Satışta eksik kapatma:** Satış siparişi "Eksik kapatıldı" ile kapatılabilir.
+- **Otomatik alacak dekontu:** Faturalı malın iadesi taslak dekontu kendisi açar.
+- **Belge tarihi kuru:** Firma bakiyesi bugünkü kurla veya belge tarihindeki kurla gösterilebilir, kur farkı ayrı yazılır.
+- **Mal kabulde elle kur:** Kuru olmayan yabancı para siparişte kur ekranda girilir.
+- **Düz HTTP'de kamera:** Barkod ekranı canlı kameranın neden açılmadığını ve HTTPS yolunu söyler. Fotoğrafla okutma çalışır.
+- **Düzeltilen hatalar:** Android'de dosya açma çökmesi, eksik kapatılmış siparişte taslak dekontun düzenlenememesi, PostgreSQL'de iade ile dekont açarken oluşan hata, aynı anda iki kez fatura kesilmesi, koyu temada etiket çıktısındaki siyah kenarlık.
+
 ## 1.5.9 yenilikleri
 
 - **Bildirim merkezi:** Üst çubuktaki zil geciken sipariş ve faturaları, düşük stoğu, bekleyen onayları gösterir. Herkes yalnızca yetkili olduğu konuları görür.

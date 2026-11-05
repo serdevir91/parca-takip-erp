@@ -628,9 +628,13 @@ değişince diğer cihazlardaki oturumlar kapanır.
   içine gömülemez.
 - **HTTPS:** **Yönetim › HTTPS** ekranı Docker'sız sunucuda kendi sertifikasını üretir ve HTTPS'i açar. Android ve
   masaüstü uygulaması sertifikayı ilk bağlantıda kaydeder, sonra değişirse bağlanmaz. Bu ayar kapalıyken trafik
-  yerel ağda şifresiz gider. Docker kurulumunda HTTPS nginx ayarından yapılır.
+  yerel ağda şifresiz gider ve yönetici ekranda uyarı görür. Docker kurulumunda HTTPS nginx ayarından yapılır.
+  Android, HTTPS'e geçmiş bir sunucuya düz HTTP ile bağlanmaz. Masaüstü sertifikayı yalnızca girişte değil, her
+  bağlantıda denetler. Kamerayla canlı okutma tarayıcıda HTTPS ister; düz HTTP'de fotoğrafla okutma çalışır.
+- **Oturum çerezi:** Oturum betiklerin okuyamadığı httpOnly çerezde durur. HTTPS açıkken çerez yalnızca şifreli
+  bağlantıda gider. Android ve masaüstü dosya indirirken kısa ömürlü tek amaçlı bilet kullanır.
 - **Kayıt:** Yeni kurulumlarda **Hesap oluştur** kapalıdır; yönetici **Yönetim › Kullanıcılar** ekranından açar.
-  Eski kurulumlarda kayıtlı ayar değişmez.
+  Eski kurulumlarda kayıtlı ayar değişmez, ayar açıksa yönetici ekranda uyarı görür.
 - **E-posta:** SMTP şifresi şifrelenmiş saklanır. E-posta modülü artık yetkiyle açılır.
 - **Masaüstü güncellemesi:** Windows uygulaması yalnızca Ed25519 imzası doğrulanan kurulum dosyasını çalıştırır.
 - **API belgeleri** (`/api/docs`) varsayılan olarak kapalıdır; `ERP_API_DOCS=true` ile açılır.

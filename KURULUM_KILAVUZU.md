@@ -168,6 +168,10 @@ dosyayı Gmail, WhatsApp veya Drive ile gönderir; bunun için sunucuda e-posta 
 | Adres değişti | Uygulamalar sunucuyu kendileri yeniden arar. Olmazsa "Sunucuyu değiştir" ile yeni adresi seçin. Kalıcı çözüm: modemde sabit IP. |
 | Giriş ekranında **Hesap oluştur** yok | Yönetici Yönetim › Kullanıcılar ekranından hesap isteklerini açmalı. |
 | Telefon: "Sunucunun sertifikası değişmiş" uyarısı | Sunucunun HTTPS sertifikası değişmiş. Değişikliği siz yaptıysanız "Sunucuyu değiştir" ile sunucuyu unutup yeniden bağlanın. Yapmadıysanız bağlanmayın, ağı kontrol edin. |
+| Telefon: "Bu sunucu HTTPS kullanıyor" uyarısı | Sunucuya `https://` ile bağlanın. Sunucuda HTTPS kapatıldıysa önce sunucuyu Son kullanılanlar listesinden silin. |
+| Barkod ekranında canlı kamera yok | Tarayıcı düz HTTP'de kamerayı açmaz. Yönetim › HTTPS ile HTTPS'i açın veya fotoğrafla okutun. |
+| 1.5.10'a geçince herkes çıkış yaptı | Beklenen durum: oturum çerezine geçildi, bir kez yeniden giriş yapılır. |
+| Beklenen mesai tatil gününü sayıyor | Yönetim › Resmi Tatiller ekranından tatili ekleyin. Dini bayramlar her yıl elle girilir. |
 | Giriş: "Hesabınız yönetici onayı bekliyor" | Yönetici Yönetim › Kullanıcılar ekranından onaylamalı. |
 | Giriş: "Hesabınız pasif" | Yönetici hesabı pasif yapmış; Kullanıcılar ekranından tekrar aktif yapılabilir. |
 | E-posta: "kullanıcı adı/şifreyi kabul etmedi" | Gmail'de normal şifre yerine uygulama şifresi kullanın. |
