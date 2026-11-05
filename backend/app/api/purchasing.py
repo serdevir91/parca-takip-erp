@@ -15,6 +15,7 @@ from ..models import Firm, Project, PurchaseOrder, PurchaseOrderLine, User
 from ..services import audit, commerce, conflict, erp, fx, suppliers, system, xlsafe
 from ..permissions import can, require
 from .deps import any_user, get_db, project_or_404
+from app.core.i18n import tx
 
 purchasing_view, purchasing_edit = require("purchasing", "view"), require("purchasing", "edit")
 planning_view, stock_edit = require("planning", "view"), require("stock", "edit")
@@ -26,7 +27,7 @@ FIRM_MODULES = ("contacts", "purchasing", "sales", "finance", "workorders", "sto
 def _project_reader(me: User) -> None:
     """Needs and costs show a project's content, so "planning" alone is not enough for them."""
     if not can(me, "projects"):
-        raise HTTPException(403, "Bu proje için yetkiniz yok")
+        raise HTTPException(403, tx("Bu proje için yetkiniz yok"))
 
 
 @router.get("/firms")
@@ -102,7 +103,7 @@ class CloseIn(BaseModel):
 def _po_or_404(db: Session, po_id: int) -> PurchaseOrder:
     po = db.get(PurchaseOrder, po_id)
     if po is None:
-        raise HTTPException(404, "Sipariş bulunamadı")
+        raise HTTPException(404, tx("Sipariş bulunamadı"))
     return po
 
 
@@ -111,7 +112,7 @@ def _firm(db: Session, firm_id: int | None) -> Firm | None:
         return None
     f = db.get(Firm, firm_id)
     if f is None:
-        raise HTTPException(404, "Firma bulunamadı")
+        raise HTTPException(404, tx("Firma bulunamadı"))
     return f
 
 
@@ -174,7 +175,7 @@ def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit)
     po = _po_or_404(db, po_id)
     conflict.claim(db, po, body.rev, me)
     if po.status in ("received", "closed", "cancelled"):
-        raise HTTPException(400, f"{erp.PO_STATUS[po.status]} durumundaki sipariş düzenlenemez")
+        raise HTTPException(400, tx("{0} durumundaki sipariş düzenlenemez", erp.PO_STATUS[po.status]))
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
     if "firm_id" in sent:
@@ -182,7 +183,7 @@ def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit)
         changes.update(firm_id=firm.id if firm else None, firm_name=firm.name if firm else "")
     if "project_id" in sent:
         if po.status != "draft":
-            raise HTTPException(400, "Proje yalnızca taslak siparişte değiştirilebilir")
+            raise HTTPException(400, tx("Proje yalnızca taslak siparişte değiştirilebilir"))
         if body.project_id is not None:
             project_or_404(db, body.project_id)
         changes["project_id"] = body.project_id
@@ -196,11 +197,11 @@ def update_order(po_id: int, body: PoUpdate, me: User = Depends(purchasing_edit)
             db, changes.get("currency", po.currency), fx.first_day(changes.get("order_date"), po.order_date, po.created_at))
     if (changes.get("currency", po.currency) != po.currency or changes.get("rate", po.rate) != po.rate) \
             and any(l.received_qty > erp.EPS for l in po.lines):
-        raise HTTPException(400, "Mal kabulü yapılmış siparişin para birimi ve kuru değiştirilemez")
+        raise HTTPException(400, tx("Mal kabulü yapılmış siparişin para birimi ve kuru değiştirilemez"))
     audit.record_changes(db, me, po, changes, "purchase_order", po.no, po.project_id)
     if body.lines is not None:
         if po.status != "draft":
-            raise HTTPException(400, "Satırlar yalnızca taslak siparişte değiştirilebilir")
+            raise HTTPException(400, tx("Satırlar yalnızca taslak siparişte değiştirilebilir"))
         erp.set_lines(po, [l.model_dump() for l in body.lines])
         audit.record(db, me, "purchase_order", po.no, "lines", None, len(body.lines), po.project_id)
     db.commit()
@@ -222,11 +223,11 @@ def _picked(po: PurchaseOrder, rows: list[ReceiveLine]) -> list[tuple[PurchaseOr
     for r in rows:
         line = by_id.get(r.line_id)
         if line is None:
-            raise HTTPException(400, f"Satır bu siparişe ait değil: {r.line_id}")
+            raise HTTPException(400, tx("Satır bu siparişe ait değil: {0}", r.line_id))
         if r.qty > 0:
             items.append((line, r.qty))
     if not items:
-        raise HTTPException(400, "Miktar girin")
+        raise HTTPException(400, tx("Miktar girin"))
     return items
 
 
@@ -243,7 +244,7 @@ def reverse(po_id: int, body: ReverseIn, me: User = Depends(purchasing_edit), db
     """Mal kabul geri alma, also the return of goods to the supplier. credit_note also drafts the iade faturası."""
     po = _po_or_404(db, po_id)
     if body.credit_note and not can(me, "finance", "edit"):
-        raise HTTPException(403, "İade faturası için finans düzenleme yetkisi gerekli")
+        raise HTTPException(403, tx("İade faturası için finans düzenleme yetkisi gerekli"))
     items = _picked(po, body.lines)
     erp.reverse_receipt(db, me, po, items, body.note)
     made = commerce.credits_for_return(db, me, po, items) if body.credit_note else []
@@ -265,7 +266,7 @@ def close(po_id: int, body: CloseIn | None = None, me: User = Depends(purchasing
 def delete_order(po_id: int, me: User = Depends(purchasing_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     po = _po_or_404(db, po_id)
     if po.status != "draft":
-        raise HTTPException(400, "Yalnızca taslak sipariş silinebilir; gönderilmiş siparişi iptal edin")
+        raise HTTPException(400, tx("Yalnızca taslak sipariş silinebilir; gönderilmiş siparişi iptal edin"))
     audit.record(db, me, "purchase_order", po.no, "no", po.no, None, po.project_id, action="delete")
     db.delete(po)
     db.commit()
@@ -363,7 +364,7 @@ def need_to_order(pid: int, body: FromNeedIn, me: User = Depends(purchasing_edit
         lines.append({"code": code, "kind": r["kind"], "description": r["description"], "unit": r["unit"],
                       "qty": r["shortage"], "unit_price": price})
     if not lines:
-        raise HTTPException(400, "Seçilen kalemlerde eksik yok")
+        raise HTTPException(400, tx("Seçilen kalemlerde eksik yok"))
     po = PurchaseOrder(no=erp.next_no(db, PurchaseOrder), firm_id=firm.id if firm else None,
                        firm_name=firm.name if firm else "", project_id=project.id, status="draft",
                        due_date=body.due_date, currency=fx.base_currency(db), rate=1.0,
@@ -395,7 +396,7 @@ def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(stock_edit
             erp.issue_from_stock(db, me, project, it.code, qty, it.note)
             n += 1
     if not n:
-        raise HTTPException(400, "Stoktan karşılanacak kalem yok")
+        raise HTTPException(400, tx("Stoktan karşılanacak kalem yok"))
     db.commit()
     return {"issued": n}
 
@@ -404,7 +405,7 @@ def need_from_stock(pid: int, body: list[IssueIn], me: User = Depends(stock_edit
 def costs(pid: int, me: User = Depends(planning_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     _project_reader(me)
     if not (can(me, "finance") or can(me, "purchasing")):
-        raise HTTPException(403, "Maliyetleri görmek için satın alma veya finans yetkisi gerekli")
+        raise HTTPException(403, tx("Maliyetleri görmek için satın alma veya finans yetkisi gerekli"))
     return erp.project_costs(db, project_or_404(db, pid), show_people=can(me, "hr"))
 
 
@@ -417,5 +418,5 @@ def performance(_: User = Depends(purchasing_view), db: Session = Depends(get_db
 @router.get("/suppliers/price-history")
 def price_history(code: str, _: User = Depends(purchasing_view), db: Session = Depends(get_db)) -> dict[str, Any]:
     if not code.strip():
-        raise HTTPException(400, "Kod girin")
+        raise HTTPException(400, tx("Kod girin"))
     return suppliers.price_history(db, code.strip())

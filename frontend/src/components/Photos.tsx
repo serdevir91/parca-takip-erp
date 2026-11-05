@@ -6,6 +6,7 @@ import { fmtBytes, isImageFile, makeThumb } from "../api/images";
 import { errText, useToast } from "./Toast";
 import Thumb, { forgetThumb } from "./viewer/Thumb";
 import Viewer, { type ViewItem } from "./viewer/Viewer";
+import { LOCALE, tx } from "../api/i18n";
 
 export type Photo = {
   id: number; entity: string; key: string; filename: string; content_type: string; size: number; caption: string;
@@ -15,7 +16,7 @@ type Entity = "part" | "stock";
 
 const photoItem = (p: Photo): ViewItem => ({
   key: p.id, name: p.filename, path: `/photos/${p.id}/file`, thumb: `/photos/${p.id}/thumb`, kind: "image",
-  caption: [p.caption, `${p.uploaded_by} · ${p.uploaded_at ? new Date(p.uploaded_at).toLocaleDateString("tr-TR") : ""}`]
+  caption: [p.caption, `${p.uploaded_by} · ${p.uploaded_at ? new Date(p.uploaded_at).toLocaleDateString(LOCALE) : ""}`]
     .filter(Boolean).join(" · "),
 });
 
@@ -42,10 +43,10 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
 
   const send = async (list: File[]) => {
     const files = list.filter(isImageFile);
-    if (files.length < list.length) toast(`${list.length - files.length} dosya resim olmadığı için atlandı`, true);
+    if (files.length < list.length) toast(tx("{0} dosya resim olmadığı için atlandı", list.length - files.length), true);
     let ok = 0;
     for (const [i, f] of files.entries()) {
-      setBusy(`${i + 1} / ${files.length} yükleniyor…`);
+      setBusy(tx("{0} / {1} yükleniyor…", i + 1, files.length));
       const form = new FormData();
       form.append("entity", entity);
       form.append("key", entityKey);
@@ -53,19 +54,19 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
       const t = await makeThumb(f);
       if (t) form.append("thumb", t, "t.jpg");
       try {
-        await upload(`/photos`, form, (pct) => setBusy(`${i + 1} / ${files.length} yükleniyor… %${pct}`));
+        await upload(`/photos`, form, (pct) => setBusy(tx("{0} / {1} yükleniyor… %{2}", i + 1, files.length, pct)));
         ok++;
       } catch (e) {
         toast(`${f.name}: ${errText(e)}`, true);
       }
     }
     setBusy(null);
-    if (ok) toast(`${ok} fotoğraf eklendi`);
+    if (ok) toast(tx("{0} fotoğraf eklendi", ok));
     refresh();
   };
 
   const remove = async (p: Photo) => {
-    if (!confirm(`${p.filename} silinsin mi?`)) return;
+    if (!confirm(tx("{0} silinsin mi?", p.filename))) return;
     try {
       await api.del(`/photos/${p.id}`);
       forgetThumb(`/photos/${p.id}/thumb`);
@@ -73,7 +74,7 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
     } catch (e) { toast(errText(e), true); }
   };
   const caption = async (p: Photo) => {
-    const c = prompt("Fotoğraf açıklaması:", p.caption);
+    const c = prompt(tx("Fotoğraf açıklaması:"), p.caption);
     if (c === null) return;
     try { await api.patch(`/photos/${p.id}`, { caption: c }); refresh(); } catch (e) { toast(errText(e), true); }
   };
@@ -85,9 +86,9 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
       onDrop={(e) => { e.preventDefault(); setOver(false); if (canEdit) void send([...e.dataTransfer.files]); }}>
       {canEdit && (
         <div className="row" style={{ marginBottom: 8 }}>
-          <button className="btn small" disabled={!!busy} onClick={() => pick.current?.click()}><ImagePlus size={15} /> Fotoğraf ekle</button>
-          <button className="btn small only-touch" disabled={!!busy} onClick={() => cam.current?.click()}><Camera size={15} /> Çek</button>
-          <span className="muted" style={{ fontSize: 12 }}>{busy ?? "Birden fazla seçebilir veya buraya sürükleyebilirsiniz."}</span>
+          <button className="btn small" disabled={!!busy} onClick={() => pick.current?.click()}><ImagePlus size={15} />{" "}{tx("Fotoğraf ekle")}</button>
+          <button className="btn small only-touch" disabled={!!busy} onClick={() => cam.current?.click()}><Camera size={15} />{" "}{tx("Çek")}</button>
+          <span className="muted" style={{ fontSize: 12 }}>{busy ?? tx("Birden fazla seçebilir veya buraya sürükleyebilirsiniz.")}</span>
           <input ref={pick} type="file" accept="image/*,.heic,.heif" multiple hidden
             onChange={(e) => { void send([...(e.target.files ?? [])]); e.target.value = ""; }} />
           <input ref={cam} type="file" accept="image/*" capture="environment" hidden
@@ -95,7 +96,7 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
         </div>
       )}
       {q.isError && <div className="error">{errText(q.error)}</div>}
-      {q.isSuccess && !photos.length && <div className="muted">Fotoğraf yok.</div>}
+      {q.isSuccess && !photos.length && <div className="muted">{tx("Fotoğraf yok.")}</div>}
       {!!photos.length && (
         <div className="photo-grid">
           {photos.map((p, i) => (
@@ -103,7 +104,7 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
               <Thumb path={p.preview ? `/photos/${p.id}/thumb` : null} label={p.filename} />
               {p.caption && <figcaption>{p.caption}</figcaption>}
               {canEdit && (
-                <button className="photo-del" aria-label="Sil" onClick={(e) => { e.stopPropagation(); void remove(p); }}><Trash2 size={14} /></button>
+                <button className="photo-del" aria-label={tx("Sil")} onClick={(e) => { e.stopPropagation(); void remove(p); }}><Trash2 size={14} /></button>
               )}
             </figure>
           ))}
@@ -114,8 +115,8 @@ export default function Photos({ entity, entityKey, canEdit }: { entity: Entity;
           actions={canEdit ? (it) => {
             const p = photos.find((x) => x.id === it.key);
             return p && <>
-              <button className="btn small" onClick={() => void caption(p)} title="Açıklama"><Pencil size={16} /></button>
-              <button className="btn small danger" onClick={() => void remove(p)} title="Sil"><Trash2 size={16} /></button>
+              <button className="btn small" onClick={() => void caption(p)} title={tx("Açıklama")}><Pencil size={16} /></button>
+              <button className="btn small danger" onClick={() => void remove(p)} title={tx("Sil")}><Trash2 size={16} /></button>
             </>;
           } : undefined} />
       )}

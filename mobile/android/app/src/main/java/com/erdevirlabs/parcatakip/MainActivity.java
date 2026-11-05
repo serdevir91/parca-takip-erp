@@ -310,15 +310,14 @@ public class MainActivity extends Activity {
         }
         String fingerprint = seen;
         new AlertDialog.Builder(this)
-                .setTitle("Sunucu sertifikası")
-                .setMessage("Bu sunucuya ilk kez güvenli bağlanılıyor. Parmak izi:\n\n" + Pin.pretty(fingerprint)
-                        + "\n\nSunucuda Yönetim > HTTPS ekranındaki parmak izi ile aynı mı?")
+                .setTitle(R.string.cert_dialog_title)
+                .setMessage(getString(R.string.cert_dialog_msg, Pin.pretty(fingerprint)))
                 .setCancelable(false)
-                .setPositiveButton("Aynı, güven", (d, w) -> {
+                .setPositiveButton(R.string.cert_btn_trust, (d, w) -> {
                     prefs.edit().putString("pin:" + origin, fingerprint).apply();
                     handler.proceed();
                 })
-                .setNegativeButton("Vazgeç", (d, w) -> {
+                .setNegativeButton(R.string.btn_cancel, (d, w) -> {
                     handler.cancel();
                     showSetup("");
                 })
@@ -349,15 +348,19 @@ public class MainActivity extends Activity {
 
     /** A remembered server keeps its pin; everything else goes by the system's trust store. */
     private HttpURLConnection open(String url) throws Exception {
-        return open(prefs, url);
+        return open(this, prefs, url);
+    }
+
+    static HttpURLConnection open(android.content.Context context, SharedPreferences prefs, String url) throws Exception {
+        if (downgrade(prefs, url)) throw new IOException(context.getString(R.string.err_server_downgrade));
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        String pin = prefs.getString("pin:" + originOf(url), null);
+        if (pin != null) Pin.apply(context, c, pin);
+        return c;
     }
 
     static HttpURLConnection open(SharedPreferences prefs, String url) throws Exception {
-        if (downgrade(prefs, url)) throw new IOException("Bu sunucu HTTPS kullanıyor, şifresiz bağlantı kurulmadı");
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        String pin = prefs.getString("pin:" + originOf(url), null);
-        if (pin != null) Pin.apply(c, pin);
-        return c;
+        return open(null, prefs, url);
     }
 
     // ---- camera -------------------------------------------------------------------------------
@@ -426,7 +429,7 @@ public class MainActivity extends Activity {
         if (types.size() > 1) pick.putExtra(Intent.EXTRA_MIME_TYPES, types.toArray(new String[0]));
         if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
 
-        Intent chooser = Intent.createChooser(pick, "Dosya seç");
+        Intent chooser = Intent.createChooser(pick, getString(R.string.choose_file));
         if ((images || params.isCaptureEnabled()) && !hasCamera() && !cameraAsked) {
             // With CAMERA in the manifest, the camera app refuses to start until the user has allowed it.
             cameraAsked = true;
@@ -453,7 +456,7 @@ public class MainActivity extends Activity {
             return true;
         } catch (ActivityNotFoundException e) {
             fileCallback = null;
-            toast("Dosya seçici bulunamadı");
+            toast(getString(R.string.err_no_file_chooser));
             return false;
         }
     }
@@ -481,7 +484,7 @@ public class MainActivity extends Activity {
 
     /** Fetch `url` (with the JWT when given) into Downloads, then offer to open it. */
     private void saveFile(String url, String fallbackName, String token) {
-        toast("İndiriliyor…");
+        toast(getString(R.string.toast_downloading));
         new Thread(() -> {
             HttpURLConnection c = null;
             try {
@@ -490,7 +493,7 @@ public class MainActivity extends Activity {
                 c.setReadTimeout(60000);
                 if (token != null && !token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
                 int code = c.getResponseCode();
-                if (code != 200) throw new Exception("Sunucu yanıtı " + code);
+                if (code != 200) throw new Exception(getString(R.string.err_server_response, code));
                 String name = nameFrom(c.getHeaderField("Content-Disposition"), fallbackName);
                 String mime = c.getContentType();
                 if (mime != null) mime = mime.split(";")[0].trim();
@@ -505,13 +508,13 @@ public class MainActivity extends Activity {
                 }
                 final String m = mime;
                 ui.post(() -> new AlertDialog.Builder(this)
-                        .setTitle("İndirildi")
-                        .setMessage(name + "\nİndirilenler klasörüne kaydedildi.")
-                        .setPositiveButton("Aç", (d, w) -> openFile(saved, m))
-                        .setNegativeButton("Kapat", null)
+                        .setTitle(R.string.downloaded_title)
+                        .setMessage(getString(R.string.downloaded_msg, name))
+                        .setPositiveButton(R.string.btn_open, (d, w) -> openFile(saved, m))
+                        .setNegativeButton(R.string.btn_close, null)
                         .show());
             } catch (Exception e) {
-                ui.post(() -> toast("İndirme başarısız: " + e.getMessage()));
+                ui.post(() -> toast(getString(R.string.err_download_failed, e.getMessage())));
             } finally {
                 if (c != null) c.disconnect();
             }
@@ -520,7 +523,7 @@ public class MainActivity extends Activity {
 
     /** Share a server file (export, list) through the Android share sheet: Gmail, WhatsApp, Drive… */
     private void shareFile(String url, String fallbackName, String token) {
-        toast("Hazırlanıyor…");
+        toast(getString(R.string.toast_preparing));
         new Thread(() -> {
             HttpURLConnection c = null;
             try {
@@ -529,7 +532,7 @@ public class MainActivity extends Activity {
                 c.setReadTimeout(60000);
                 if (token != null && !token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
                 int code = c.getResponseCode();
-                if (code != 200) throw new Exception("Sunucu yanıtı " + code);
+                if (code != 200) throw new Exception(getString(R.string.err_server_response, code));
                 String name = nameFrom(c.getHeaderField("Content-Disposition"), fallbackName);
                 String mime = c.getContentType();
                 if (mime != null) mime = mime.split(";")[0].trim();
@@ -543,7 +546,7 @@ public class MainActivity extends Activity {
                 final String m = mime;
                 ui.post(() -> startShare(f, m, name));
             } catch (Exception e) {
-                ui.post(() -> toast("Paylaşılamadı: " + e.getMessage()));
+                ui.post(() -> toast(getString(R.string.err_share_failed, e.getMessage())));
             } finally {
                 if (c != null) c.disconnect();
             }
@@ -559,7 +562,7 @@ public class MainActivity extends Activity {
             }
             startShare(f, mime, name);
         } catch (Exception e) {
-            toast("Paylaşılamadı: " + e.getMessage());
+            toast(getString(R.string.err_share_failed, e.getMessage()));
         }
     }
 
@@ -584,9 +587,9 @@ public class MainActivity extends Activity {
                 .putExtra(Intent.EXTRA_SUBJECT, name)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
-            startActivity(Intent.createChooser(send, "Paylaş: " + name));
+            startActivity(Intent.createChooser(send, getString(R.string.share_title, name)));
         } catch (ActivityNotFoundException e) {
-            toast("Paylaşacak uygulama bulunamadı");
+            toast(getString(R.string.err_no_share_app));
         }
     }
 
@@ -598,7 +601,7 @@ public class MainActivity extends Activity {
             v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LAB ERP");
             v.put(MediaStore.Downloads.IS_PENDING, 1);
             Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new Exception("Dosya oluşturulamadı");
+            if (uri == null) throw new Exception(getString(R.string.err_file_create));
             try (OutputStream out = getContentResolver().openOutputStream(uri)) {
                 copy(in, out);
             }
@@ -649,7 +652,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(i);
         } catch (ActivityNotFoundException e) {
-            toast("Bu dosyayı açacak uygulama yok");
+            toast(getString(R.string.err_no_app_for_file));
         }
     }
 
@@ -679,28 +682,27 @@ public class MainActivity extends Activity {
 
     /** Latest GitHub release vs this build; silent at startup, with feedback when `manual`. */
     private void checkUpdate(boolean manual) {
-        if (manual) toast("Güncelleme kontrol ediliyor…");
+        if (manual) toast(getString(R.string.toast_checking_update));
         new Thread(() -> {
             try {
                 String body = Discovery.get(RELEASES, 6000);
-                if (body == null) throw new Exception("Sunucuya ulaşılamadı");
+                if (body == null) throw new Exception(getString(R.string.err_server_unreachable));
                 JSONObject rel = new JSONObject(body);
                 String latest = rel.optString("tag_name", "").replaceFirst("^v", "");
                 String apk = pickApk(rel.optJSONArray("assets"));
                 String page = apk != null ? apk : rel.optString("html_url", "");
                 if (newer(latest, BuildConfig.VERSION_NAME) && !page.isEmpty()) {
                     ui.post(() -> new AlertDialog.Builder(this)
-                            .setTitle("Güncelleme var")
-                            .setMessage("LAB ERP " + latest + " yayınlandı (yüklü: " + BuildConfig.VERSION_NAME + ").\n"
-                                    + "APK indirilecek; kurulum için dosyayı açın.")
-                            .setPositiveButton("İndir", (d, w) -> openExternal(page))
-                            .setNegativeButton("Sonra", null)
+                            .setTitle(R.string.update_dialog_title)
+                            .setMessage(getString(R.string.update_dialog_msg, latest, BuildConfig.VERSION_NAME))
+                            .setPositiveButton(R.string.btn_download, (d, w) -> openExternal(page))
+                            .setNegativeButton(R.string.btn_later, null)
                             .show());
                 } else if (manual) {
-                    ui.post(() -> toast("Uygulama güncel (" + BuildConfig.VERSION_NAME + ")"));
+                    ui.post(() -> toast(getString(R.string.toast_app_up_to_date, BuildConfig.VERSION_NAME)));
                 }
             } catch (Exception e) {
-                if (manual) ui.post(() -> toast("Güncelleme kontrol edilemedi"));
+                if (manual) ui.post(() -> toast(getString(R.string.toast_update_check_failed)));
             }
         }).start();
     }
@@ -751,7 +753,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (ActivityNotFoundException e) {
-            toast("Bağlantı açılamadı");
+            toast(getString(R.string.err_open_link_failed));
         }
     }
 
@@ -828,7 +830,7 @@ public class MainActivity extends Activity {
             String base = normalize(url);
             if (base.isEmpty()) return;
             if (downgrade(base)) {
-                ui.post(() -> showSetup("error=" + enc("Bu sunucu HTTPS kullanıyor. https:// adresiyle bağlanın. Sunucuda HTTPS kapatıldıysa önce onu listeden silin")));
+                ui.post(() -> showSetup("error=" + enc(getString(R.string.setup_error_https_required))));
                 return;
             }
             try {

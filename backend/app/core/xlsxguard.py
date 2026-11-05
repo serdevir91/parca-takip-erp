@@ -4,6 +4,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 from typing import IO
+from app.core.i18n import tx
 
 MAX_UNPACKED = 300 * 1024 * 1024   # a real BOM/T-35 workbook is a few MB unpacked
 MAX_RATIO = 200
@@ -22,6 +23,6 @@ def check_xlsx(src: str | Path | IO[bytes]) -> None:
         unpacked = sum(i.file_size for i in infos)
         packed = sum(i.compress_size for i in infos) or 1
         if len(infos) > MAX_ENTRIES or unpacked > MAX_UNPACKED or unpacked / packed > MAX_RATIO:
-            raise ValueError("Excel dosyası açıldığında çok büyük; dosya bozuk veya zararlı olabilir.")
+            raise ValueError(tx("Excel dosyası açıldığında çok büyük; dosya bozuk veya zararlı olabilir."))
     if hasattr(src, "seek"):
         src.seek(0)

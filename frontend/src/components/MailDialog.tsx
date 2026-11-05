@@ -6,6 +6,7 @@ import { useAuth } from "../api/auth";
 import { mobileApp } from "../api/mobile";
 import { Field, Modal } from "../pages/admin/shared";
 import { errText, useToast } from "./Toast";
+import { tx } from "../api/i18n";
 
 /** A file to attach: fetched from the API (`path`, e.g. an Excel export) or built by the page (`blob`). */
 export type MailFile = { name: string; path?: string; blob?: Blob };
@@ -15,7 +16,7 @@ type Recipient = { name: string; email: string; kind: string };
 async function fileBlob(f: MailFile): Promise<Blob> {
   if (f.blob) return f.blob;
   const res = await fetch(`/api${f.path}`);
-  if (!res.ok) throw new ApiError(res.status, `${f.name} hazırlanamadı (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, tx("{0} hazırlanamadı ({1})", f.name, res.status));
   return res.blob();
 }
 
@@ -84,7 +85,7 @@ export default function MailDialog({ files, subject, body = "", onClose }: {
       form.append("body", text);
       for (const f of files) form.append("files", await fileBlob(f), f.name);
       await upload("/mail/send", form);
-      toast(`E-posta gönderildi: ${to}`);
+      toast(tx("E-posta gönderildi: {0}", to));
       onClose();
     } catch (e) {
       setErr(errText(e));
@@ -95,7 +96,7 @@ export default function MailDialog({ files, subject, body = "", onClose }: {
 
   async function share() {
     try {
-      if (!(await shareFiles(files, subj))) toast("Bu cihaz dosya paylaşmayı desteklemiyor", true);
+      if (!(await shareFiles(files, subj))) toast(tx("Bu cihaz dosya paylaşmayı desteklemiyor"), true);
     } catch (e) {
       toast(errText(e), true);
     }
@@ -103,28 +104,28 @@ export default function MailDialog({ files, subject, body = "", onClose }: {
 
   const suggestions = (recips.data ?? []).filter((r) => !to.includes(r.email)).slice(0, 12);
   return (
-    <Modal title="E-posta ile gönder" onClose={onClose}
+    <Modal title={tx("E-posta ile gönder")} onClose={onClose}
       footer={<>
         {canShareFromDevice() && (
-          <button className="btn" onClick={() => void share()} title="Gmail, WhatsApp, Drive… ile paylaş">
-            <Share2 size={15} /> Telefonla paylaş
+          <button className="btn" onClick={() => void share()} title={tx("Gmail, WhatsApp, Drive… ile paylaş")}>
+            <Share2 size={15} />{" "}{tx("Telefonla paylaş")}
           </button>
         )}
-        <button className="btn" onClick={onClose}>Vazgeç</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
         <button className="btn primary" disabled={!ready || busy || !to.trim()} onClick={() => void send()}>
-          <Mail size={15} /> {busy ? "Gönderiliyor…" : "Gönder"}
+          <Mail size={15} /> {busy ? tx("Gönderiliyor…") : tx("Gönder")}
         </button>
       </>}>
       <div className="adm-form">
         {status.data && !ready && (
           <div className="warn">
-            E-posta sunucusu ayarlanmamış.{" "}
-            {user?.role === "admin" ? "Yönetim > E-posta sekmesinden ayarlayın." : "Yöneticinizden Yönetim > E-posta ayarını yapmasını isteyin."}
-            {canShareFromDevice() && " Şimdilik “Telefonla paylaş” ile gönderebilirsiniz."}
+            {tx("E-posta sunucusu ayarlanmamış.")}{" "}
+            {user?.role === "admin" ? tx("Yönetim > E-posta sekmesinden ayarlayın.") : tx("Yöneticinizden Yönetim > E-posta ayarını yapmasını isteyin.")}
+            {canShareFromDevice() && tx(" Şimdilik “Telefonla paylaş” ile gönderebilirsiniz.")}
           </div>
         )}
-        <Field label="Alıcı" hint="Birden fazla adresi virgülle ayırın">
-          <input type="email" multiple autoFocus value={to} onChange={(e) => setTo(e.target.value)} placeholder="ornek@firma.com" />
+        <Field label={tx("Alıcı")} hint={tx("Birden fazla adresi virgülle ayırın")}>
+          <input type="email" multiple autoFocus value={to} onChange={(e) => setTo(e.target.value)} placeholder={tx("ornek@firma.com")} />
         </Field>
         {suggestions.length > 0 && (
           <div className="chips">
@@ -135,10 +136,10 @@ export default function MailDialog({ files, subject, body = "", onClose }: {
             ))}
           </div>
         )}
-        <Field label="Bilgi (CC)"><input type="email" multiple value={cc} onChange={(e) => setCc(e.target.value)} /></Field>
-        <Field label="Konu"><input value={subj} maxLength={200} onChange={(e) => setSubj(e.target.value)} /></Field>
-        <Field label="Mesaj"><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} /></Field>
-        <div className="muted">Ek: {files.map((f) => f.name).join(", ")}</div>
+        <Field label={tx("Bilgi (CC)")}><input type="email" multiple value={cc} onChange={(e) => setCc(e.target.value)} /></Field>
+        <Field label={tx("Konu")}><input value={subj} maxLength={200} onChange={(e) => setSubj(e.target.value)} /></Field>
+        <Field label={tx("Mesaj")}><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} /></Field>
+        <div className="muted">{tx("Ek: {0}", files.map((f) => f.name).join(", "))}</div>
         {err && <div className="error">{err}</div>}
       </div>
     </Modal>

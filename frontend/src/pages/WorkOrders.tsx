@@ -10,6 +10,7 @@ import { statusStyle } from "../theme/theme";
 import { Field, Loading, Modal } from "./admin/shared";
 import { MakerInput, ProjectSelect, WO_COLORS, fmtDay, fmtMoney, fmtQty, numOrNull, trIncludes, type WoWarning, type WorkOrder } from "./erp/common";
 import WoDetail from "./erp/WoDetail";
+import { LOCALE, tx } from "../api/i18n";
 
 type ListResp = { rows: WorkOrder[]; statuses: Record<string, string> };
 
@@ -48,7 +49,7 @@ export default function WorkOrders() {
   });
   const del = useMutation({
     mutationFn: (w: WorkOrder) => api.del(`/work-orders/${w.id}`),
-    onSuccess: () => { toast("İş emri silindi"); refresh(); },
+    onSuccess: () => { toast(tx("İş emri silindi")); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
 
@@ -56,16 +57,16 @@ export default function WorkOrders() {
     <Page>
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, marginRight: 8 }}>İş Emirleri{project ? ` · ${project.name}` : ""}</h2>
-          {canEdit && <button className="btn primary" onClick={() => setEditing("new")}>+ Yeni iş emri</button>}
-          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Durum">
-            <option value="open">Açık iş emirleri</option>
-            <option value="">Tümü</option>
-            {Object.entries(list.data?.statuses ?? {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <h2 style={{ margin: 0, marginRight: 8 }}>{tx("İş Emirleri")}{project ? ` · ${project.name}` : ""}</h2>
+          {canEdit && <button className="btn primary" onClick={() => setEditing("new")}>{tx("+ Yeni iş emri")}</button>}
+          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={tx("Durum")}>
+            <option value="open">{tx("Açık iş emirleri")}</option>
+            <option value="">{tx("Tümü")}</option>
+            {Object.entries(list.data?.statuses ?? {}).map(([k, v]) => <option key={k} value={k}>{tx(v)}</option>)}
           </select>
-          {!pid && <ProjectSelect value={projectFilter} onChange={setProjectFilter} emptyLabel="Tüm projeler" />}
-          <input placeholder="Ara (no, parça, firma)…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <span className="muted">{rows.length.toLocaleString("tr-TR")} iş emri</span>
+          {!pid && <ProjectSelect value={projectFilter} onChange={setProjectFilter} emptyLabel={tx("Tüm projeler")} />}
+          <input placeholder={tx("Ara (no, parça, firma)…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <span className="muted">{tx("{0} iş emri", rows.length.toLocaleString(LOCALE))}</span>
         </div>
         <Loading error={list.error} loading={list.isLoading} />
         {list.data && (
@@ -73,8 +74,8 @@ export default function WorkOrders() {
             <table className="simple erp-table">
               <thead>
                 <tr>
-                  <th>İş emri no</th>{!pid && <th>Proje</th>}<th>Parça no</th><th>Açıklama</th><th className="num">Miktar</th>
-                  <th className="num">Üretilen</th><th>Yapan</th><th>Durum</th><th className="num">Rota</th><th>Başlangıç</th><th>Termin</th><th className="num">Maliyet</th><th></th>
+                  <th>{tx("İş emri no")}</th>{!pid && <th>{tx("Proje")}</th>}<th>{tx("Parça no")}</th><th>{tx("Açıklama")}</th><th className="num">{tx("Miktar")}</th>
+                  <th className="num">{tx("Üretilen")}</th><th>{tx("Yapan")}</th><th>{tx("Durum")}</th><th className="num">{tx("Rota")}</th><th>{tx("Başlangıç")}</th><th>{tx("Termin")}</th><th className="num">{tx("Maliyet")}</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -83,40 +84,40 @@ export default function WorkOrders() {
                   return (
                     <tr key={w.id} className="clickable" onClick={() => setDetail(w)}>
                       <td><b>{w.no}</b></td>
-                      {!pid && <td>{w.project_name ?? <span className="muted">Stok</span>}</td>}
+                      {!pid && <td>{w.project_name ?? <span className="muted">{tx("Stok")}</span>}</td>}
                       <td className="mono">{w.part_no}</td>
                       <td>{w.description}</td>
                       <td className="num">{fmtQty(w.qty)}</td>
                       <td className="num">{fmtQty(w.done_qty)}</td>
-                      <td>{w.firm_name ? <>{w.firm_name} <span className="badge">Fason</span></> : "İç üretim"}</td>
+                      <td>{w.firm_name ? <>{w.firm_name} <span className="badge">{tx("Fason")}</span></> : tx("İç üretim")}</td>
                       <td><span className="badge" style={statusStyle(WO_COLORS[w.status])}>{w.status_label}</span></td>
                       <td className="num">{w.ops_total ? `${w.ops_done}/${w.ops_total}` : ""}</td>
                       <td>{fmtDay(w.start_date)}</td>
-                      <td className={w.overdue ? "error" : undefined}>{fmtDay(w.due_date)}{w.overdue ? " (gecikti)" : ""}</td>
+                      <td className={w.overdue ? "error" : undefined}>{fmtDay(w.due_date)}{w.overdue ? tx(" (gecikti)") : ""}</td>
                       <td className="num">{fmtMoney(w.total_cost)}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         {canEdit && (
                           <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                            {w.status === "planned" && <button className="btn small" disabled={setSt.isPending} onClick={() => setSt.mutate({ w, s: "in_progress" })}>Başlat</button>}
-                            {open && <button className="btn small primary" onClick={() => setCompleting(w)}>Üretim girişi</button>}
-                            {open && <button className="btn small" onClick={() => setEditing(w)}>Düzenle</button>}
-                            {w.status === "planned" && <button className="btn small danger" disabled={del.isPending} onClick={() => confirm(`${w.no} silinsin mi?`) && del.mutate(w)}>Sil</button>}
-                            {w.status === "in_progress" && w.done_qty === 0 && <button className="btn small danger" disabled={setSt.isPending} onClick={() => confirm(`${w.no} iptal edilsin mi?`) && setSt.mutate({ w, s: "cancelled" })}>İptal</button>}
-                            {w.status === "in_progress" && <button className="btn small" disabled={setSt.isPending} title="Üretileni ve maliyetini korur, kalan miktarı kapatır"
-                              onClick={() => confirm(`${w.no} ${fmtQty(w.done_qty)} / ${fmtQty(w.qty)} üretimle kapatılsın mı? Sonra değiştirilemez.`) && setSt.mutate({ w, s: "closed" })}>Kısa kapat</button>}
+                            {w.status === "planned" && <button className="btn small" disabled={setSt.isPending} onClick={() => setSt.mutate({ w, s: "in_progress" })}>{tx("Başlat")}</button>}
+                            {open && <button className="btn small primary" onClick={() => setCompleting(w)}>{tx("Üretim girişi")}</button>}
+                            {open && <button className="btn small" onClick={() => setEditing(w)}>{tx("Düzenle")}</button>}
+                            {w.status === "planned" && <button className="btn small danger" disabled={del.isPending} onClick={() => confirm(tx("{0} silinsin mi?", w.no)) && del.mutate(w)}>{tx("Sil")}</button>}
+                            {w.status === "in_progress" && w.done_qty === 0 && <button className="btn small danger" disabled={setSt.isPending} onClick={() => confirm(tx("{0} iptal edilsin mi?", w.no)) && setSt.mutate({ w, s: "cancelled" })}>{tx("İptal")}</button>}
+                            {w.status === "in_progress" && <button className="btn small" disabled={setSt.isPending} title={tx("Üretileni ve maliyetini korur, kalan miktarı kapatır")}
+                              onClick={() => confirm(tx("{0} {1} / {2} üretimle kapatılsın mı? Sonra değiştirilemez.", w.no, fmtQty(w.done_qty), fmtQty(w.qty))) && setSt.mutate({ w, s: "closed" })}>{tx("Kısa kapat")}</button>}
                           </div>
                         )}
                       </td>
                     </tr>
                   );
                 })}
-                {!rows.length && <tr><td colSpan={13} className="muted">İş emri yok.</td></tr>}
+                {!rows.length && <tr><td colSpan={13} className="muted">{tx("İş emri yok.")}</td></tr>}
               </tbody>
             </table>
           </div>
         )}
         <p className="muted" style={{ marginTop: 10 }}>
-          İş emri başlatıldığında parça "Devam ediyor" olur; üretim girişi tamamlanınca parça "Üretildi" olarak işaretlenir.
+          {tx("İş emri başlatıldığında parça \"Devam ediyor\" olur; üretim girişi tamamlanınca parça \"Üretildi\" olarak işaretlenir.")}
         </p>
       </div>
       {editing && <WoForm wo={editing === "new" ? undefined : editing} projectId={pid || null} onClose={() => setEditing(null)} />}
@@ -152,29 +153,29 @@ function WoForm({ wo, projectId, onClose }: { wo?: WorkOrder; projectId: number 
       return wo ? saveRev(wo.rev, (rev) => api.put<WorkOrder>(`/work-orders/${wo.id}`, { ...body, rev }))
         : api.post<WorkOrder>("/work-orders", { ...body, project_id: project, part_no: partNo.trim() });
     },
-    onSuccess: (w) => { toast(wo ? "İş emri güncellendi" : `${w.no} oluşturuldu`); refresh(); onClose(); },
+    onSuccess: (w) => { toast(wo ? tx("İş emri güncellendi") : tx("{0} oluşturuldu", w.no)); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title={wo ? `İş emrini düzenle: ${wo.no}` : "Yeni iş emri"} onClose={onClose}
+    <Modal title={wo ? tx("İş emrini düzenle: {0}", wo.no) : tx("Yeni iş emri")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || (!wo && !partNo.trim())} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || (!wo && !partNo.trim())} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
       <div className="adm-form">
-        {!wo && <Field label="Proje"><ProjectSelect value={project} onChange={setProject} emptyLabel="(Stok için, projesiz)" /></Field>}
-        <Field label="Parça no">{wo ? <input disabled value={wo.part_no} /> : <input autoFocus value={partNo} onChange={(e) => setPartNo(e.target.value)} />}</Field>
-        <Field label="Açıklama"><input value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
-        <Field label="Miktar"><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-        <Field label="Yapan"><MakerInput value={maker} onChange={setMaker} /></Field>
+        {!wo && <Field label={tx("Proje")}><ProjectSelect value={project} onChange={setProject} emptyLabel={tx("(Stok için, projesiz)")} /></Field>}
+        <Field label={tx("Parça no")}>{wo ? <input disabled value={wo.part_no} /> : <input autoFocus value={partNo} onChange={(e) => setPartNo(e.target.value)} />}</Field>
+        <Field label={tx("Açıklama")}><input value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
+        <Field label={tx("Miktar")}><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+        <Field label={tx("Yapan")}><MakerInput value={maker} onChange={setMaker} /></Field>
         <div className="adm-form two">
-          <Field label="Başlangıç"><input type="date" value={start ?? ""} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Termin"><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
+          <Field label={tx("Başlangıç")}><input type="date" value={start ?? ""} onChange={(e) => setStart(e.target.value)} /></Field>
+          <Field label={tx("Termin")}><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
         </div>
-        <Field label={`Birim maliyet (${curSign()})`} hint="Fason fiyatı veya iç üretim maliyeti; proje maliyetine eklenir.">
+        <Field label={tx("Birim maliyet ({0})", curSign())} hint={tx("Fason fiyatı veya iç üretim maliyeti; proje maliyetine eklenir.")}>
           <input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
         </Field>
-        <Field label="Not"><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label={tx("Not")}><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
     </Modal>
   );
@@ -189,7 +190,7 @@ function CompleteModal({ wo, onClose }: { wo: WorkOrder; onClose: () => void }) 
   const save = useMutation({
     mutationFn: () => api.post<WorkOrder & { warnings: WoWarning[] }>(`/work-orders/${wo.id}/complete`, { qty: numOrNull(qty) ?? 0, note }),
     onSuccess: (w) => {
-      toast(`${w.no}: ${fmtQty(w.done_qty)} / ${fmtQty(w.qty)} üretildi`);
+      toast(tx("{0}: {1} / {2} üretildi", w.no, fmtQty(w.done_qty), fmtQty(w.qty)));
       refresh();
       if (w.warnings.length) setWarnings(w.warnings);
       else onClose();
@@ -198,25 +199,25 @@ function CompleteModal({ wo, onClose }: { wo: WorkOrder; onClose: () => void }) 
   });
   if (warnings) {
     return (
-      <Modal title={`Eksik malzeme: ${wo.no}`} onClose={onClose} footer={<button className="btn primary" onClick={onClose}>Tamam</button>}>
-        <p>Üretim girişi kaydedildi, ancak şu malzemeler stoktan tam çıkılamadı:</p>
+      <Modal title={tx("Eksik malzeme: {0}", wo.no)} onClose={onClose} footer={<button className="btn primary" onClick={onClose}>{tx("Tamam")}</button>}>
+        <p>{tx("Üretim girişi kaydedildi, ancak şu malzemeler stoktan tam çıkılamadı:")}</p>
         <ul className="scan-warn">{warnings.map((w) => <li key={w.code}>{w.message}</li>)}</ul>
-        <p className="muted">Stoktaki kadarı çıkıldı. İş emri açıksa eksik kalan sonraki üretim girişinde yeniden denenir.</p>
+        <p className="muted">{tx("Stoktaki kadarı çıkıldı. İş emri açıksa eksik kalan sonraki üretim girişinde yeniden denenir.")}</p>
       </Modal>
     );
   }
   return (
-    <Modal title={`Üretim girişi: ${wo.no}`} onClose={onClose}
+    <Modal title={tx("Üretim girişi: {0}", wo.no)} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
-      <p><b className="mono">{wo.part_no}</b> {wo.description} · kalan {fmtQty(wo.remaining)}</p>
+      <p><b className="mono">{wo.part_no}</b>{" "}{tx("{0} · kalan {1}", wo.description, fmtQty(wo.remaining))}</p>
       <div className="adm-form">
-        <Field label="Üretilen miktar"><input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-        <Field label="Not"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label={tx("Üretilen miktar")}><input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+        <Field label={tx("Not")}><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
-      <p className="muted">{wo.project_id ? "Üretilen parçalar stoğa girer ve projeye çıkılır." : "Üretilen parçalar stoğa girer."}</p>
+      <p className="muted">{wo.project_id ? tx("Üretilen parçalar stoğa girer ve projeye çıkılır.") : tx("Üretilen parçalar stoğa girer.")}</p>
     </Modal>
   );
 }

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from ..models import ExchangeRate, SyncState, User
 from . import audit, system
+from app.core.i18n import tx
 
 TCMB_URL = "https://www.tcmb.gov.tr/kurlar/today.xml"
 FETCH_TIMEOUT = 10          # seconds, for the whole download
@@ -51,7 +52,7 @@ def clean_currency(currency: str | None) -> str:
     """Currency of a new or edited document, or 400."""
     cur = norm(currency)
     if not re.fullmatch(r"[A-Z]{3}", cur):
-        raise HTTPException(400, "Para birimi TRY, EUR, USD gibi üç harfli kod olmalı")
+        raise HTTPException(400, tx("Para birimi TRY, EUR, USD gibi üç harfli kod olmalı"))
     return cur
 
 
@@ -121,10 +122,10 @@ def set_manual(db: Session, user: User, currency: str, rate: float, day: date | 
     """Rate typed by hand. It replaces a fetched rate of the same day, and a later fetch leaves it alone."""
     cur = clean_currency(currency)
     if cur == base_currency(db):
-        raise HTTPException(400, f"{cur} ana para birimi, kuru her zaman 1")
+        raise HTTPException(400, tx("{0} ana para birimi, kuru her zaman 1", cur))
     day = day or date.today()
     if day > date.today():
-        raise HTTPException(400, "İleri tarihli kur girilemez")
+        raise HTTPException(400, tx("İleri tarihli kur girilemez"))
     _lock(db)
     old = rate_on(db, cur, day)
     row = _put(db, day, cur, rate, "manual")
@@ -165,11 +166,11 @@ def download() -> bytes:
             while chunk := r.read1(65536):
                 buf += chunk
                 if len(buf) > FETCH_MAX_BYTES:
-                    raise RateFetchError(_BAD_REPLY)
+                    raise RateFetchError(tx(_BAD_REPLY))
                 if time.monotonic() > deadline:
-                    raise RateFetchError(_OFFLINE)
+                    raise RateFetchError(tx(_OFFLINE))
     except (OSError, http.client.HTTPException) as e:   # URLError, HTTPError and timeouts are OSError
-        raise RateFetchError(_OFFLINE) from e
+        raise RateFetchError(tx(_OFFLINE)) from e
     return bytes(buf)
 
 
@@ -187,7 +188,7 @@ def parse_bulletin(data: bytes) -> tuple[date, dict[str, float]]:
     try:
         root = ElementTree.fromstring(data)
     except Exception as e:  # noqa: BLE001 - ParseError and the defusedxml refusals
-        raise RateFetchError(_BAD_REPLY) from e
+        raise RateFetchError(tx(_BAD_REPLY)) from e
     out: dict[str, float] = {}
     for c in root.findall("Currency"):
         code = norm(c.get("CurrencyCode") or c.get("Kod"))
@@ -198,7 +199,7 @@ def parse_bulletin(data: bytes) -> tuple[date, dict[str, float]]:
         if re.fullmatch(r"[A-Z]{3}", code) and sell > 0 and unit > 0:
             out[code] = sell / unit
     if not out:
-        raise RateFetchError(_BAD_REPLY)
+        raise RateFetchError(tx(_BAD_REPLY))
     return _bulletin_day(root), out
 
 
@@ -208,7 +209,7 @@ def store_bulletin(db: Session, user: User | None, day: date, try_rates: dict[st
     base = base_currency(db)
     in_try = {**try_rates, "TRY": 1.0}
     if base not in in_try:
-        raise RateFetchError(f"Merkez Bankası listesinde {base} yok. Kurları elle girin.")
+        raise RateFetchError(tx("Merkez Bankası listesinde {0} yok. Kurları elle girin.", base))
     _lock(db)
     manual = set(db.scalars(select(ExchangeRate.currency).where(ExchangeRate.rate_date == day,
                                                                 ExchangeRate.source == "manual")))

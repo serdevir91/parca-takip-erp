@@ -15,6 +15,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ..models import User
+from app.core.i18n import tx
 
 
 def claim(db: Session, row: Any, base: int | None, user: User | None) -> None:
@@ -28,5 +29,5 @@ def claim(db: Session, row: Any, base: int | None, user: User | None) -> None:
         db.rollback()
         db.refresh(row)
         raise HTTPException(409, detail={"conflict": True, "by": row.edit_by, "rev": row.edit_rev,
-                                         "message": f"Bu kaydı siz düzenlerken {row.edit_by or 'başka biri'} değiştirdi"})
+                                         "message": tx("Bu kaydı siz düzenlerken {0} değiştirdi", row.edit_by or 'başka biri')})
     db.expire(row, ["edit_rev", "edit_by"])

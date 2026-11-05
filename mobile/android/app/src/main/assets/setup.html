@@ -70,6 +70,129 @@
   </footer>
 </main>
 <script>
+  const I18N = {
+    en: {
+      "Aynı ağdaki ERP sunucusuna bağlanın. Sunucu, masaüstü uygulaması (sunucu modu), Docker ya da Dockersız kurulum olabilir.":
+        "Connect to the ERP server on the same network. The server can be the desktop app (server mode), Docker, or a Docker-free installation.",
+      "Sunucu adresi": "Server address",
+      "örn. 192.168.1.20:8000": "e.g. 192.168.1.20:8000",
+      "Bağlan": "Connect",
+      "Ağdaki sunucular": "Servers on the network",
+      "Aramak için “Ağda ara”ya dokunun.": "Tap “Scan network” to search.",
+      "Ağda ara": "Scan network",
+      "Son kullanılanlar": "Recently used",
+      "Güncellemeleri kontrol et": "Check for updates",
+      "Listeden kaldır": "Remove from list",
+      "Sunucu adresini yazın.": "Enter the server address.",
+      "Bağlantı deneniyor…": "Testing connection…",
+      "Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin.":
+        "Could not reach server. Check the address, port, and that you are on the same Wi-Fi network.",
+      "Bağlandı": "Connected",
+      "sürüm": "version",
+      "Aranıyor… (birkaç saniye sürebilir)": "Searching… (may take a few seconds)",
+      "Sunucu bulunamadı. Adresi elle yazın.": "No server found. Enter the address manually.",
+      "Bu sayfa Android uygulaması içinde açılmalı.": "This page must be opened within the Android app.",
+      "Uygulama sürümü": "App version",
+      "Şu anki sunucu": "Current server",
+      "Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin.":
+        "The server certificate has changed, connection closed. Do not connect unless the administrator renewed it. If renewed, remove the server from the list and add it again.",
+      "Sunucu açılamadı: {0}. Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.":
+        "Could not open server: {0}. Check that the server is running or select another server.",
+    },
+    es: {
+      "Aynı ağdaki ERP sunucusuna bağlanın. Sunucu, masaüstü uygulaması (sunucu modu), Docker ya da Dockersız kurulum olabilir.":
+        "Conéctese al servidor ERP en la misma red. El servidor puede ser la aplicación de escritorio (modo servidor), Docker o una instalación sin Docker.",
+      "Sunucu adresi": "Dirección del servidor",
+      "örn. 192.168.1.20:8000": "ej. 192.168.1.20:8000",
+      "Bağlan": "Conectar",
+      "Ağdaki sunucular": "Servidores en la red",
+      "Aramak için “Ağda ara”ya dokunun.": "Toque “Buscar en la red” para buscar.",
+      "Ağda ara": "Buscar en la red",
+      "Son kullanılanlar": "Usados recientemente",
+      "Güncellemeleri kontrol et": "Buscar actualizaciones",
+      "Listeden kaldır": "Eliminar de la lista",
+      "Sunucu adresini yazın.": "Introduzca la dirección del servidor.",
+      "Bağlantı deneniyor…": "Probando conexión…",
+      "Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin.":
+        "No se pudo conectar con el servidor. Compruebe la dirección, el puerto y que esté en la misma red Wi-Fi.",
+      "Bağlandı": "Conectado",
+      "sürüm": "versión",
+      "Aranıyor… (birkaç saniye sürebilir)": "Buscando… (puede tardar unos segundos)",
+      "Sunucu bulunamadı. Adresi elle yazın.": "No se encontró ningún servidor. Introduzca la dirección manualmente.",
+      "Bu sayfa Android uygulaması içinde açılmalı.": "Esta página debe abrirse dentro de la aplicación de Android.",
+      "Uygulama sürümü": "Versión de la aplicación",
+      "Şu anki sunucu": "Servidor actual",
+      "Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin.":
+        "El certificado del servidor ha cambiado, conexión cerrada. No se conecte a menos que el administrador lo haya renovado. Si fue renovado, elimine el servidor de la lista y agréguelo de nuevo.",
+      "Sunucu açılamadı: {0}. Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.":
+        "No se pudo abrir el servidor: {0}. Compruebe que el servidor esté en funcionamiento o seleccione otro servidor.",
+    },
+    de: {
+      "Aynı ağdaki ERP sunucusuna bağlanın. Sunucu, masaüstü uygulaması (sunucu modu), Docker ya da Dockersız kurulum olabilir.":
+        "Verbinden Sie sich mit dem ERP-Server im selben Netzwerk. Der Server kann die Desktop-Anwendung (Server-Modus), Docker oder eine Docker-freie Installation sein.",
+      "Sunucu adresi": "Serveradresse",
+      "örn. 192.168.1.20:8000": "z.B. 192.168.1.20:8000",
+      "Bağlan": "Verbinden",
+      "Ağdaki sunucular": "Server im Netzwerk",
+      "Aramak için “Ağda ara”ya dokunun.": "Tippen Sie auf „Im Netzwerk suchen“, um zu suchen.",
+      "Ağda ara": "Im Netzwerk suchen",
+      "Son kullanılanlar": "Zuletzt verwendet",
+      "Güncellemeleri kontrol et": "Nach Updates suchen",
+      "Listeden kaldır": "Aus der Liste entfernen",
+      "Sunucu adresini yazın.": "Geben Sie die Serveradresse ein.",
+      "Bağlantı deneniyor…": "Verbindung wird getestet…",
+      "Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin.":
+        "Server konnte nicht erreicht werden. Prüfen Sie Adresse, Port und ob Sie sich im selben WLAN befinden.",
+      "Bağlandı": "Verbunden",
+      "sürüm": "Version",
+      "Aranıyor… (birkaç saniye sürebilir)": "Wird gesucht… (kann einige Sekunden dauern)",
+      "Sunucu bulunamadı. Adresi elle yazın.": "Kein Server gefunden. Geben Sie die Adresse manuell ein.",
+      "Bu sayfa Android uygulaması içinde açılmalı.": "Diese Seite muss in der Android-App geöffnet werden.",
+      "Uygulama sürümü": "App-Version",
+      "Şu anki sunucu": "Aktueller Server",
+      "Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin.":
+        "Das Serverzertifikat wurde geändert, Verbindung getrennt. Verbinden Sie sich nicht, es sei denn, der Administrator hat es erneuert. Falls erneuert, entfernen Sie den Server aus der Liste und fügen Sie ihn erneut hinzu.",
+      "Sunucu açılamadı: {0}. Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.":
+        "Server konnte nicht geöffnet werden: {0}. Stellen Sie sicher, dass der Server läuft oder wählen Sie einen anderen Server.",
+    },
+  };
+  const LANG = (navigator.language || "tr").slice(0, 2);
+  function st(text) {
+    if (!text) return text;
+    var cat = I18N[LANG];
+    return (cat && cat[text]) || text;
+  }
+  function translateDom(root) {
+    if (LANG === "tr") return;
+    var walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    var textNodes = [];
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeType === 3) {
+        textNodes.push(node);
+      } else if (node.nodeType === 1) {
+        var attrs = ["placeholder", "title", "aria-label"];
+        for (var i = 0; i < attrs.length; i++) {
+          var val = node.getAttribute(attrs[i]);
+          if (val && I18N[LANG] && I18N[LANG][val]) {
+            node.setAttribute(attrs[i], I18N[LANG][val]);
+          }
+        }
+      }
+    }
+    for (var j = 0; j < textNodes.length; j++) {
+      var tn = textNodes[j];
+      var orig = tn.nodeValue;
+      var trimmed = orig.trim();
+      if (trimmed && I18N[LANG] && I18N[LANG][trimmed]) {
+        var leading = orig.match(/^\s*/)[0];
+        var trailing = orig.match(/\s*$/)[0];
+        tn.nodeValue = leading + I18N[LANG][trimmed] + trailing;
+      }
+    }
+  }
+  translateDom();
+
   var app = window.ParcaTakipApp;
   var cbs = {}, seq = 0;
   window.__erpCb = function (id, data) { var f = cbs[id]; delete cbs[id]; if (f) f(data); };
@@ -86,11 +209,11 @@
     var u = document.createElement("div"); u.className = "u"; u.textContent = url.replace(/^http:\/\//, "");
     info.appendChild(u);
     if (note) { var n = document.createElement("div"); n.className = "n"; n.textContent = note; info.appendChild(n); }
-    var b = document.createElement("button"); b.className = "primary"; b.textContent = "Bağlan";
+    var b = document.createElement("button"); b.className = "primary"; b.textContent = st("Bağlan");
     b.onclick = function () { connect(url); };
     li.appendChild(info); li.appendChild(b);
     if (onForget) {
-      var x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Listeden kaldır";
+      var x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = st("Listeden kaldır");
       x.onclick = function () { onForget(); li.remove(); };
       li.appendChild(x);
     }
@@ -99,24 +222,24 @@
 
   function connect(raw) {
     raw = (raw || "").trim();
-    if (!raw) { msg("Sunucu adresini yazın.", "err"); return; }
-    $("go").disabled = true; msg("Bağlantı deneniyor…");
+    if (!raw) { msg(st("Sunucu adresini yazın."), "err"); return; }
+    $("go").disabled = true; msg(st("Bağlantı deneniyor…"));
     call("check", [raw], function (r) {
       $("go").disabled = false;
-      if (!r) { msg("Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin.", "err"); return; }
-      msg("Bağlandı" + (r.version ? " (sürüm " + r.version + ")" : "") + ".", "ok");
+      if (!r) { msg(st("Sunucuya ulaşılamadı. Adresi, portu ve aynı Wi-Fi ağında olduğunuzu kontrol edin."), "err"); return; }
+      msg(st("Bağlandı") + (r.version ? " (" + st("sürüm") + " " + r.version + ")" : "") + ".", "ok");
       app.connect(r.url);
     });
   }
 
   function scan() {
     var ul = $("found"); $("scan").disabled = true;
-    ul.innerHTML = '<li class="empty">Aranıyor… (birkaç saniye sürebilir)</li>';
+    ul.innerHTML = '<li class="empty">' + st("Aranıyor… (birkaç saniye sürebilir)") + '</li>';
     call("discover", [], function (list) {
       $("scan").disabled = false; ul.innerHTML = "";
-      if (!list || !list.length) { ul.innerHTML = '<li class="empty">Sunucu bulunamadı. Adresi elle yazın.</li>'; return; }
+      if (!list || !list.length) { ul.innerHTML = '<li class="empty">' + st("Sunucu bulunamadı. Adresi elle yazın.") + '</li>'; return; }
       list.forEach(function (s) {
-        ul.appendChild(item(s.url, [s.name, s.version && "sürüm " + s.version].filter(Boolean).join(" · ")));
+        ul.appendChild(item(s.url, [s.name, s.version && st("sürüm") + " " + s.version].filter(Boolean).join(" · ")));
       });
     });
   }
@@ -127,24 +250,24 @@
   $("upd").onclick = function () { app.checkUpdate(true); };
 
   if (!app) {
-    msg("Bu sayfa Android uygulaması içinde açılmalı.", "err");
+    msg(st("Bu sayfa Android uygulaması içinde açılmalı."), "err");
   } else {
     var cfg = {};
     try { cfg = JSON.parse(app.getConfig()); } catch (e) {}
-    $("ver").textContent = "Uygulama sürümü " + (cfg.version || app.appVersion());
+    $("ver").textContent = st("Uygulama sürümü") + " " + (cfg.version || app.appVersion());
     if (cfg.server) $("addr").value = cfg.server.replace(/^http:\/\//, "");
     var recent = cfg.recent || [];
     if (recent.length) {
       $("recentCard").hidden = false;
       recent.forEach(function (u) {
-        $("recent").appendChild(item(u, u === cfg.server ? "Şu anki sunucu" : "", function () {
+        $("recent").appendChild(item(u, u === cfg.server ? st("Şu anki sunucu") : "", function () {
           app.forget(u);
         }));
       });
     }
     var q = new URLSearchParams(location.search);
-    if (q.get("cert")) msg("Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin.", "err");
-    else if (q.get("error")) msg("Sunucu açılamadı: " + q.get("error") + ". Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.", "err");
+    if (q.get("cert")) msg(st("Sunucunun sertifikası değişmiş, bağlantı kesildi. Sunucuyu yönetici yenilemediyse bağlanmayın. Yenilediyse sunucuyu listeden kaldırıp yeniden ekleyin."), "err");
+    else if (q.get("error")) msg(st("Sunucu açılamadı: {0}. Sunucunun çalıştığını kontrol edin ya da başka bir sunucu seçin.").replace("{0}", q.get("error")), "err");
     else if (!cfg.server) scan();
   }
 </script>

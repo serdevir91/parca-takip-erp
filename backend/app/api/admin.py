@@ -29,6 +29,7 @@ from ..services.settings import (get_setting, part_no_patterns, purchased_assemb
                                  signup_enabled)
 from .auth import _is_default_password, check_email, check_password_rules
 from .deps import admin, get_db
+from app.core.i18n import tx
 
 contacts_view, contacts_edit = require("contacts", "view"), require("contacts", "edit")
 
@@ -74,7 +75,7 @@ class PasswordReset(BaseModel):
 
 def _check_role(role: str) -> None:
     if role not in ROLES:
-        raise HTTPException(400, f"Geçersiz rol: {role}")
+        raise HTTPException(400, tx("Geçersiz rol: {0}", role))
 
 
 def _check_password(pw: str) -> None:
@@ -84,7 +85,7 @@ def _check_password(pw: str) -> None:
 def _user_or_404(db: Session, user_id: int) -> User:
     u = db.get(User, user_id)
     if u is None:
-        raise HTTPException(404, "Kullanıcı bulunamadı")
+        raise HTTPException(404, tx("Kullanıcı bulunamadı"))
     return u
 
 
@@ -96,13 +97,13 @@ def _active_admins(db: Session) -> int:
 def _guard_self(me: User, u: User, new_role: str, new_active: bool) -> None:
     """An admin must not lock themselves out (deactivate or demote their own account)."""
     if u.id == me.id and (not new_active or new_role != ROLE_ADMIN):
-        raise HTTPException(400, "Kendi hesabınızı pasif yapamaz veya yönetici rolünü kaldıramazsınız")
+        raise HTTPException(400, tx("Kendi hesabınızı pasif yapamaz veya yönetici rolünü kaldıramazsınız"))
 
 
 def _guard_last_admin(db: Session, u: User, new_role: str, new_active: bool) -> None:
     losing = u.role == ROLE_ADMIN and u.active and (new_role != ROLE_ADMIN or not new_active)
     if losing and _active_admins(db) <= 1:
-        raise HTTPException(400, "Son aktif yönetici pasif yapılamaz veya rolü değiştirilemez")
+        raise HTTPException(400, tx("Son aktif yönetici pasif yapılamaz veya rolü değiştirilemez"))
 
 
 @router.get("/roles")
@@ -136,7 +137,7 @@ class ApproveIn(BaseModel):
 def _pending_or_404(db: Session, user_id: int) -> User:
     u = _user_or_404(db, user_id)
     if not u.pending:
-        raise HTTPException(400, "Bu hesap onay beklemiyor")
+        raise HTTPException(400, tx("Bu hesap onay beklemiyor"))
     return u
 
 
@@ -169,11 +170,11 @@ def reject_signup(user_id: int, me: User = Depends(admin), db: Session = Depends
 def create_user(body: UserCreate, me: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
     username = body.username.strip()
     if not username:
-        raise HTTPException(400, "Kullanıcı adı boş olamaz")
+        raise HTTPException(400, tx("Kullanıcı adı boş olamaz"))
     _check_role(body.role)
     _check_password(body.password)
     if db.scalar(select(User).where(func.lower(User.username) == username.lower())):
-        raise HTTPException(409, "Bu kullanıcı adı zaten var")
+        raise HTTPException(409, tx("Bu kullanıcı adı zaten var"))
     u = User(username=username, full_name=body.full_name.strip(), email=check_email(body.email), role=body.role,
              password_hash=hash_password(body.password), active=True,
              permissions=clean_overrides(body.permissions) or None)
@@ -273,7 +274,7 @@ class FirmUpdate(BaseModel):
 
 def _check_kind(kind: str) -> None:
     if kind not in FIRM_KINDS:
-        raise HTTPException(400, "Firma türü üretici, tedarikçi, ikisi birden veya müşteri olmalı")
+        raise HTTPException(400, tx("Firma türü üretici, tedarikçi, ikisi birden veya müşteri olmalı"))
 
 
 def _firm_name_taken(db: Session, name: str, exclude_id: int | None = None) -> bool:
@@ -284,7 +285,7 @@ def _firm_name_taken(db: Session, name: str, exclude_id: int | None = None) -> b
 def _firm_or_404(db: Session, firm_id: int) -> Firm:
     f = db.get(Firm, firm_id)
     if f is None:
-        raise HTTPException(404, "Firma bulunamadı")
+        raise HTTPException(404, tx("Firma bulunamadı"))
     return f
 
 
@@ -301,10 +302,10 @@ def list_firms(kind: str | None = None, _: User = Depends(contacts_view),
 def create_firm(body: FirmIn, me: User = Depends(contacts_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Firma adı boş olamaz")
+        raise HTTPException(400, tx("Firma adı boş olamaz"))
     _check_kind(body.kind)
     if _firm_name_taken(db, name):
-        raise HTTPException(409, "Bu firma zaten var")
+        raise HTTPException(409, tx("Bu firma zaten var"))
     f = Firm(**{**body.model_dump(), "name": name, "contact": body.contact.strip()})
     db.add(f)
     db.flush()
@@ -322,9 +323,9 @@ def update_firm(firm_id: int, body: FirmUpdate, me: User = Depends(contacts_edit
     if "name" in changes:
         changes["name"] = changes["name"].strip()
         if not changes["name"]:
-            raise HTTPException(400, "Firma adı boş olamaz")
+            raise HTTPException(400, tx("Firma adı boş olamaz"))
         if _firm_name_taken(db, changes["name"], f.id):
-            raise HTTPException(409, "Bu firma zaten var")
+            raise HTTPException(409, tx("Bu firma zaten var"))
     if "kind" in changes:
         _check_kind(changes["kind"])
     audit.record_changes(db, me, f, changes, "firm", f.id)
@@ -337,7 +338,7 @@ def delete_firm(firm_id: int, me: User = Depends(contacts_edit), db: Session = D
     """Tracking rows keep the firm name as text, so deleting a firm loses no history."""
     f = _firm_or_404(db, firm_id)
     if any(db.scalar(select(m.id).where(m.firm_id == f.id).limit(1)) for m in (Invoice, Payment, PurchaseOrder, SalesOrder)):
-        raise HTTPException(400, "Bu firmanın fatura, ödeme veya sipariş kaydı var. Silmek yerine pasife alın.")
+        raise HTTPException(400, tx("Bu firmanın fatura, ödeme veya sipariş kaydı var. Silmek yerine pasife alın."))
     audit.record(db, me, "firm", f.id, "name", f.name, None, action="delete")
     db.delete(f)
     db.commit()
@@ -362,7 +363,7 @@ class SettingIn(BaseModel):
 
 def _clean_str_list(v: Any, what: str) -> list[str]:
     if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-        raise HTTPException(400, f"{what} bir metin listesi olmalı")
+        raise HTTPException(400, tx("{0} bir metin listesi olmalı", what))
     out: list[str] = []
     for x in (s.strip() for s in v):
         if x and x not in out:
@@ -372,23 +373,23 @@ def _clean_str_list(v: Any, what: str) -> list[str]:
 
 def _clean_temin_types(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
-        raise HTTPException(400, "Temin şekilleri bir liste olmalı")
+        raise HTTPException(400, tx("Temin şekilleri bir liste olmalı"))
     fixed = {t["name"]: t for t in DEFAULT_TEMIN_TYPES if t["name"] in FIXED_TEMINS}
     out: dict[str, dict[str, Any]] = {}
     for t in value:
         name = str((t or {}).get("name") or "").strip() if isinstance(t, dict) else ""
         if not name or len(name) > 64:
-            raise HTTPException(400, "Temin şekli adı boş olamaz ve 64 karakteri geçemez")
+            raise HTTPException(400, tx("Temin şekli adı boş olamaz ve 64 karakteri geçemez"))
         if name in out:
-            raise HTTPException(400, f"Aynı temin şekli iki kez yazılmış: {name}")
+            raise HTTPException(400, tx("Aynı temin şekli iki kez yazılmış: {0}", name))
         if t.get("kind") not in (KIND_IMALAT, KIND_HAZIR) and name not in fixed:
-            raise HTTPException(400, f"{name}: davranış İmalat veya Hazır Alım olmalı")
+            raise HTTPException(400, tx("{0}: davranış İmalat veya Hazır Alım olmalı", name))
         # The fixed types keep their meaning; only their settings for drawing and planning change
         out[name] = {"name": name, "kind": fixed[name]["kind"] if name in fixed else t["kind"],
                      "drawing": bool(t.get("drawing")), "order": bool(t.get("order"))}
     missing = [n for n in fixed if n not in out]
     if missing:
-        raise HTTPException(400, f"Bu temin şekilleri silinemez: {', '.join(missing)}")
+        raise HTTPException(400, tx("Bu temin şekilleri silinemez: {0}", ', '.join(missing)))
     return list(out.values())
 
 
@@ -398,39 +399,39 @@ def _validate_setting(key: str, value: Any) -> Any:
     if key == "part_no_patterns":
         pats = _clean_str_list(value, "Parça numarası desenleri")
         if not pats:
-            raise HTTPException(400, "En az bir parça numarası deseni gerekli")
+            raise HTTPException(400, tx("En az bir parça numarası deseni gerekli"))
         for p in pats:
             try:
                 re.compile(p)
             except re.error as e:
-                raise HTTPException(400, f"Geçersiz desen '{p}': {e}") from e
+                raise HTTPException(400, tx("Geçersiz desen '{0}': {1}", p, e)) from e
         return pats
     if key == "purchased_assemblies":
-        return sorted(_clean_str_list(value, "Satın alınan montaj listesi"))
+        return sorted(_clean_str_list(value, tx("Satın alınan montaj listesi")))
     if key == "system":
         return system.clean(value)
     if key == "material_status_choices":
         choices = _clean_str_list(value, "Malzeme durumları")
         if not choices:
-            raise HTTPException(400, "En az bir malzeme durumu gerekli")
+            raise HTTPException(400, tx("En az bir malzeme durumu gerekli"))
         return choices
     if key == "signup":
         if not isinstance(value, dict):
-            raise HTTPException(400, "Hesap oluşturma ayarı bir nesne olmalı")
+            raise HTTPException(400, tx("Hesap oluşturma ayarı bir nesne olmalı"))
         return {"enabled": bool(value.get("enabled", False))}
     if key == "status_rules":
         if not isinstance(value, dict):
-            raise HTTPException(400, "Durum kuralları bir nesne olmalı")
+            raise HTTPException(400, tx("Durum kuralları bir nesne olmalı"))
         out = dict(value)
         try:
             ratio = float(out.get("big_drop_ratio", 0.10))
         except (TypeError, ValueError) as e:
-            raise HTTPException(400, "big_drop_ratio sayı olmalı") from e
+            raise HTTPException(400, tx("big_drop_ratio sayı olmalı")) from e
         if not 0 < ratio <= 1:
-            raise HTTPException(400, "big_drop_ratio 0 ile 1 arasında olmalı")
+            raise HTTPException(400, tx("big_drop_ratio 0 ile 1 arasında olmalı"))
         out["big_drop_ratio"] = ratio
         return out
-    raise HTTPException(404, f"Bilinmeyen ayar: {key}")
+    raise HTTPException(404, tx("Bilinmeyen ayar: {0}", key))
 
 
 def _mirror_purchased(db: Session, wanted: list[str]) -> None:
@@ -464,7 +465,7 @@ def get_settings_view(_: User = Depends(admin), db: Session = Depends(get_db)) -
 def put_setting(key: str, body: SettingIn, me: User = Depends(admin),
                 db: Session = Depends(get_db)) -> dict[str, Any]:
     if key not in SETTING_KEYS:
-        raise HTTPException(404, f"Bilinmeyen ayar: {key}")
+        raise HTTPException(404, tx("Bilinmeyen ayar: {0}", key))
     value = _validate_setting(key, body.value)
     old = system.saved(db) if key == "system" else _settings_out(db)[key]
     if key == "purchased_assemblies":
@@ -488,7 +489,7 @@ def _parse_when(s: str | None, end: bool) -> datetime | None:
         else:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError as e:
-        raise HTTPException(400, f"Geçersiz tarih: {s}") from e
+        raise HTTPException(400, tx("Geçersiz tarih: {0}", s)) from e
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
@@ -570,7 +571,7 @@ async def upload_backup(file: UploadFile = File(...), me: User = Depends(admin),
         info = backup_svc.adopt_upload(tmp)
     except (ValueError, OSError, tarfile.TarError, KeyError) as e:
         tmp.unlink(missing_ok=True)
-        raise HTTPException(400, f"Bu dosya geçerli bir yedek değil: {e}") from e
+        raise HTTPException(400, tx("Bu dosya geçerli bir yedek değil: {0}", e)) from e
     audit.record(db, me, "backup", info.name, "size", None, size, action="upload")
     db.commit()
     return info.to_dict()
@@ -584,7 +585,7 @@ class RestoreIn(BaseModel):
 def restore_backup(name: str, body: RestoreIn, me: User = Depends(admin),
                    db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.confirm != name:
-        raise HTTPException(400, "Geri yükleme onaylanmadı")
+        raise HTTPException(400, tx("Geri yükleme onaylanmadı"))
     try:
         path = backup_svc.backup_path(name)
     except backup_svc.BackupError as e:
@@ -597,7 +598,7 @@ def restore_backup(name: str, body: RestoreIn, me: User = Depends(admin),
     except TimeoutError as e:
         raise HTTPException(409, str(e)) from e
     except (backup_svc.BackupError, ValueError, OSError, tarfile.TarError) as e:
-        raise HTTPException(500, f"Geri yükleme başarısız, veriler eski haline getirildi: {e}") from e
+        raise HTTPException(500, tx("Geri yükleme başarısız, veriler eski haline getirildi: {0}", e)) from e
     _is_default_password.cache_clear()
     loginguard.reset()
     with SessionLocal() as s:
@@ -640,7 +641,7 @@ def https_set(body: HttpsIn, request: Request, me: User = Depends(admin),
 def restart_server(_: User = Depends(admin)) -> dict[str, bool]:
     """Only under a service manager that starts the process again (the systemd unit of server_install.sh)."""
     if os.environ.get("ERP_SUPERVISED") != "1":
-        raise HTTPException(409, "Bu sunucu kendini yeniden başlatamıyor. Sunucuyu elle yeniden başlatın.")
+        raise HTTPException(409, tx("Bu sunucu kendini yeniden başlatamıyor. Sunucuyu elle yeniden başlatın."))
     threading.Timer(1, os.kill, (os.getpid(), signal.SIGTERM)).start()
     return {"ok": True}
 

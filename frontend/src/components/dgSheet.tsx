@@ -5,6 +5,7 @@ import { cellText, FilterPopup, norm, parseNum, type ColFilter } from "./dgFilte
 import { autofit, drawnColumns, headerText, isEmpty, type GridColumn, type GridProps } from "./dgTypes";
 import { useToast } from "./Toast";
 import { qty } from "../api/num";
+import { LOCALE, tx } from "../api/i18n";
 
 type Pos = { r: number; c: number };
 type Range = { r0: number; r1: number; c0: number; c1: number };
@@ -115,21 +116,21 @@ function FindBar({ replace, onFind, onReplace, onReplaceAll, onClose }: {
   };
   return (
     <div className="dg-find" role="search" onKeyDown={key}>
-      <input autoFocus placeholder="Bul" aria-label="Bul" value={q} onChange={(e) => setQ(e.target.value)} />
-      {replace && <input placeholder="Şununla değiştir" aria-label="Şununla değiştir" value={to} onChange={(e) => setTo(e.target.value)} />}
-      <button className="btn small" disabled={!q} onClick={() => setMsg(onFind(q, exact, mcase, true))} title="Önceki (Shift+Enter)">‹</button>
-      <button className="btn small" disabled={!q} onClick={() => setMsg(onFind(q, exact, mcase, false))} title="Sonraki (Enter)">›</button>
+      <input autoFocus placeholder={tx("Bul")} aria-label={tx("Bul")} value={q} onChange={(e) => setQ(e.target.value)} />
+      {replace && <input placeholder={tx("Şununla değiştir")} aria-label={tx("Şununla değiştir")} value={to} onChange={(e) => setTo(e.target.value)} />}
+      <button className="btn small" disabled={!q} onClick={() => setMsg(onFind(q, exact, mcase, true))} title={tx("Önceki (Shift+Enter)")}>‹</button>
+      <button className="btn small" disabled={!q} onClick={() => setMsg(onFind(q, exact, mcase, false))} title={tx("Sonraki (Enter)")}>›</button>
       {replace && (
         <>
-          <button className="btn small" disabled={!q} onClick={() => setMsg(onReplace(q, to, exact, mcase))}>Değiştir</button>
-          <button className="btn small" disabled={!q} onClick={() => setMsg(onReplaceAll(q, to, exact, mcase))}>Tümünü değiştir</button>
+          <button className="btn small" disabled={!q} onClick={() => setMsg(onReplace(q, to, exact, mcase))}>{tx("Değiştir")}</button>
+          <button className="btn small" disabled={!q} onClick={() => setMsg(onReplaceAll(q, to, exact, mcase))}>{tx("Tümünü değiştir")}</button>
         </>
       )}
-      <label><input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} /> Tüm hücre</label>
-      <label><input type="checkbox" checked={mcase} onChange={(e) => setMcase(e.target.checked)} /> Büyük/küçük harf</label>
+      <label><input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} />{" "}{tx("Tüm hücre")}</label>
+      <label><input type="checkbox" checked={mcase} onChange={(e) => setMcase(e.target.checked)} />{" "}{tx("Büyük/küçük harf")}</label>
       {msg && <span className="muted">{msg}</span>}
       <span className="dg-spacer" />
-      <button className="dg-link" onClick={onClose}>Kapat</button>
+      <button className="dg-link" onClick={onClose}>{tx("Kapat")}</button>
     </div>
   );
 }
@@ -260,7 +261,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
       if (val !== old) edits.push({ id: row.id, col: col.id, old, val });
     }
     apply(edits);
-    if (skipped && !quiet) toast(`${edits.length.toLocaleString("tr-TR")} hücre yazıldı, ${skipped.toLocaleString("tr-TR")} hücre atlandı (kilitli hücre ya da geçersiz değer)`, true);
+    if (skipped && !quiet) toast(tx("{0} hücre yazıldı, {1} hücre atlandı (kilitli hücre ya da geçersiz değer)", edits.length.toLocaleString(LOCALE), skipped.toLocaleString(LOCALE)), true);
     return edits.length;
   };
   const history = (from: React.MutableRefObject<Edit[][]>, to: React.MutableRefObject<Edit[][]>, label: string) => {
@@ -268,7 +269,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     if (!e) return;
     apply(e.map((x) => ({ ...x, old: x.val, val: x.old })), false);
     to.current.push(e.map((x) => ({ ...x, old: x.val, val: x.old })));
-    setNote(`${e.length.toLocaleString("tr-TR")} hücre ${label}`);
+    setNote(tx("{0} hücre {1}", e.length.toLocaleString(LOCALE), label));
   };
 
   const clearCells = (s: Range) => {
@@ -297,7 +298,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
       }
     }
     const n = write(cells);
-    setNote(`${n.toLocaleString("tr-TR")} hücre yapıştırıldı`);
+    setNote(tx("{0} hücre yapıştırıldı", n.toLocaleString(LOCALE)));
     pick({ r0: sel.r0, c0: sel.c0, r1: Math.min(lastR, sel.r0 + (tile ? H : h) - 1), c1: Math.min(lastC, sel.c0 + (tile ? W : w) - 1) });
   };
 
@@ -374,13 +375,13 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     (exact ? to : t.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), mcase ? "gu" : "giu"), () => to));
   const onFind = (q: string, exact: boolean, mcase: boolean, back: boolean) => {
     const m = matches(q, exact, mcase);
-    if (!m.length) return "Bulunamadı";
+    if (!m.length) return tx("Bulunamadı");
     const cur = act ?? { r: -1, c: -1 };
     const after = (x: Pos) => x.r > cur.r || (x.r === cur.r && x.c > cur.c);
     const before = (x: Pos) => x.r < cur.r || (x.r === cur.r && x.c < cur.c);
     const i = back ? m.reduce((b, x, k) => (before(x) ? k : b), m.length - 1) : Math.max(0, m.findIndex(after));
     go(m[i]);
-    return `${(i + 1).toLocaleString("tr-TR")} / ${m.length.toLocaleString("tr-TR")}`;
+    return `${(i + 1).toLocaleString(LOCALE)} / ${m.length.toLocaleString(LOCALE)}`;
   };
   const onReplace = (q: string, to: string, exact: boolean, mcase: boolean) => {
     if (act && matcher(q, exact, mcase)(text(act))) write([{ ...act, text: swap(text(act), q, to, exact, mcase) }]);
@@ -388,7 +389,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
   };
   const onReplaceAll = (q: string, to: string, exact: boolean, mcase: boolean) => {
     const n = write(matches(q, exact, mcase).map((x) => ({ ...x, text: swap(text(x), q, to, exact, mcase) })));
-    return `${n.toLocaleString("tr-TR")} hücre değişti`;
+    return tx("{0} hücre değişti", n.toLocaleString(LOCALE));
   };
   const openFind = (mode: "find" | "replace") => {
     findScope.current = multi ? sel : null;
@@ -444,7 +445,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
         case "h": if (p.onEdit) { done(); openFind("replace"); } return;
         case "d": if (p.onEdit) { done(); fillDown(); } return;
         case "r": if (p.onEdit) { done(); fillRight(); } return;
-        case "z": done(); if (e.shiftKey) history(redo, undo, "yinelendi"); else history(undo, redo, "geri alındı"); return;
+        case "z": done(); if (e.shiftKey) history(redo, undo, "yinelendi"); else history(undo, redo, tx("geri alındı")); return;
         case "y": done(); history(redo, undo, "yinelendi"); return;
         case " ": done(); if (sel) pick({ ...sel, r0: 0, r1: lastR }); return;
       }
@@ -484,7 +485,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     e.clipboardData.setData("text/plain", toTsv(block(sel)));
     e.preventDefault();
     const n = (sel.r1 - sel.r0 + 1) * (sel.c1 - sel.c0 + 1);
-    setNote(`${n.toLocaleString("tr-TR")} hücre ${cut ? "kesildi" : "kopyalandı"}`);
+    setNote(tx("{0} hücre {1}", n.toLocaleString(LOCALE), cut ? "kesildi" : tx("kopyalandı")));
     if (cut) clearCells(sel);
   };
   const onPaste = (e: React.ClipboardEvent) => {
@@ -498,7 +499,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     try {
       paste(await navigator.clipboard.readText());
     } catch {
-      toast("Yapıştırmak için Ctrl+V kullanın");
+      toast(tx("Yapıştırmak için Ctrl+V kullanın"));
     }
   };
 
@@ -583,14 +584,14 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
     return { count, nums, sum, min, max };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel?.r0, sel?.r1, sel?.c0, sel?.c1, rows, cols.length]);
-  const num = (n: number) => qty(n).toLocaleString("tr-TR");
+  const num = (n: number) => qty(n).toLocaleString(LOCALE);
   const filterTo = (f: ColFilter) => { if (act) cols[act.c].setFilterValue(f); };
   const actCol = act ? (cols[act.c].columnDef as GridColumn<T>) : null;
 
   return (
     <>
       {find && <FindBar replace={find === "replace" && !!p.onEdit} onFind={onFind} onReplace={onReplace} onReplaceAll={onReplaceAll} onClose={() => { setFind(null); focusGrid(); }} />}
-      <div className="dg" ref={scrollRef} tabIndex={0} aria-label="Tablo" onClick={() => setOpenFilter(null)} onKeyDown={onKey} onCopy={onCopy} onCut={(e) => onCopy(e, !!p.onEdit)} onPaste={onPaste}
+      <div className="dg" ref={scrollRef} tabIndex={0} aria-label={tx("Tablo")} onClick={() => setOpenFilter(null)} onKeyDown={onKey} onCopy={onCopy} onCut={(e) => onCopy(e, !!p.onEdit)} onPaste={onPaste}
         onMouseDown={onMouseDown} onMouseOver={onMouseOver} onMouseMove={onMouseMove} onDoubleClick={onDoubleClick} onContextMenu={onContextMenu}>
         <table style={{ width: totalWidth }}>
           <thead>
@@ -607,19 +608,19 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
                       style={{ width: h.getSize(), position: "sticky", ...(pinned ? { left: h.column.getStart("left") } : {}) }}>
                       <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
                         <span style={{ cursor: h.column.getCanSort() ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
-                          title={h.column.getCanSort() ? "Sırala. Shift ile birden çok sütuna göre sıralar." : undefined}
+                          title={h.column.getCanSort() ? tx("Sırala. Shift ile birden çok sütuna göre sıralar.") : undefined}
                           onClick={h.column.getToggleSortingHandler()}>
                           {flexRender(h.column.columnDef.header, h.getContext())}
                           {sorted === "asc" ? " ▲" : sorted === "desc" ? " ▼" : ""}{sorted && many ? h.column.getSortIndex() + 1 : ""}
                         </span>
                         {!col.noFilter && h.column.id !== "_sel" && (
                           <button className={"btn small" + (f ? " primary" : "")} style={{ padding: "0 5px", marginLeft: "auto" }}
-                            title="Sırala, filtrele, sütun seçenekleri" onClick={(e) => { e.stopPropagation(); setOpenFilter(openFilter === h.id ? null : h.id); }}>▾</button>
+                            title={tx("Sırala, filtrele, sütun seçenekleri")} onClick={(e) => { e.stopPropagation(); setOpenFilter(openFilter === h.id ? null : h.id); }}>▾</button>
                         )}
                       </div>
                       {openFilter === h.id && <FilterPopup table={table} colId={h.column.id} onClose={() => setOpenFilter(null)} />}
                       {h.column.getCanResize() && (
-                        <div className="resizer" title="Sürükleyin; çift tıklayınca sığdırır" onMouseDown={h.getResizeHandler()} onTouchStart={h.getResizeHandler()}
+                        <div className="resizer" title={tx("Sürükleyin; çift tıklayınca sığdırır")} onMouseDown={h.getResizeHandler()} onTouchStart={h.getResizeHandler()}
                           onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => { e.stopPropagation(); autofit(table, h.column.id); }} />
                       )}
                     </th>
@@ -655,7 +656,7 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
                         ) : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())
                         )}
-                        {corner && <span className="dg-fill" title="Sürükleyerek doldurun; çift tıklayınca aşağı doldurur" />}
+                        {corner && <span className="dg-fill" title={tx("Sürükleyerek doldurun; çift tıklayınca aşağı doldurur")} />}
                       </td>
                     );
                   })}
@@ -665,26 +666,26 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
             {padBottom > 0 && <tr style={{ height: padBottom }}><td colSpan={drawn.length} style={{ border: 0, padding: 0 }} /></tr>}
           </tbody>
         </table>
-        {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>{p.emptyText ?? "Kayıt yok."}</div>}
+        {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>{p.emptyText ?? tx("Kayıt yok.")}</div>}
       </div>
       <div className="dg-status" aria-live="polite">
         {act && actCol ? (
           <>
-            <span className="dg-addr"><b>{headerText(actCol) || cols[act.c].id}</b> · {(act.r + 1).toLocaleString("tr-TR")}. satır</span>
+            <span className="dg-addr"><b>{headerText(actCol) || cols[act.c].id}</b>{" "}{tx("· {0}. satır", (act.r + 1).toLocaleString(LOCALE))}</span>
             <span className="dg-val" title={text(act)}>{text(act)}</span>
           </>
-        ) : <span className="muted">Hücreye tıklayın. Ok tuşları, Ctrl+C / Ctrl+V, Ctrl+F ve sağ tık menüsü çalışır.</span>}
+        ) : <span className="muted">{tx("Hücreye tıklayın. Ok tuşları, Ctrl+C / Ctrl+V, Ctrl+F ve sağ tık menüsü çalışır.")}</span>}
         {note && <span className="muted">{note}</span>}
         <span className="dg-spacer" />
         {multi && stats && (
           <>
-            <span>Sayı: <b>{stats.count.toLocaleString("tr-TR")}</b></span>
+            <span>{tx("Sayı:")}{" "}<b>{stats.count.toLocaleString(LOCALE)}</b></span>
             {stats.nums > 0 && (
               <>
-                <span>Toplam: <b>{num(stats.sum)}</b></span>
-                <span>Ortalama: <b>{num(stats.sum / stats.nums)}</b></span>
-                <span>En küçük: <b>{num(stats.min)}</b></span>
-                <span>En büyük: <b>{num(stats.max)}</b></span>
+                <span>{tx("Toplam:")}{" "}<b>{num(stats.sum)}</b></span>
+                <span>{tx("Ortalama:")}{" "}<b>{num(stats.sum / stats.nums)}</b></span>
+                <span>{tx("En küçük:")}{" "}<b>{num(stats.min)}</b></span>
+                <span>{tx("En büyük:")}{" "}<b>{num(stats.max)}</b></span>
               </>
             )}
           </>
@@ -694,24 +695,24 @@ export function TableView<T>({ p, table, rows }: { p: GridProps<T>; table: Table
         <>
           <div className="dg-cmenu-back" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
           <div className="dg-cmenu card" role="menu" style={{ left: menu.x, top: menu.y }} onClick={() => setMenu(null)}>
-            <button role="menuitem" onClick={() => command("copy")}>Kopyala<kbd>Ctrl+C</kbd></button>
+            <button role="menuitem" onClick={() => command("copy")}>{tx("Kopyala")}<kbd>{tx("Ctrl+C")}</kbd></button>
             {p.onEdit && (
               <>
-                <button role="menuitem" onClick={() => command("cut")}>Kes<kbd>Ctrl+X</kbd></button>
-                <button role="menuitem" onClick={() => void pasteFromMenu()}>Yapıştır<kbd>Ctrl+V</kbd></button>
-                <button role="menuitem" onClick={() => clearCells(sel)}>Temizle<kbd>Delete</kbd></button>
-                <button role="menuitem" onClick={fillDown}>Aşağı doldur<kbd>Ctrl+D</kbd></button>
-                <button role="menuitem" onClick={fillRight}>Sağa doldur<kbd>Ctrl+R</kbd></button>
+                <button role="menuitem" onClick={() => command("cut")}>{tx("Kes")}<kbd>{tx("Ctrl+X")}</kbd></button>
+                <button role="menuitem" onClick={() => void pasteFromMenu()}>{tx("Yapıştır")}<kbd>{tx("Ctrl+V")}</kbd></button>
+                <button role="menuitem" onClick={() => clearCells(sel)}>{tx("Temizle")}<kbd>{tx("Delete")}</kbd></button>
+                <button role="menuitem" onClick={fillDown}>{tx("Aşağı doldur")}<kbd>{tx("Ctrl+D")}</kbd></button>
+                <button role="menuitem" onClick={fillRight}>{tx("Sağa doldur")}<kbd>{tx("Ctrl+R")}</kbd></button>
               </>
             )}
             <hr />
-            <button role="menuitem" onClick={() => filterTo({ values: [cellText(raw(act))] })}>Bu değere göre filtrele</button>
-            <button role="menuitem" onClick={() => filterTo({ conds: [isEmpty(raw(act)) ? { op: "notEmpty" } : { op: "ne", a: text(act) }] })}>Bu değeri hariç tut</button>
-            <button role="menuitem" onClick={() => openFind(p.onEdit ? "replace" : "find")}>Bul ve değiştir<kbd>Ctrl+H</kbd></button>
+            <button role="menuitem" onClick={() => filterTo({ values: [cellText(raw(act))] })}>{tx("Bu değere göre filtrele")}</button>
+            <button role="menuitem" onClick={() => filterTo({ conds: [isEmpty(raw(act)) ? { op: "notEmpty" } : { op: "ne", a: text(act) }] })}>{tx("Bu değeri hariç tut")}</button>
+            <button role="menuitem" onClick={() => openFind(p.onEdit ? "replace" : "find")}>{tx("Bul ve değiştir")}<kbd>{tx("Ctrl+H")}</kbd></button>
             {p.onRowClick && (
               <>
                 <hr />
-                <button role="menuitem" onClick={() => p.onRowClick!(rows[act.r].original)}>Ayrıntı</button>
+                <button role="menuitem" onClick={() => p.onRowClick!(rows[act.r].original)}>{tx("Ayrıntı")}</button>
               </>
             )}
           </div>

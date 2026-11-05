@@ -1,3 +1,4 @@
+import { LOCALE } from "./i18n";
 /** Small JPEG preview made in the browser before upload (the server has no image library).
  *  null when the browser cannot decode the file (HEIC on most browsers, broken files). */
 export async function makeThumb(file: Blob, max = 480): Promise<Blob | null> {
@@ -24,6 +25,6 @@ export const isImageFile = (f: File) => f.type.startsWith("image/") || /\.(jpe?g
 
 export function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 0 })} KB`;
-  return `${(n / 1024 / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;
+  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString(LOCALE, { maximumFractionDigits: 0 })} KB`;
+  return `${(n / 1024 / 1024).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} MB`;
 }

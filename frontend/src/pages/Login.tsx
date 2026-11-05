@@ -6,6 +6,8 @@ import { api } from "../api/client";
 import { mobileApp } from "../api/mobile";
 import BrandMark from "../components/BrandMark";
 import { useBrand } from "../api/system";
+import LangSelect from "../components/LangSelect";
+import { tx } from "../api/i18n";
 
 /** Login, plus "Hesap oluştur": the request waits until an admin approves it in Yönetim > Kullanıcılar. */
 export default function Login() {
@@ -38,8 +40,8 @@ export default function Login() {
     e.preventDefault();
     setErr("");
     if (mode === "signup") {
-      if (password.length < minPw) return setErr(`Şifre en az ${minPw} karakter olmalı.`);
-      if (password !== again) return setErr("Şifreler aynı değil.");
+      if (password.length < minPw) return setErr(tx("Şifre en az {0} karakter olmalı.", minPw));
+      if (password !== again) return setErr(tx("Şifreler aynı değil."));
     }
     setBusy(true);
     try {
@@ -54,7 +56,7 @@ export default function Login() {
         setInfo(r.message);
       }
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : mode === "login" ? "Giriş başarısız" : "Hesap isteği gönderilemedi");
+      setErr(ex instanceof Error ? ex.message : mode === "login" ? tx("Giriş başarısız") : tx("Hesap isteği gönderilemedi"));
     } finally {
       setBusy(false);
     }
@@ -63,45 +65,45 @@ export default function Login() {
   const signup = mode === "signup";
   return (
     <div className="login">
-      <div className="login-desk"><DesktopMenu /></div>
+      <div className="login-desk"><LangSelect /><DesktopMenu /></div>
       <form className="card" onSubmit={submit}>
         <h1 className="login-brand"><span className="brand-logo"><BrandMark size={22} logo={brand.logo} /></span>{brand.name}</h1>
-        {signup && <div className="muted">Hesabınız yönetici onayından sonra açılır.</div>}
+        {signup && <div className="muted">{tx("Hesabınız yönetici onayından sonra açılır.")}</div>}
         <label>
-          Kullanıcı adı
+          {tx("Kullanıcı adı")}
           <input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username"
             autoCapitalize="none" spellCheck={false} style={{ width: "100%" }} />
         </label>
         {signup && (
           <>
-            <label>Ad soyad<input value={fullName} maxLength={128} onChange={(e) => setFullName(e.target.value)} autoComplete="name" style={{ width: "100%" }} /></label>
-            <label>E-posta (isteğe bağlı)<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" style={{ width: "100%" }} /></label>
+            <label>{tx("Ad soyad")}<input value={fullName} maxLength={128} onChange={(e) => setFullName(e.target.value)} autoComplete="name" style={{ width: "100%" }} /></label>
+            <label>{tx("E-posta (isteğe bağlı)")}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" style={{ width: "100%" }} /></label>
           </>
         )}
         <label>
-          Şifre{signup && <span className="muted"> (en az {minPw} karakter)</span>}
+          {tx("Şifre")}{signup && <span className="muted">{" "}{tx("(en az {0} karakter)", minPw)}</span>}
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             autoComplete={signup ? "new-password" : "current-password"} style={{ width: "100%" }} />
         </label>
         {signup && (
-          <label>Şifre (tekrar)<input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" style={{ width: "100%" }} /></label>
+          <label>{tx("Şifre (tekrar)")}<input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" style={{ width: "100%" }} /></label>
         )}
         {info && <div className="ok-box">{info}</div>}
         {err && <div className="error">{err}</div>}
         <button className="btn primary" disabled={busy || !username.trim() || !password}>
-          {signup ? (busy ? "Gönderiliyor…" : "Hesap isteği gönder") : busy ? "Giriş yapılıyor…" : "Giriş yap"}
+          {signup ? (busy ? tx("Gönderiliyor…") : tx("Hesap isteği gönder")) : busy ? tx("Giriş yapılıyor…") : tx("Giriş yap")}
         </button>
         {signupOn && (
           <button type="button" className="btn" onClick={() => switchTo(signup ? "login" : "signup")}>
-            {signup ? "Hesabım var, giriş yap" : "Hesap oluştur"}
+            {signup ? tx("Hesabım var, giriş yap") : tx("Hesap oluştur")}
           </button>
         )}
         {mobileApp() && (
           <button type="button" className="btn" onClick={() => mobileApp()?.changeServer()}>
-            Sunucuyu değiştir ({location.host})
+            {tx("Sunucuyu değiştir ({0})", location.host)}
           </button>
         )}
-        <div className="muted small-note">Sunucu: {location.host}</div>
+        <div className="muted small-note">{tx("Sunucu: {0}", location.host)}</div>
       </form>
     </div>
   );

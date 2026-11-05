@@ -26,6 +26,7 @@ from ..models import (Employee, FastenerSetting, Invoice, Project, PurchaseOrder
 from . import audit, fx, system
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import apply_changes, tracking_of
+from app.core.i18n import tx
 
 EPS = 1e-9
 
@@ -86,21 +87,21 @@ def move(db: Session, user: User | None, item: StockItem, kind: str, qty: float,
          ref: str = "", note: str = "", unit_cost: float | None = None) -> StockMove:
     """Book a stock move. qty is positive; OUT_KINDS subtract, count sets the counted quantity."""
     if kind not in MOVE_KINDS:
-        raise HTTPException(400, f"Geçersiz hareket türü: {kind}")
+        raise HTTPException(400, tx("Geçersiz hareket türü: {0}", kind))
     # Take the row lock before reading the balance, so parallel moves queue up instead of losing each other
     db.flush()
     db.execute(update(StockItem).where(StockItem.id == item.id).values(qty=StockItem.qty))
     db.refresh(item)
     if kind == "count":
         if qty < 0:
-            raise HTTPException(400, "Sayım miktarı negatif olamaz")
+            raise HTTPException(400, tx("Sayım miktarı negatif olamaz"))
         delta = qty - item.qty
     else:
         if qty <= 0:
-            raise HTTPException(400, "Miktar sıfırdan büyük olmalı")
+            raise HTTPException(400, tx("Miktar sıfırdan büyük olmalı"))
         delta = -qty if kind in OUT_KINDS else qty
     if item.qty + delta < -EPS:
-        raise HTTPException(400, f"{item.code}: stokta yeterli miktar yok (stok {num.text(item.qty)}, istenen {num.text(qty)})")
+        raise HTTPException(400, tx("{0}: stokta yeterli miktar yok (stok {1}, istenen {2})", item.code, num.text(item.qty), num.text(qty)))
     if delta > 0 and unit_cost is not None:
         have = max(item.qty, 0.0)
         old_cost = item.unit_cost if item.unit_cost is not None else unit_cost
@@ -226,7 +227,7 @@ def project_held(db: Session, project_id: int, item_id: int) -> float:
 def issue_from_stock(db: Session, user: User, project: Project, code: str, qty: float, note: str = "") -> StockMove:
     item = db.scalar(select(StockItem).where(StockItem.code == code))
     if item is None:
-        raise HTTPException(404, f"{code}: stok kartı yok")
+        raise HTTPException(404, tx("{0}: stok kartı yok", code))
     m = move(db, user, item, "issue", qty, project_id=project.id, ref=STOCK_REF, note=note)
     if item.kind == "part":
         t = _tracking(db, project.id, code)
@@ -273,9 +274,9 @@ def set_lines(po: PurchaseOrder, lines: list[dict[str, Any]]) -> None:
     po.lines.clear()
     for i, l in enumerate(lines, 1):
         if _num(l["qty"]) <= 0:
-            raise HTTPException(400, f"Satır {i}: miktar sıfırdan büyük olmalı")
+            raise HTTPException(400, tx("Satır {0}: miktar sıfırdan büyük olmalı", i))
         if not (l.get("code") or "").strip() and not (l.get("description") or "").strip():
-            raise HTTPException(400, f"Satır {i}: kod veya açıklama gerekli")
+            raise HTTPException(400, tx("Satır {0}: kod veya açıklama gerekli", i))
         po.lines.append(PurchaseOrderLine(seq=i, code=(l.get("code") or "").strip(), kind=l.get("kind") or "part",
                                           description=(l.get("description") or "").strip(),
                                           unit=l.get("unit") or "Adet", qty=_num(float(l["qty"])), received_qty=0.0,
@@ -291,24 +292,23 @@ def fill_po_rate(db: Session, po: PurchaseOrder) -> float | None:
 
 def set_po_status(db: Session, user: User, po: PurchaseOrder, status: str) -> None:
     if status not in ("draft", "sent", "cancelled"):
-        raise HTTPException(400, "Durum taslak, gönderildi veya iptal olabilir; teslimat mal kabul ile işlenir")
+        raise HTTPException(400, tx("Durum taslak, gönderildi veya iptal olabilir; teslimat mal kabul ile işlenir"))
     lock_order(db, po)
     received = any(l.received_qty > EPS for l in po.lines)
     if po.status == status:
         return
     if po.status in ("received", "closed", "cancelled"):
-        raise HTTPException(400, f"{PO_STATUS[po.status]} durumundaki sipariş değiştirilemez")
+        raise HTTPException(400, tx("{0} durumundaki sipariş değiştirilemez", PO_STATUS[po.status]))
     if status == "cancelled" and received:
-        raise HTTPException(400, "Mal kabulü yapılmış sipariş iptal edilemez. Kalanı bırakmak için siparişi eksik "
-                                 "kapatın, malı geri vermek için mal kabulü geri alın.")
+        raise HTTPException(400, tx("Mal kabulü yapılmış sipariş iptal edilemez. Kalanı bırakmak için siparişi eksik kapatın, malı geri vermek için mal kabulü geri alın."))
     if status == "draft" and received:
-        raise HTTPException(400, "Mal kabulü yapılmış sipariş taslağa döndürülemez")
+        raise HTTPException(400, tx("Mal kabulü yapılmış sipariş taslağa döndürülemez"))
     if status == "draft" and db.scalar(select(Invoice.id).where(Invoice.purchase_order_id == po.id,
                                                                 Invoice.status != "cancelled").limit(1)):
-        raise HTTPException(400, "Faturası girilmiş sipariş taslağa döndürülemez")
+        raise HTTPException(400, tx("Faturası girilmiş sipariş taslağa döndürülemez"))
     if status == "sent":
         if not po.lines:
-            raise HTTPException(400, "Satırı olmayan sipariş gönderilemez")
+            raise HTTPException(400, tx("Satırı olmayan sipariş gönderilemez"))
         if po.order_date is None:
             po.order_date = date.today()
         fill_po_rate(db, po)
@@ -326,8 +326,7 @@ def _base_cost(db: Session, po: PurchaseOrder, line: PurchaseOrderLine) -> float
         return None
     rate = fill_po_rate(db, po)
     if rate is None:
-        raise HTTPException(400, f"{po.no}: {po.currency} kuru bilinmiyor, stok maliyeti hesaplanamaz. Siparişe kur "
-                                 "yazın veya Fatura ve ödeme > Kurlar ekranından kur girin.")
+        raise HTTPException(400, tx("{0}: {1} kuru bilinmiyor, stok maliyeti hesaplanamaz. Siparişe kur yazın veya Fatura ve ödeme > Kurlar ekranından kur girin.", po.no, po.currency))
     return round(line.unit_price * rate, 6)
 
 
@@ -346,12 +345,12 @@ def receive(db: Session, user: User, po: PurchaseOrder, items: list[tuple[Purcha
     rate is typed on the receipt screen for a foreign currency order that has none."""
     lock_order(db, po)
     if po.status not in ("sent", "partial"):
-        raise HTTPException(400, "Mal kabul yalnızca gönderilmiş siparişte yapılır")
+        raise HTTPException(400, tx("Mal kabul yalnızca gönderilmiş siparişte yapılır"))
     if rate is not None and rate != po.rate:
         if fx.norm(po.currency) == fx.base_currency(db):
-            raise HTTPException(400, f"{po.currency} ana para birimi, kur girilmez")
+            raise HTTPException(400, tx("{0} ana para birimi, kur girilmez", po.currency))
         if any(l.received_qty > EPS for l in po.lines):
-            raise HTTPException(400, "Mal kabulü yapılmış siparişin kuru değiştirilemez")
+            raise HTTPException(400, tx("Mal kabulü yapılmış siparişin kuru değiştirilemez"))
         audit.record(db, user, "purchase_order", po.no, "rate", po.rate, rate, po.project_id)
         po.rate = rate
     over = 1 + system.system(db)["commerce"]["over_receipt_pct"] / 100
@@ -361,8 +360,7 @@ def receive(db: Session, user: User, po: PurchaseOrder, items: list[tuple[Purcha
             continue
         room = _num(line.qty * over - line.received_qty)
         if qty > room + EPS:
-            raise HTTPException(400, f"{line.code or line.description}: en fazla {num.text(max(room, 0.0))} {line.unit} daha "
-                                     f"teslim alınabilir (sipariş {num.text(line.qty)}, teslim alınan {num.text(line.received_qty)})")
+            raise HTTPException(400, tx("{0}: en fazla {1} {2} daha teslim alınabilir (sipariş {3}, teslim alınan {4})", line.code or line.description, num.text(max(room, 0.0)), line.unit, num.text(line.qty), num.text(line.received_qty)))
         line.received_qty = _num(line.received_qty + qty)
         db.add(PurchaseReceipt(po_id=po.id, line_id=line.id, qty=qty, username=user.username if user else "",
                                note=note[:300]))
@@ -398,14 +396,14 @@ def reverse_receipt(db: Session, user: User, po: PurchaseOrder, items: list[tupl
     A project order first takes them back from the project, so stock and the project both net to zero."""
     lock_order(db, po)
     if po.status not in ("partial", "received", "closed"):
-        raise HTTPException(400, "Bu siparişte geri alınacak mal kabulü yok")
+        raise HTTPException(400, tx("Bu siparişte geri alınacak mal kabulü yok"))
     codes: set[str] = set()
     for line, qty in items:
         if qty <= 0:
             continue
         label = line.code or line.description
         if qty > line.received_qty + EPS:
-            raise HTTPException(400, f"{label}: teslim alınan {num.text(line.received_qty)}, en fazla bu kadar geri alınabilir")
+            raise HTTPException(400, tx("{0}: teslim alınan {1}, en fazla bu kadar geri alınabilir", label, num.text(line.received_qty)))
         line.received_qty = _num(line.received_qty - qty)
         db.add(PurchaseReceipt(po_id=po.id, line_id=line.id, qty=-qty, username=user.username if user else "",
                                note=note[:300]))
@@ -414,12 +412,12 @@ def reverse_receipt(db: Session, user: User, po: PurchaseOrder, items: list[tupl
             continue
         item = db.scalar(select(StockItem).where(StockItem.code == line.code))
         if item is None:
-            raise HTTPException(400, f"{label}: stok kartı yok, mal stokta değil")
+            raise HTTPException(400, tx("{0}: stok kartı yok, mal stokta değil", label))
         cost = _receipt_cost(db, po, line, item)
         if po.project_id:
             held = project_held(db, po.project_id, item.id)
             if held + EPS < qty:
-                raise HTTPException(400, f"{label}: projede yeterli miktar yok (projede {num.text(held)}, istenen {num.text(qty)})")
+                raise HTTPException(400, tx("{0}: projede yeterli miktar yok (projede {1}, istenen {2})", label, num.text(held), num.text(qty)))
             move(db, user, item, "issue_return", qty, project_id=po.project_id, ref=po.no, note=note, unit_cost=cost)
             codes.add(line.code)
         move(db, user, item, "supplier_return", qty, project_id=po.project_id, ref=po.no, note=note, unit_cost=cost)
@@ -434,7 +432,7 @@ def close_po(db: Session, user: User, po: PurchaseOrder, note: str = "") -> None
     """Siparişi eksik kapat: what was received stays, the rest is no longer on order."""
     lock_order(db, po)
     if po.status != "partial":
-        raise HTTPException(400, "Yalnızca kısmi teslim alınmış sipariş eksik kapatılır; hiç teslim alınmadıysa iptal edin")
+        raise HTTPException(400, tx("Yalnızca kısmi teslim alınmış sipariş eksik kapatılır; hiç teslim alınmadıysa iptal edin"))
     audit.record(db, user, "purchase_order", po.no, "status", po.status, "closed", po.project_id)
     po.status = "closed"
     if note.strip():
@@ -466,21 +464,20 @@ def lock_wo(db: Session, w: WorkOrder) -> None:
 
 def set_wo_status(db: Session, user: User, w: WorkOrder, status: str) -> None:
     if status not in ("planned", "in_progress", "cancelled", "closed"):
-        raise HTTPException(400, "Durum planlandı, üretimde, iptal veya kısa kapatıldı olabilir; "
-                                 "tamamlama üretim girişi ile yapılır")
+        raise HTTPException(400, tx("Durum planlandı, üretimde, iptal veya kısa kapatıldı olabilir; tamamlama üretim girişi ile yapılır"))
     lock_wo(db, w)
     if w.status == status:
         return
     if w.status in WO_FINAL:
-        raise HTTPException(400, f"{WO_STATUS[w.status]} durumundaki iş emri değiştirilemez")
+        raise HTTPException(400, tx("{0} durumundaki iş emri değiştirilemez", WO_STATUS[w.status]))
     if status == "planned" and w.done_qty > EPS:
-        raise HTTPException(400, "Üretim girişi yapılmış iş emri planlandıya döndürülemez")
+        raise HTTPException(400, tx("Üretim girişi yapılmış iş emri planlandıya döndürülemez"))
     if status == "cancelled":
         if w.done_qty > EPS:
-            raise HTTPException(400, "Üretim girişi yapılmış iş emri iptal edilemez; kısa kapatın")
+            raise HTTPException(400, tx("Üretim girişi yapılmış iş emri iptal edilemez; kısa kapatın"))
         if db.scalar(select(WorkOrderMaterial.id).where(WorkOrderMaterial.wo_id == w.id,
                                                         WorkOrderMaterial.issued_qty > EPS).limit(1)):
-            raise HTTPException(400, "Malzeme çıkılmış iş emri iptal edilemez; malzemeyi iade edin veya kısa kapatın")
+            raise HTTPException(400, tx("Malzeme çıkılmış iş emri iptal edilemez; malzemeyi iade edin veya kısa kapatın"))
     if status == "in_progress":
         if w.start_date is None:
             w.start_date = date.today()
@@ -497,9 +494,9 @@ def complete_work(db: Session, user: User, w: WorkOrder, qty: float, note: str =
 
     lock_wo(db, w)
     if w.status not in WO_OPEN:
-        raise HTTPException(400, "Yalnızca açık iş emrine üretim girişi yapılır")
+        raise HTTPException(400, tx("Yalnızca açık iş emrine üretim girişi yapılır"))
     if qty <= 0:
-        raise HTTPException(400, "Miktar sıfırdan büyük olmalı")
+        raise HTTPException(400, tx("Miktar sıfırdan büyük olmalı"))
     if w.status == "planned":
         set_wo_status(db, user, w, "in_progress")
     w.done_qty = _num(w.done_qty + qty)
@@ -608,7 +605,7 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
     """Committed (ordered/planned) vs actual (received/produced/issued) cost, by source, firm and main group, all in
     the base currency. Orders whose rate is unknown stay out of the totals and are listed under `unconverted`."""
     pv = ProjectView.load(db, project)
-    groups = {code: it["main_group"] or "(Kök)" for code, it in _bom_items(pv).items()}
+    groups = {code: it["main_group"] or tx("(Kök)") for code, it in _bom_items(pv).items()}
     rows: list[dict[str, Any]] = []      # {source, firm, group, committed, actual}
     missing_price = 0
     book = fx.Book(db)
@@ -633,14 +630,14 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
                     u["documents"].append(po.no)
                 continue
             rows.append({"source": "Satın alma", "firm": po.firm_name or "(Firma yok)",
-                         "group": groups.get(l.code, "(BOM dışı)"), "committed": committed * rate,
+                         "group": groups.get(l.code, tx("(BOM dışı)")), "committed": committed * rate,
                          "actual": actual * rate})
     for w in db.scalars(select(WorkOrder).where(WorkOrder.project_id == project.id, WorkOrder.status != "cancelled")):
         if w.unit_cost is None:
             missing_price += 1
             continue
         rows.append({"source": "Fason iş emri" if w.firm_name else "İç üretim", "firm": w.firm_name or "(İç üretim)",
-                     "group": groups.get(w.part_no, "(BOM dışı)"),
+                     "group": groups.get(w.part_no, tx("(BOM dışı)")),
                      "committed": (w.done_qty if w.status == "closed" else w.qty) * w.unit_cost,
                      "actual": min(w.done_qty, w.qty) * w.unit_cost})
     for m, code in db.execute(select(StockMove, StockItem.code).join(StockItem)
@@ -651,7 +648,7 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
             missing_price += 1
             continue
         v = -m.qty * m.unit_cost
-        rows.append({"source": "Stoktan", "firm": "(Stok)", "group": groups.get(code, "(BOM dışı)"),
+        rows.append({"source": "Stoktan", "firm": tx("(Stok)"), "group": groups.get(code, tx("(BOM dışı)")),
                      "committed": v, "actual": v})
     wo_parts = dict(db.execute(select(WorkOrder.id, WorkOrder.part_no)
                                .where(WorkOrder.project_id == project.id)).all())
@@ -663,7 +660,7 @@ def project_costs(db: Session, project: Project, show_people: bool = True) -> di
         v = t.hours * t.hourly_cost
         # Without hr rights labour is one anonymous line, so a person's wage cannot be worked out
         rows.append({"source": "İşçilik", "firm": emp if show_people else "İşçilik",
-                     "group": groups.get(wo_parts.get(t.work_order_id or 0, ""), "(Genel işçilik)"),
+                     "group": groups.get(wo_parts.get(t.work_order_id or 0, ""), tx("(Genel işçilik)")),
                      "committed": v, "actual": v})
 
     def roll(key: str) -> list[dict[str, Any]]:

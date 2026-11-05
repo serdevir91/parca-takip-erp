@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from . import secretbox, system
 from .settings import get_setting, set_setting
+from app.core.i18n import tx
 
 log = logging.getLogger("erp.mail")
 
@@ -84,11 +85,11 @@ def save(db: Session, body: dict[str, Any]) -> SmtpConfig:
     if body.get("clear_password"):
         c.password = ""
     if c.security not in SECURITY:
-        raise ValueError("Güvenlik türü starttls, ssl veya none olmalı")
+        raise ValueError(tx("Güvenlik türü starttls, ssl veya none olmalı"))
     if not 1 <= c.port <= 65535:
-        raise ValueError("Port 1-65535 arasında olmalı")
+        raise ValueError(tx("Port 1-65535 arasında olmalı"))
     if c.from_addr and not valid_email(c.from_addr):
-        raise ValueError("Gönderen adresi geçerli bir e-posta olmalı")
+        raise ValueError(tx("Gönderen adresi geçerli bir e-posta olmalı"))
     set_setting(db, "smtp", {**c.__dict__, "password": secretbox.seal(c.password)})
     return c
 
@@ -104,7 +105,7 @@ def send(c: SmtpConfig, to: list[str], subject: str, body: str, attachments: lis
          reply_to: str = "", cc: list[str] = ()) -> None:
     """Send one message. Raises RuntimeError with a Turkish message the UI can show."""
     if not c.ready:
-        raise RuntimeError("E-posta sunucusu ayarlanmamış (Yönetim > E-posta)")
+        raise RuntimeError(tx("E-posta sunucusu ayarlanmamış (Yönetim > E-posta)"))
     msg = EmailMessage()
     msg["From"] = formataddr((c.from_name, c.from_addr))
     msg["To"] = ", ".join(to)
@@ -132,10 +133,9 @@ def send(c: SmtpConfig, to: list[str], subject: str, body: str, attachments: lis
                 server.login(c.username, c.password)
             server.send_message(msg, to_addrs=[*to, *cc])
     except smtplib.SMTPAuthenticationError as e:
-        raise RuntimeError("E-posta sunucusu kullanıcı adı/şifreyi kabul etmedi. Gmail için "
-                           "uygulama şifresi kullanın.") from e
+        raise RuntimeError(tx("E-posta sunucusu kullanıcı adı/şifreyi kabul etmedi. Gmail için uygulama şifresi kullanın.")) from e
     except smtplib.SMTPRecipientsRefused as e:
-        raise RuntimeError(f"Alıcı reddedildi: {', '.join(e.recipients)}") from e
+        raise RuntimeError(tx("Alıcı reddedildi: {0}", ', '.join(e.recipients))) from e
     except (OSError, smtplib.SMTPException) as e:
         log.warning("mail send failed: %s", e)
-        raise RuntimeError(f"E-posta gönderilemedi: {e}") from e
+        raise RuntimeError(tx("E-posta gönderilemedi: {0}", e)) from e

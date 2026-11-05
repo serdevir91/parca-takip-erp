@@ -9,6 +9,7 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../api/auth";
 import { PageHeader, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
+import { LOCALE, tx } from "../api/i18n";
 
 type Item = {
   part_no: string; name?: string; assembly: boolean; qty: number; material: string; weight: number | null; rev: string;
@@ -19,7 +20,7 @@ type Draft = { tree: Item; rev: number; by: string; at: string };
 type Version = { id: number; seq: number; filename: string; status: string };
 type Flat = { node: TreeNode; depth: number; level: string; total: number };
 
-const STATUS: Record<string, string> = { approved: "Onaylı", pending: "Bekliyor", rejected: "Reddedildi", undone: "Geri alındı" };
+const STATUS: Record<string, string> = { approved: tx("Onaylı"), pending: tx("Bekliyor"), rejected: tx("Reddedildi"), undone: tx("Geri alındı") };
 const HISTORY = 50;
 
 let lastKey = 0;
@@ -269,7 +270,7 @@ export default function BomTree() {
       const { qty, children, key } = at.node;
       Object.assign(at.node, item, { qty, key, children: kids.length ? kids.map(withKeys) : children });
     });
-    if (kids.length) toast(`${item.part_no} alt kalemleriyle eklendi`);
+    if (kids.length) toast(tx("{0} alt kalemleriyle eklendi", item.part_no));
   };
 
   // ---------- start and send ----------
@@ -324,7 +325,7 @@ export default function BomTree() {
     while (saving.current) await new Promise((r) => setTimeout(r, 50));
     try {
       await api.post(`/projects/${pid}/bom/tree/submit`, { tree: root, note });
-      toast("Sürüm oluşturuldu. Karşılaştırıp onaylayın.");
+      toast(tx("Sürüm oluşturuldu. Karşılaştırıp onaylayın."));
       navigate(`/p/${pid}/bom`);
     } catch (e) {
       setErrors(errText(e).split("\n"));
@@ -344,8 +345,8 @@ export default function BomTree() {
   });
 
   const header = (
-    <PageHeader icon={Network} title="Ürün ağacı"
-      sub="Ürünün hangi montaj ve parçalardan, kaçar adet oluştuğunu elle kurun. Gönderdiğiniz ağaç BOM sürümü olur." />
+    <PageHeader icon={Network} title={tx("Ürün ağacı")}
+      sub={tx("Ürünün hangi montaj ve parçalardan, kaçar adet oluştuğunu elle kurun. Gönderdiğiniz ağaç BOM sürümü olur.")} />
   );
 
   if (!root) {
@@ -353,32 +354,32 @@ export default function BomTree() {
       <div className="page">
         {header}
         <div className="card tree-start">
-          <h3>Nasıl oluşturulur?</h3>
+          <h3>{tx("Nasıl oluşturulur?")}</h3>
           <ol>
-            <li>En üste bitmiş ürünü yazın.</li>
-            <li>Altına doğrudan monte edilen alt montajları ve parçaları ekleyin.</li>
-            <li>Her satıra bir üst montajdaki adedini yazın. Toplam adet kendiliğinden hesaplanır.</li>
-            <li>Satırın imalat mı hazır alım mı olduğunu seçin.</li>
-            <li>Ağacı sürüm olarak gönderin, BOM sürümlerinden karşılaştırıp onaylayın.</li>
+            <li>{tx("En üste bitmiş ürünü yazın.")}</li>
+            <li>{tx("Altına doğrudan monte edilen alt montajları ve parçaları ekleyin.")}</li>
+            <li>{tx("Her satıra bir üst montajdaki adedini yazın. Toplam adet kendiliğinden hesaplanır.")}</li>
+            <li>{tx("Satırın imalat mı hazır alım mı olduğunu seçin.")}</li>
+            <li>{tx("Ağacı sürüm olarak gönderin, BOM sürümlerinden karşılaştırıp onaylayın.")}</li>
           </ol>
           {canEdit ? (
             <div className="row" style={{ alignItems: "center" }}>
-              <button className="btn primary" disabled={!draftQ.data} onClick={startEmpty}><Plus size={16} /> Boş ağaçla başla</button>
+              <button className="btn primary" disabled={!draftQ.data} onClick={startEmpty}><Plus size={16} />{" "}{tx("Boş ağaçla başla")}</button>
               {versions.length > 0 && (
-                <select aria-label="Başlangıç sürümü" value="" onChange={(e) => void startFrom(e.target.value)}>
-                  <option value="">Bir BOM sürümünden başla…</option>
+                <select aria-label={tx("Başlangıç sürümü")} value="" onChange={(e) => void startFrom(e.target.value)}>
+                  <option value="">{tx("Bir BOM sürümünden başla…")}</option>
                   {versions.map((v) => <option key={v.id} value={v.id}>#{v.seq} {v.filename} ({STATUS[v.status] ?? v.status})</option>)}
                 </select>
               )}
             </div>
-          ) : <div className="muted">Bu projede ürün ağacı taslağı yok.</div>}
+          ) : <div className="muted">{tx("Bu projede ürün ağacı taslağı yok.")}</div>}
         </div>
       </div>
     );
   }
 
-  const saveText = saveError ? `Kaydedilemedi: ${saveError}` : dirty ? "Kaydediliyor…"
-    : savedAt ? `Taslak kaydedildi ${new Date(savedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : "";
+  const saveText = saveError ? tx("Kaydedilemedi: {0}", saveError) : dirty ? tx("Kaydediliyor…")
+    : savedAt ? tx("Taslak kaydedildi {0}", new Date(savedAt).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" })) : "";
   const buying = node?.assembly && node.procurement === "Hazır Alım";
 
   return (
@@ -387,30 +388,30 @@ export default function BomTree() {
       {conflict && (
         <div className="card tree-alert">
           <span>{conflict}</span>
-          <button className="btn small" onClick={() => void reloadDraft()}>Son taslağı yükle</button>
-          <button className="btn small" onClick={() => void flush(true)}>Benimkini kaydet</button>
+          <button className="btn small" onClick={() => void reloadDraft()}>{tx("Son taslağı yükle")}</button>
+          <button className="btn small" onClick={() => void flush(true)}>{tx("Benimkini kaydet")}</button>
         </div>
       )}
       <div className="toolbar tree-bar">
         {canEdit && (
           <>
-            <button className="btn small" disabled={!past.length} onClick={undo}><Undo2 size={14} /> Geri al</button>
+            <button className="btn small" disabled={!past.length} onClick={undo}><Undo2 size={14} />{" "}{tx("Geri al")}</button>
             {askDelete ? (
               <>
-                <button className="btn small danger" onClick={() => void discard()}>Taslak silinsin</button>
-                <button className="btn small" onClick={() => setAskDelete(false)}>Vazgeç</button>
+                <button className="btn small danger" onClick={() => void discard()}>{tx("Taslak silinsin")}</button>
+                <button className="btn small" onClick={() => setAskDelete(false)}>{tx("Vazgeç")}</button>
               </>
-            ) : <button className="btn small" onClick={() => setAskDelete(true)}>Taslağı sil</button>}
+            ) : <button className="btn small" onClick={() => setAskDelete(true)}>{tx("Taslağı sil")}</button>}
           </>
         )}
-        <span className="muted">{total?.rows.toLocaleString("tr-TR")} satır · {total?.unique.toLocaleString("tr-TR")} farklı kalem</span>
+        <span className="muted">{tx("{0} satır · {1} farklı kalem", total?.rows.toLocaleString(LOCALE), total?.unique.toLocaleString(LOCALE))}</span>
         <span className={saveError ? "error" : "muted"}>{saveText}</span>
         <span style={{ flex: 1 }} />
         {canEdit && (
           <>
-            <input placeholder="Sürüm notu (isteğe bağlı)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input placeholder={tx("Sürüm notu (isteğe bağlı)")} value={note} onChange={(e) => setNote(e.target.value)} />
             <button className="btn primary" disabled={sending} onClick={() => void send()}>
-              {sending ? "Gönderiliyor…" : "Sürüm olarak gönder"}
+              {sending ? tx("Gönderiliyor…") : tx("Sürüm olarak gönder")}
             </button>
           </>
         )}
@@ -421,22 +422,22 @@ export default function BomTree() {
         </div>
       )}
       <div className="tree-layout">
-        <div className="card tree-list" role="tree" aria-label="Ürün ağacı">
+        <div className="card tree-list" role="tree" aria-label={tx("Ürün ağacı")}>
           {rows.map(({ node: n, depth, level, total: sum }) => (
             <div key={n.key} role="treeitem" aria-selected={n.key === sel} aria-level={depth + 1}
               className={`tree-row${n.key === sel ? " on" : ""}`} style={{ paddingLeft: 6 + depth * 18 }}
               onClick={() => setSel(n.key)}>
               {n.children.length > 0 ? (
-                <button className="tree-fold" aria-label={collapsed.has(n.key) ? "Aç" : "Kapat"}
+                <button className="tree-fold" aria-label={collapsed.has(n.key) ? tx("Aç") : tx("Kapat")}
                   onClick={(e) => { e.stopPropagation(); toggle(n.key); }}>
                   {collapsed.has(n.key) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                 </button>
               ) : <span className="tree-fold" />}
               {n.assembly ? <Boxes size={15} className="tree-asm" /> : <Box size={15} className="muted" />}
               <span className="muted tree-lvl">{level}</span>
-              <span className={`tree-no${n.part_no ? "" : " error"}`}>{n.part_no || "Numara yok"}</span>
+              <span className={`tree-no${n.part_no ? "" : " error"}`}>{n.part_no || tx("Numara yok")}</span>
               {n.name && <span className="muted">{n.name}</span>}
-              {depth > 0 && <span className="muted tree-qty">{n.qty} adet{sum !== n.qty ? ` · toplam ${sum.toLocaleString("tr-TR")}` : ""}</span>}
+              {depth > 0 && <span className="muted tree-qty">{tx("{0} adet", n.qty)}{sum !== n.qty ? tx(" · toplam {0}", sum.toLocaleString(LOCALE)) : ""}</span>}
             </div>
           ))}
         </div>
@@ -444,17 +445,17 @@ export default function BomTree() {
           <fieldset className="card tree-form" disabled={!canEdit}>
             {canEdit && (
               <div className="tree-actions">
-                <button className="btn small primary" onClick={() => add(false)}><Plus size={14} /> Parça</button>
-                <button className="btn small primary" onClick={() => add(true)}><Plus size={14} /> Alt montaj</button>
-                <button className="btn small" title="Yukarı taşı" aria-label="Yukarı taşı" disabled={index < 1} onClick={() => move(-1)}><ArrowUp size={14} /></button>
-                <button className="btn small" title="Aşağı taşı" aria-label="Aşağı taşı" disabled={!parent || index >= parent.children.length - 1} onClick={() => move(1)}><ArrowDown size={14} /></button>
-                <button className="btn small" title="Üstteki montajın altına al" aria-label="Üstteki montajın altına al" disabled={!before?.assembly} onClick={indent}><IndentIncrease size={14} /></button>
-                <button className="btn small" title="Bir seviye yukarı çıkar" aria-label="Bir seviye yukarı çıkar" disabled={!parent || parent === root} onClick={outdent}><IndentDecrease size={14} /></button>
-                <button className="btn small" title="Kopyala" aria-label="Kopyala" disabled={!parent} onClick={copy}><Copy size={14} /></button>
-                <button className="btn small" title="Sil" aria-label="Sil" disabled={!parent} onClick={remove}><Trash2 size={14} /></button>
+                <button className="btn small primary" onClick={() => add(false)}><Plus size={14} />{" "}{tx("Parça")}</button>
+                <button className="btn small primary" onClick={() => add(true)}><Plus size={14} />{" "}{tx("Alt montaj")}</button>
+                <button className="btn small" title={tx("Yukarı taşı")} aria-label={tx("Yukarı taşı")} disabled={index < 1} onClick={() => move(-1)}><ArrowUp size={14} /></button>
+                <button className="btn small" title={tx("Aşağı taşı")} aria-label={tx("Aşağı taşı")} disabled={!parent || index >= parent.children.length - 1} onClick={() => move(1)}><ArrowDown size={14} /></button>
+                <button className="btn small" title={tx("Üstteki montajın altına al")} aria-label={tx("Üstteki montajın altına al")} disabled={!before?.assembly} onClick={indent}><IndentIncrease size={14} /></button>
+                <button className="btn small" title={tx("Bir seviye yukarı çıkar")} aria-label={tx("Bir seviye yukarı çıkar")} disabled={!parent || parent === root} onClick={outdent}><IndentDecrease size={14} /></button>
+                <button className="btn small" title={tx("Kopyala")} aria-label={tx("Kopyala")} disabled={!parent} onClick={copy}><Copy size={14} /></button>
+                <button className="btn small" title={tx("Sil")} aria-label={tx("Sil")} disabled={!parent} onClick={remove}><Trash2 size={14} /></button>
               </div>
             )}
-            <label className="tree-pick">Parça numarası
+            <label className="tree-pick">{tx("Parça numarası")}
               <input ref={partInput} value={node.part_no} maxLength={200} autoComplete="off"
                 onChange={(e) => { setFocused(true); set("part_no", e.target.value); }}
                 onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
@@ -471,47 +472,47 @@ export default function BomTree() {
                 </div>
               )}
             </label>
-            <label>Parça adı
+            <label>{tx("Parça adı")}
               <input value={node.name ?? ""} maxLength={300} onChange={(e) => set("name", e.target.value)} />
             </label>
             <div className="adm-two">
-              <label>Tür
+              <label>{tx("Tür")}
                 <select value={node.assembly ? "a" : "p"} disabled={!parent || node.children.length > 0}
                   onChange={(e) => set("assembly", e.target.value === "a")}>
-                  <option value="p">Parça</option>
-                  <option value="a">Montaj</option>
+                  <option value="p">{tx("Parça")}</option>
+                  <option value="a">{tx("Montaj")}</option>
                 </select>
               </label>
-              <label>Adet (üst montajda)
+              <label>{tx("Adet (üst montajda)")}
                 <input type="number" min={1} max={1000000} step={1} value={parent ? node.qty : 1} disabled={!parent}
                   onChange={(e) => set("qty", Math.max(0, Math.min(1000000, Math.trunc(Number(e.target.value)) || 0)))} />
               </label>
             </div>
             <div className="adm-two">
-              <label>Temin şekli
+              <label>{tx("Temin şekli")}
                 <select value={node.procurement} onChange={(e) => set("procurement", e.target.value)}>
-                  <option value="">Seçilmedi</option>
-                  {temin.map((t) => <option key={t}>{t}</option>)}
+                  <option value="">{tx("Seçilmedi")}</option>
+                  {temin.map((t) => <option key={t}>{tx(t)}</option>)}
                 </select>
               </label>
-              <label>Revizyon
+              <label>{tx("Revizyon")}
                 <input value={node.rev} maxLength={32} onChange={(e) => set("rev", e.target.value)} />
               </label>
             </div>
             <div className="adm-two">
-              <label>Malzeme
+              <label>{tx("Malzeme")}
                 <input value={node.material} maxLength={200} onChange={(e) => set("material", e.target.value)} />
               </label>
-              <label>Ağırlık (g)
+              <label>{tx("Ağırlık (g)")}
                 <input type="number" min={0} step="any" value={node.weight ?? ""}
                   onChange={(e) => set("weight", e.target.value === "" ? null : Math.max(0, Number(e.target.value)))} />
               </label>
             </div>
-            <label>Kaplama
+            <label>{tx("Kaplama")}
               <input value={node.coating} maxLength={200} onChange={(e) => set("coating", e.target.value)} />
             </label>
-            {buying && <div className="muted">Hazır alım montajı tek kalem sayılır. İçindeki satırlar ayrıca takip edilmez.</div>}
-            <div className="muted">Enter yeni satır açar. Daha önce kullanılan numarayı seçince bilgileri, montajsa alt kalemleri gelir. "DIN 912 M10 x 60" gibi adlar bağlantı elemanı olarak tanınır.</div>
+            {buying && <div className="muted">{tx("Hazır alım montajı tek kalem sayılır. İçindeki satırlar ayrıca takip edilmez.")}</div>}
+            <div className="muted">{tx("Enter yeni satır açar. Daha önce kullanılan numarayı seçince bilgileri, montajsa alt kalemleri gelir. \"DIN 912 M10 x 60\" gibi adlar bağlantı elemanı olarak tanınır.")}</div>
           </fieldset>
         )}
       </div>

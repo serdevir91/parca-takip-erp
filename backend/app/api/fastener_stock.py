@@ -16,6 +16,7 @@ from ..models import Project, PurchaseOrder, PurchaseOrderLine, StockItem, User
 from ..permissions import require
 from ..services import audit, erp
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 stock_view, stock_edit = require("stock", "view"), require("stock", "edit")
 
@@ -109,7 +110,7 @@ class MoveIn(BaseModel):
 def _card(db: Session, key: str, unit: str | None) -> StockItem:
     item = db.scalar(select(StockItem).where(StockItem.code == key))
     if item is not None and item.kind != "fastener":
-        raise HTTPException(409, f"{key}: bu kod başka türde bir stok kartında kullanılıyor")
+        raise HTTPException(409, tx("{0}: bu kod başka türde bir stok kartında kullanılıyor", key))
     return item or erp.stock_item(db, key, _description(*_parts(key, "")), "fastener", unit or "")
 
 
@@ -123,10 +124,10 @@ def save_card(body: CardIn, me: User = Depends(stock_edit), db: Session = Depend
     key = (body.key or "").strip()
     if not key:
         if not body.type.strip() or not body.size.strip():
-            raise HTTPException(400, "Tip ve ölçü gerekli")
+            raise HTTPException(400, tx("Tip ve ölçü gerekli"))
         key = _key(body.type, body.std, body.size)
         if db.scalar(select(StockItem).where(StockItem.code == key)) is not None:
-            raise HTTPException(409, "Bu bağlantı elemanı zaten listede")
+            raise HTTPException(409, tx("Bu bağlantı elemanı zaten listede"))
     item = _card(db, key, body.unit)
     for field in ("unit", "min_qty", "location"):
         value = getattr(body, field)
@@ -140,13 +141,13 @@ def save_card(body: CardIn, me: User = Depends(stock_edit), db: Session = Depend
 @router.post("/move")
 def quick_move(body: MoveIn, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.kind not in MOVES:
-        raise HTTPException(400, "Geçersiz hareket")
+        raise HTTPException(400, tx("Geçersiz hareket"))
     if body.kind != "count" and body.qty <= 0:
-        raise HTTPException(400, "Miktar girin")
+        raise HTTPException(400, tx("Miktar girin"))
     item = _card(db, body.key.strip(), body.unit)
     if body.kind == "issue":
         if body.project_id is None:
-            raise HTTPException(400, "Projeye çıkış için proje seçin")
+            raise HTTPException(400, tx("Projeye çıkış için proje seçin"))
         erp.issue_from_stock(db, me, project_or_404(db, body.project_id), item.code, body.qty, body.note)
     else:
         erp.move(db, me, item, body.kind, body.qty, note=body.note)

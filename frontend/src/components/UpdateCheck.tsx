@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api/client";
+import { tx } from "../api/i18n";
 
 type Info = { current: string; server?: string; feed?: { version: string; notes?: string; url?: string } };
 type State = { info: Info; checking: boolean; available: boolean; check: (manual?: boolean) => Promise<void>; message: string };
@@ -37,9 +38,9 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
       }
       setInfo(next);
       const newer = cmpVersion(next.server ?? "0", next.current) > 0 || (next.feed && cmpVersion(next.feed.version, next.server ?? next.current) > 0);
-      setMessage(newer ? "" : manual ? `Güncel sürümü kullanıyorsunuz (${next.server ?? next.current}).` : "");
+      setMessage(newer ? "" : manual ? tx("Güncel sürümü kullanıyorsunuz ({0}).", next.server ?? next.current) : "");
     } catch (e) {
-      if (manual) setMessage(`Güncelleme denetlenemedi: ${e instanceof Error ? e.message : e}`);
+      if (manual) setMessage(tx("Güncelleme denetlenemedi: {0}", e instanceof Error ? e.message : e));
     } finally {
       setChecking(false);
     }
@@ -98,7 +99,7 @@ export function UpdateBanner() {
       <div className="row">
         {serverNewer ? (
           <>
-            <span>Sunucuda yeni sürüm var: <b>{info.server}</b> (açık olan: {info.current}).</span>
+            <span>{tx("Sunucuda yeni sürüm var:")}{" "}<b>{info.server}</b>{" "}{tx("(açık olan: {0}).", info.current)}</span>
             <button
               className="btn primary small"
               onClick={() => {
@@ -106,17 +107,17 @@ export function UpdateBanner() {
                 location.reload();
               }}
             >
-              Yenile
+              {tx("Yenile")}
             </button>
           </>
         ) : (
           <>
-            <span>Yeni sürüm yayımlandı: <b>{info.feed!.version}</b>. {info.feed!.notes}</span>
-            {info.feed!.url && <a className="btn small" href={info.feed!.url} target="_blank" rel="noreferrer">İndir</a>}
-            <span className="muted">Kurulum için README &gt; Güncelleme adımlarını izleyin.</span>
+            <span>{tx("Yeni sürüm yayımlandı:")}{" "}<b>{info.feed!.version}</b>. {info.feed!.notes}</span>
+            {info.feed!.url && <a className="btn small" href={info.feed!.url} target="_blank" rel="noreferrer">{tx("İndir")}</a>}
+            <span className="muted">{tx("Kurulum için README > Güncelleme adımlarını izleyin.")}</span>
           </>
         )}
-        <button className="btn small" style={{ marginLeft: "auto" }} onClick={close} aria-label="Kapat" title="Kapat">
+        <button className="btn small" style={{ marginLeft: "auto" }} onClick={close} aria-label={tx("Kapat")} title={tx("Kapat")}>
           ✕
         </button>
       </div>

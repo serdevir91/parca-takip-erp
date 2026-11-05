@@ -4,7 +4,7 @@ import {
   type SortingState, type Table, type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, download } from "../api/client";
 import { mobileApp } from "../api/mobile";
 import { savePref } from "../api/prefs";
@@ -14,6 +14,7 @@ import { colId, drawnColumns, freezeTo, headerText, isEmpty, type GridColumn, ty
 import MailDialog, { shareFiles, type MailFile } from "./MailDialog";
 import { useAuth } from "../api/auth";
 import { errText, useToast } from "./Toast";
+import { LOCALE, tx } from "../api/i18n";
 
 export { cellText, Icon, multiFilter, type ColFilter };
 export type { CellChange, GridColumn } from "./dgTypes";
@@ -87,12 +88,21 @@ function saveJson(key: string | null, v: unknown): void {
   try { localStorage.setItem(key, JSON.stringify(v)); savePref(key); } catch { /* storage unavailable */ }
 }
 
+/** These columns hold fixed values stored in Turkish. Anything else is user data and is shown as it is. */
+const VALUE_COLUMNS = new Set(["status", "progress", "main_group", "material_status", "kind", "unit", "type", "row_type", "procurement", "procurement_csv", "method", "desc", "fastener_desc"]);
+const VALUE_CELL = {
+  cell: (c: { column: { id: string }; getValue: () => unknown }) => {
+    const v = c.getValue();
+    return typeof v === "string" && VALUE_COLUMNS.has(c.column.id) ? tx(v) : (v as ReactNode);
+  },
+};
+
 /** Show, hide and reorder columns. Dragging works with a mouse, the arrows work on a phone. */
 function ColumnsPanel<T>({ table, onReset, onClose }: { table: Table<T>; onReset: () => void; onClose: () => void }) {
   const all = table.getAllLeafColumns().filter((c) => c.id !== "_sel" && c.id !== ADV);
   const [dragged, setDragged] = useState<string | null>(null);
   const frozen = table.getState().columnPinning.left ?? [];
-  const label = (id: string) => headerText(table.getColumn(id)!.columnDef as GridColumn<T>) || "İşlemler";
+  const label = (id: string) => headerText(table.getColumn(id)!.columnDef as GridColumn<T>) || tx("İşlemler");
   const move = (id: string, to: number) => {
     const ids = all.map((c) => c.id);
     ids.splice(ids.indexOf(id), 1);
@@ -102,13 +112,13 @@ function ColumnsPanel<T>({ table, onReset, onClose }: { table: Table<T>; onReset
   return (
     <>
       <div className="fs-backdrop" onClick={onClose} />
-      <div className="fs cols card" role="dialog" aria-label="Sütunlar">
+      <div className="fs cols card" role="dialog" aria-label={tx("Sütunlar")}>
         <div className="fs-head">
-          <b>Sütunlar</b>
+          <b>{tx("Sütunlar")}</b>
           <span className="dg-spacer" />
-          <button className="dg-link" onClick={() => table.toggleAllColumnsVisible(true)}>Tümünü göster</button>
-          <button className="dg-link" onClick={onReset}>Varsayılana dön</button>
-          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
+          <button className="dg-link" onClick={() => table.toggleAllColumnsVisible(true)}>{tx("Tümünü göster")}</button>
+          <button className="dg-link" onClick={onReset}>{tx("Varsayılana dön")}</button>
+          <button className="fs-close" onClick={onClose} aria-label={tx("Kapat")}><Icon name="x" /></button>
         </div>
         <div className="cols-list">
           {all.map((c, i) => (
@@ -117,11 +127,11 @@ function ColumnsPanel<T>({ table, onReset, onClose }: { table: Table<T>; onReset
               onDragOver={(e) => { e.preventDefault(); if (dragged && dragged !== c.id) move(dragged, i); }}>
               <span className="cols-grip" aria-hidden="true">⠿</span>
               <label><input type="checkbox" checked={c.getIsVisible()} onChange={c.getToggleVisibilityHandler()} /> {label(c.id)}</label>
-              {frozen.includes(c.id) && <span className="badge">Sabit</span>}
+              {frozen.includes(c.id) && <span className="badge">{tx("Sabit")}</span>}
               <span className="dg-spacer" />
-              {c.getIsVisible() && <button className="dg-link" onClick={() => freezeTo(table, c.id)}>{frozen[frozen.length - 1] === c.id ? "Sabitlemeyi kaldır" : "Buraya kadar sabitle"}</button>}
-              <button className="fs-close" disabled={i === 0} onClick={() => move(c.id, i - 1)} aria-label={`${label(c.id)} yukarı`}>↑</button>
-              <button className="fs-close" disabled={i === all.length - 1} onClick={() => move(c.id, i + 1)} aria-label={`${label(c.id)} aşağı`}>↓</button>
+              {c.getIsVisible() && <button className="dg-link" onClick={() => freezeTo(table, c.id)}>{frozen[frozen.length - 1] === c.id ? tx("Sabitlemeyi kaldır") : tx("Buraya kadar sabitle")}</button>}
+              <button className="fs-close" disabled={i === 0} onClick={() => move(c.id, i - 1)} aria-label={tx("{0} yukarı", label(c.id))}>↑</button>
+              <button className="fs-close" disabled={i === all.length - 1} onClick={() => move(c.id, i + 1)} aria-label={tx("{0} aşağı", label(c.id))}>↓</button>
             </div>
           ))}
         </div>
@@ -166,19 +176,19 @@ export default function DataGrid<T>(p: GridProps<T>) {
     return [{
       id: "_sel", size: 32, enableSorting: false, noFilter: true, noExport: true, card: "hide",
       header: ({ table }) => (
-        <input type="checkbox" aria-label="Tümünü seç" checked={table.getIsAllRowsSelected()}
+        <input type="checkbox" aria-label={tx("Tümünü seç")} checked={table.getIsAllRowsSelected()}
           ref={(el) => { if (el) el.indeterminate = table.getIsSomeRowsSelected(); }}
           onChange={table.getToggleAllRowsSelectedHandler()} />
       ),
       cell: ({ row }) => (
-        <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onChange={() => {}}
+        <input type="checkbox" aria-label={tx("Seç")} checked={row.getIsSelected()} onChange={() => {}}
           onClick={(e) => { e.stopPropagation(); checkRow.current(row, e.shiftKey); }} />
       ),
     } as GridColumn<T>, ...cols];
   }, [p.columns, p.selectable]);
 
   const table = useReactTable({
-    data: p.data, columns, getRowId: p.getRowId,
+    data: p.data, columns, getRowId: p.getRowId, defaultColumn: VALUE_CELL,
     state: {
       sorting, columnFilters: filters, rowSelection: selection, globalFilter: search,
       columnVisibility: { ...layout.visibility, [ADV]: false },
@@ -259,7 +269,7 @@ export default function DataGrid<T>(p: GridProps<T>) {
     setSheet(null);
     try {
       if (mobileApp()) {
-        if (!(await shareFiles([f], f.name))) toast("Bu uygulama sürümü dosya paylaşamıyor; uygulamayı güncelleyin", true);
+        if (!(await shareFiles([f], f.name))) toast(tx("Bu uygulama sürümü dosya paylaşamıyor; uygulamayı güncelleyin"), true);
         return;
       }
       const url = URL.createObjectURL(f.blob!);
@@ -312,30 +322,30 @@ export default function DataGrid<T>(p: GridProps<T>) {
       <div className="dg-bar">
         <label className="dg-search">
           <Icon name="search" />
-          <input type="search" placeholder="Listede ara…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Listede ara" />
-          {search && <button className="dg-search-x" onClick={() => setSearch("")} aria-label="Aramayı temizle"><Icon name="x" size={14} /></button>}
+          <input type="search" placeholder={tx("Listede ara…")} value={search} onChange={(e) => setSearch(e.target.value)} aria-label={tx("Listede ara")} />
+          {search && <button className="dg-search-x" onClick={() => setSearch("")} aria-label={tx("Aramayı temizle")}><Icon name="x" size={14} /></button>}
         </label>
         <button className={`dg-tool${sheet === "filter" ? " on" : ""}${activeFilters ? " active" : ""}`} aria-expanded={sheet === "filter"}
           onClick={() => { setSheetCol(null); setSheet(sheet === "filter" ? null : "filter"); }}>
-          <Icon name="filter" /> Filtre{activeFilters > 0 && <span className="dg-count-badge">{activeFilters}</span>}
+          <Icon name="filter" />{" "}{tx("Filtre")}{activeFilters > 0 && <span className="dg-count-badge">{activeFilters}</span>}
         </button>
-        <button className={`dg-tool${advanced ? " active" : ""}`} onClick={() => setSheet("advanced")}>Gelişmiş</button>
-        <button className="dg-tool" onClick={() => setSheet("columns")}>Sütunlar</button>
+        <button className={`dg-tool${advanced ? " active" : ""}`} onClick={() => setSheet("advanced")}>{tx("Gelişmiş")}</button>
+        <button className="dg-tool" onClick={() => setSheet("columns")}>{tx("Sütunlar")}</button>
         {stateKey && (
           <div className="dg-menu-wrap">
-            <button className="dg-tool" onClick={() => setSheet(sheet === "views" ? null : "views")} aria-haspopup="menu">Görünümler ▾</button>
+            <button className="dg-tool" onClick={() => setSheet(sheet === "views" ? null : "views")} aria-haspopup="menu">{tx("Görünümler ▾")}</button>
             {sheet === "views" && (
               <div className="dg-menu card" role="menu">
                 {views.map((v) => (
                   <div key={v.name} className="dg-view-row">
                     <button className="btn small" onClick={() => openView(v)}>{v.name}</button>
-                    <button className="fs-close" aria-label={`${v.name} görünümünü sil`} onClick={() => setViews((s) => s.filter((x) => x !== v))}><Icon name="x" size={14} /></button>
+                    <button className="fs-close" aria-label={tx("{0} görünümünü sil", v.name)} onClick={() => setViews((s) => s.filter((x) => x !== v))}><Icon name="x" size={14} /></button>
                   </div>
                 ))}
-                {views.length === 0 && <span className="muted">Kayıtlı görünüm yok. Filtre, sıralama ve sütunlar birlikte kaydedilir.</span>}
+                {views.length === 0 && <span className="muted">{tx("Kayıtlı görünüm yok. Filtre, sıralama ve sütunlar birlikte kaydedilir.")}</span>}
                 <div className="dg-view-row">
-                  <input placeholder="Görünüm adı" aria-label="Görünüm adı" value={viewName} onChange={(e) => setViewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveView()} />
-                  <button className="btn small primary" disabled={!viewName.trim()} onClick={saveView}>Kaydet</button>
+                  <input placeholder={tx("Görünüm adı")} aria-label={tx("Görünüm adı")} value={viewName} onChange={(e) => setViewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveView()} />
+                  <button className="btn small primary" disabled={!viewName.trim()} onClick={saveView}>{tx("Kaydet")}</button>
                 </div>
               </div>
             )}
@@ -344,16 +354,16 @@ export default function DataGrid<T>(p: GridProps<T>) {
         {view === "cards" && sortable.length > 0 && (
           <label className={`dg-tool dg-sort${sortVal ? " active" : ""}`}>
             <Icon name="sort" />
-            <select value={sortVal} aria-label="Sırala"
+            <select value={sortVal} aria-label={tx("Sırala")}
               onChange={(e) => {
                 const [id, dir] = e.target.value.split(":");
                 setSorting(id ? [{ id, desc: dir === "desc" }] : []);
               }}>
-              <option value="">Sıralama</option>
+              <option value="">{tx("Sıralama")}</option>
               {sortable.map((c) => (
                 <Fragment key={c.id}>
-                  <option value={`${c.id}:asc`}>{headerText(c.columnDef as GridColumn<T>)} (artan)</option>
-                  <option value={`${c.id}:desc`}>{headerText(c.columnDef as GridColumn<T>)} (azalan)</option>
+                  <option value={`${c.id}:asc`}>{tx("{0} (artan)", headerText(c.columnDef as GridColumn<T>))}</option>
+                  <option value={`${c.id}:desc`}>{tx("{0} (azalan)", headerText(c.columnDef as GridColumn<T>))}</option>
                 </Fragment>
               ))}
             </select>
@@ -361,52 +371,52 @@ export default function DataGrid<T>(p: GridProps<T>) {
         )}
         {exportName && (
           <div className="dg-menu-wrap">
-            <button className="dg-tool" onClick={() => setSheet(sheet === "export" ? null : "export")} aria-haspopup="menu">Paylaş ▾</button>
+            <button className="dg-tool" onClick={() => setSheet(sheet === "export" ? null : "export")} aria-haspopup="menu">{tx("Paylaş ▾")}</button>
             {sheet === "export" && (
               <div className="dg-menu card" role="menu">
-                <button role="menuitem" className="btn small" onClick={() => void downloadXlsx()}>Excel dosyası indir (.xlsx)</button>
-                <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>CSV indir</button>
-                {canMail && <button role="menuitem" className="btn small" onClick={() => { setSheet(null); setMail(csvFile()); }}>E-posta ile gönder</button>}
+                <button role="menuitem" className="btn small" onClick={() => void downloadXlsx()}>{tx("Excel dosyası indir (.xlsx)")}</button>
+                <button role="menuitem" className="btn small" onClick={() => void downloadCsv()}>{tx("CSV indir")}</button>
+                {canMail && <button role="menuitem" className="btn small" onClick={() => { setSheet(null); setMail(csvFile()); }}>{tx("E-posta ile gönder")}</button>}
               </div>
             )}
           </div>
         )}
         <span className="dg-spacer" />
-        <span className="dg-count" title="Gösterilen / toplam kayıt">
-          <b>{rows.length.toLocaleString("tr-TR")}</b>{rows.length !== p.data.length && <> / {p.data.length.toLocaleString("tr-TR")}</>} kayıt
+        <span className="dg-count" title={tx("Gösterilen / toplam kayıt")}>
+          <b>{rows.length.toLocaleString(LOCALE)}</b>{rows.length !== p.data.length && <> / {p.data.length.toLocaleString(LOCALE)}</>}{" "}{tx("kayıt")}
         </span>
-        <div className="seg small" role="radiogroup" aria-label="Görünüm">
-          <button className={view === "cards" ? "on" : ""} onClick={() => setView("cards")} title="Kart görünümü">Liste</button>
-          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")} title="Tablo görünümü">Tablo</button>
+        <div className="seg small" role="radiogroup" aria-label={tx("Görünüm")}>
+          <button className={view === "cards" ? "on" : ""} onClick={() => setView("cards")} title={tx("Kart görünümü")}>{tx("Liste")}</button>
+          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")} title={tx("Tablo görünümü")}>{tx("Tablo")}</button>
         </div>
       </div>
       {activeFilters > 0 && (
-        <div className="dg-active" aria-label="Etkin filtreler">
+        <div className="dg-active" aria-label={tx("Etkin filtreler")}>
           {filters.map((f) => {
             const c = table.getColumn(f.id);
             if (!c) return null;
             if (f.id === ADV) {
               return (
                 <span key={f.id} className="dg-fchip">
-                  <button className="dg-fchip-main" title="Filtreyi düzenle" onClick={() => setSheet("advanced")}>
-                    <span className="dg-fchip-k">Gelişmiş filtre</span>
+                  <button className="dg-fchip-main" title={tx("Filtreyi düzenle")} onClick={() => setSheet("advanced")}>
+                    <span className="dg-fchip-k">{tx("Gelişmiş filtre")}</span>
                     <span className="dg-fchip-v">{advSummary(f.value as AdvValue)}</span>
                   </button>
-                  <button className="dg-fchip-x" aria-label="Filtreyi kaldır" onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
+                  <button className="dg-fchip-x" aria-label={tx("Filtreyi kaldır")} onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
                 </span>
               );
             }
             return (
               <span key={f.id} className="dg-fchip">
-                <button className="dg-fchip-main" title="Filtreyi düzenle" onClick={() => { setSheetCol(f.id); setSheet("filter"); }}>
+                <button className="dg-fchip-main" title={tx("Filtreyi düzenle")} onClick={() => { setSheetCol(f.id); setSheet("filter"); }}>
                   <span className="dg-fchip-k">{headerText(c.columnDef as GridColumn<T>) || f.id}</span>
                   <span className="dg-fchip-v">{filterSummary(f.value as ColFilter)}</span>
                 </button>
-                <button className="dg-fchip-x" aria-label="Filtreyi kaldır" onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
+                <button className="dg-fchip-x" aria-label={tx("Filtreyi kaldır")} onClick={() => c.setFilterValue(undefined)}><Icon name="x" size={13} /></button>
               </span>
             );
           })}
-          <button className="dg-link" onClick={() => { table.resetColumnFilters(); setSearch(""); }}>Tümünü temizle</button>
+          <button className="dg-link" onClick={() => { table.resetColumnFilters(); setSearch(""); }}>{tx("Tümünü temizle")}</button>
         </div>
       )}
       {p.selectable && rows.length > 0 && (view === "cards" || selectedCount > 0) && (
@@ -415,13 +425,13 @@ export default function DataGrid<T>(p: GridProps<T>) {
             <input type="checkbox" checked={table.getIsAllRowsSelected()}
               ref={(el) => { if (el) el.indeterminate = table.getIsSomeRowsSelected(); }}
               onChange={table.getToggleAllRowsSelectedHandler()} />
-            Tümünü seç <span className="muted">({rows.length.toLocaleString("tr-TR")})</span>
+            {tx("Tümünü seç")}{" "}<span className="muted">({rows.length.toLocaleString(LOCALE)})</span>
           </label>
           {selectedCount > 0 && (
             <>
-              <b>{selectedCount.toLocaleString("tr-TR")} seçili</b>
-              <button className="dg-link" onClick={invertSelection}>Tersine çevir</button>
-              <button className="dg-link" onClick={() => table.setRowSelection({})}>Seçimi temizle</button>
+              <b>{tx("{0} seçili", selectedCount.toLocaleString(LOCALE))}</b>
+              <button className="dg-link" onClick={invertSelection}>{tx("Tersine çevir")}</button>
+              <button className="dg-link" onClick={() => table.setRowSelection({})}>{tx("Seçimi temizle")}</button>
               {p.selectionActions}
             </>
           )}
@@ -431,7 +441,7 @@ export default function DataGrid<T>(p: GridProps<T>) {
       {sheet === "advanced" && <AdvancedFilter table={table} onClose={() => setSheet(null)} />}
       {sheet === "columns" && <ColumnsPanel table={table} onReset={resetLayout} onClose={() => setSheet(null)} />}
       {view === "cards" ? <CardView p={p} table={table} rows={rows} onCheck={(r, shift) => checkRow.current(r, shift)} /> : <TableView p={p} table={table} rows={rows} />}
-      {mail && <MailDialog files={[mail]} subject={exportName ?? "Liste"} body={`${exportName} listesi ektedir (${rows.length} satır).`} onClose={() => setMail(null)} />}
+      {mail && <MailDialog files={[mail]} subject={exportName ?? tx("Liste")} body={tx("{0} listesi ektedir ({1} satır).", exportName, rows.length)} onClose={() => setMail(null)} />}
     </>
   );
 }
@@ -481,7 +491,7 @@ function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Tabl
             return (
               <span className={ed ? "dgc-val editable" : "dgc-val"} style={d.cellStyle?.(row.original)}
                 onClick={ed ? (e) => { e.stopPropagation(); p.onEditStart?.(); setEditing({ row: row.id, col: id }); } : undefined}
-                title={ed ? "Değiştirmek için dokunun" : undefined}>
+                title={ed ? tx("Değiştirmek için dokunun") : undefined}>
                 {isEmpty(cells[id].getValue()) && ed ? "—" : render(id)}
               </span>
             );
@@ -501,7 +511,7 @@ function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Tabl
               <div className="dgc-body">
                 <div className="dgc-head">
                   {p.selectable && (
-                    <input type="checkbox" aria-label="Seç" checked={row.getIsSelected()} onChange={() => {}}
+                    <input type="checkbox" aria-label={tx("Seç")} checked={row.getIsSelected()} onChange={() => {}}
                       onClick={(e) => { e.stopPropagation(); onCheck(row, e.shiftKey); }} />
                   )}
                   <div className="dgc-titles">
@@ -513,7 +523,7 @@ function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Tabl
                   )}
                   {(hiddenEdits || open) && (
                     <button className={`dgc-more${open ? " on" : ""}`} aria-expanded={open}
-                      title={open ? "Boş alanları gizle" : "Boş alanları da göster ve düzenle"}
+                      title={open ? tx("Boş alanları gizle") : tx("Boş alanları da göster ve düzenle")}
                       onClick={(e) => { e.stopPropagation(); toggleExpand(row.id); }}>✎</button>
                   )}
                 </div>
@@ -535,7 +545,7 @@ function CardView<T>({ p, table, rows, onCheck }: { p: GridProps<T>; table: Tabl
           );
         })}
       </div>
-      {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>{p.emptyText ?? "Kayıt yok."}</div>}
+      {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>{p.emptyText ?? tx("Kayıt yok.")}</div>}
     </div>
   );
 }

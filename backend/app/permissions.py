@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 
 from .config import get_settings
 from .models import ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER, ROLE_VIEWER, User
+from app.core.i18n import tx
 
 NONE, VIEW, EDIT = "none", "view", "edit"
 LEVELS = (NONE, VIEW, EDIT)
@@ -84,7 +85,7 @@ def require(module: str, level: str = VIEW):
 
     def dep(user: User = Depends(current_user)) -> User:
         if not can(user, module, level):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Bu işlem için yetkiniz yok")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, tx("Bu işlem için yetkiniz yok"))
         return user
 
     dep.__name__ = f"require_{module}_{level}"

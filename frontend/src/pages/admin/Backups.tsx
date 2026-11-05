@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, download, upload } from "../../api/client";
 import { errText, useToast } from "../../components/Toast";
 import { Loading, Modal, fmtBytes, fmtDate, fmtNum } from "./shared";
+import { tx } from "../../api/i18n";
 
 type Backup = { name: string; size: number; created_at: string };
 type BackupStatus = {
@@ -26,7 +27,7 @@ export default function BackupsTab() {
   });
   const now = useMutation({
     mutationFn: () => api.post<Backup>("/admin/backups"),
-    onSuccess: (b) => toast(`Yedek alındı: ${b.name} (${fmtBytes(b.size)})`),
+    onSuccess: (b) => toast(tx("Yedek alındı: {0} ({1})", b.name, fmtBytes(b.size))),
     onError: (e) => toast(errText(e), true),
     onSettled: () => void qc.invalidateQueries({ queryKey: QK }),
   });
@@ -34,7 +35,7 @@ export default function BackupsTab() {
     mutationFn: (name: string) =>
       api.post<{ ok: boolean; safety_backup: string | null }>(`/admin/backups/${encodeURIComponent(name)}/restore`, { confirm: name }),
     onSuccess: (r) => {
-      toast(`Yedek geri yüklendi. Önceki durum: ${r.safety_backup ?? "—"}`);
+      toast(tx("Yedek geri yüklendi. Önceki durum: {0}", r.safety_backup ?? "—"));
       // Everything on screen belongs to the data that was just replaced.
       setTimeout(() => window.location.reload(), 1500);
     },
@@ -49,7 +50,7 @@ export default function BackupsTab() {
     setPct(0);
     try {
       const b = await upload<Backup>("/admin/backups/upload", form, setPct);
-      toast(`Yedek yüklendi: ${b.name}`);
+      toast(tx("Yedek yüklendi: {0}", b.name));
     } catch (e) {
       toast(errText(e), true);
     } finally {
@@ -75,28 +76,28 @@ export default function BackupsTab() {
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
         <button className="btn primary" disabled={running} onClick={() => now.mutate()}>
-          {running ? "Yedek alınıyor…" : "Şimdi yedekle"}
+          {running ? tx("Yedek alınıyor…") : tx("Şimdi yedekle")}
         </button>
         <button className="btn" disabled={pct !== null} onClick={() => picker.current?.click()}>
-          {pct !== null ? `Yükleniyor… %${pct}` : "Yedek dosyası yükle"}
+          {pct !== null ? tx("Yükleniyor… %{0}", pct) : tx("Yedek dosyası yükle")}
         </button>
         <input ref={picker} type="file" accept=".tar" hidden onChange={(e) => e.target.files?.[0] && void send(e.target.files[0])} />
-        <button className="btn" disabled={st.isFetching} onClick={() => void st.refetch()}>Yenile</button>
+        <button className="btn" disabled={st.isFetching} onClick={() => void st.refetch()}>{tx("Yenile")}</button>
       </div>
       <Loading error={st.error} loading={st.isLoading} />
       {d && (
         <>
           <div className="adm-stats">
-            <div><span className="muted">Son yedek</span><b>{d.last ? fmtDate(d.last.created_at) : "Henüz yok"}</b></div>
-            <div><span className="muted">Yedek sayısı</span><b>{fmtNum(d.count)}</b></div>
-            <div><span className="muted">Toplam boyut</span><b>{fmtBytes(d.total_size)}</b></div>
-            <div><span className="muted">Boş disk alanı</span><b>{d.free_bytes != null ? fmtBytes(d.free_bytes) : "—"}</b></div>
-            <div><span className="muted">Saklama süresi</span><b>{fmtNum(d.keep_days)} gün</b></div>
+            <div><span className="muted">{tx("Son yedek")}</span><b>{d.last ? fmtDate(d.last.created_at) : tx("Henüz yok")}</b></div>
+            <div><span className="muted">{tx("Yedek sayısı")}</span><b>{fmtNum(d.count)}</b></div>
+            <div><span className="muted">{tx("Toplam boyut")}</span><b>{fmtBytes(d.total_size)}</b></div>
+            <div><span className="muted">{tx("Boş disk alanı")}</span><b>{d.free_bytes != null ? fmtBytes(d.free_bytes) : "—"}</b></div>
+            <div><span className="muted">{tx("Saklama süresi")}</span><b>{tx("{0} gün", fmtNum(d.keep_days))}</b></div>
           </div>
-          <p className="muted">Yedek klasörü: <code>{d.backup_dir}</code></p>
+          <p className="muted">{tx("Yedek klasörü:")}{" "}<code>{d.backup_dir}</code></p>
           <div className="adm-scroll">
             <table className="simple">
-              <thead><tr><th>Dosya</th><th>Tarih</th><th style={{ textAlign: "right" }}>Boyut</th><th></th></tr></thead>
+              <thead><tr><th>{tx("Dosya")}</th><th>{tx("Tarih")}</th><th style={{ textAlign: "right" }}>{tx("Boyut")}</th><th></th></tr></thead>
               <tbody>
                 {d.items.map((b) => (
                   <tr key={b.name}>
@@ -105,37 +106,37 @@ export default function BackupsTab() {
                     <td style={{ textAlign: "right" }}>{fmtBytes(b.size)}</td>
                     <td>
                       <button className="btn small" disabled={busy === b.name} onClick={() => void get(b.name)}>
-                        {busy === b.name ? "İndiriliyor…" : "İndir"}
+                        {busy === b.name ? tx("İndiriliyor…") : tx("İndir")}
                       </button>{" "}
-                      <button className="btn small" disabled={running} onClick={() => setRestoring(b)}>Geri yükle</button>
+                      <button className="btn small" disabled={running} onClick={() => setRestoring(b)}>{tx("Geri yükle")}</button>
                     </td>
                   </tr>
                 ))}
-                {!d.items.length && <tr><td colSpan={4} className="muted">Yedek yok.</td></tr>}
+                {!d.items.length && <tr><td colSpan={4} className="muted">{tx("Yedek yok.")}</td></tr>}
               </tbody>
             </table>
           </div>
           <p className="muted" style={{ marginTop: 10 }}>
-            Her yedek veritabanını ve yüklenen dosyaları (BOM, teknik resimler) içerir. {fmtNum(d.keep_days)} günden eski yedekler otomatik silinir; en yeni yedek her zaman korunur.
+            {tx("Her yedek veritabanını ve yüklenen dosyaları (BOM, teknik resimler) içerir. {0} günden eski yedekler otomatik silinir; en yeni yedek her zaman korunur.", fmtNum(d.keep_days))}
           </p>
         </>
       )}
       {restoring && (
         <Modal
-          title="Yedek geri yüklensin mi?"
+          title={tx("Yedek geri yüklensin mi?")}
           onClose={() => !restore.isPending && setRestoring(null)}
           footer={
             <>
-              <button className="btn" disabled={restore.isPending} onClick={() => setRestoring(null)}>Vazgeç</button>
+              <button className="btn" disabled={restore.isPending} onClick={() => setRestoring(null)}>{tx("Vazgeç")}</button>
               <button className="btn danger" disabled={restore.isPending} onClick={() => restore.mutate(restoring.name)}>
-                {restore.isPending ? "Geri yükleniyor…" : "Onaylıyorum, geri yükle"}
+                {restore.isPending ? tx("Geri yükleniyor…") : tx("Onaylıyorum, geri yükle")}
               </button>
             </>
           }
         >
           <p><b>{restoring.name}</b> ({fmtDate(restoring.created_at)})</p>
-          <p>Şu anki tüm veriler bu yedekteki hâliyle değişir. Yedekten sonra girilen kayıtlar kaybolur.</p>
-          <p className="muted">İşlemden önce mevcut durumun yedeği otomatik alınır. İşlem sürerken herkes için sistem kısa süre kullanılamaz.</p>
+          <p>{tx("Şu anki tüm veriler bu yedekteki hâliyle değişir. Yedekten sonra girilen kayıtlar kaybolur.")}</p>
+          <p className="muted">{tx("İşlemden önce mevcut durumun yedeği otomatik alınır. İşlem sürerken herkes için sistem kısa süre kullanılamaz.")}</p>
         </Modal>
       )}
     </div>

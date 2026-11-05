@@ -9,6 +9,7 @@ import { Page, useProject } from "../components/Layout";
 import { errText } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
 import type { Project } from "../types";
+import { LOCALE, tx } from "../api/i18n";
 
 // ---------- API types (backend/app/services/state.py ProjectView.dashboard) ----------
 type StatusCount = { status: string; count: number; qty: number; color: string };
@@ -45,11 +46,11 @@ type Slice = { name: string; value: number; color: string; qty?: number };
 const TYPE_PALETTE = ["#5B8DEF", "#F2A541", "#4CB79A", "#C77DDB", "#E86A6A", "#8C9BAB", "#D4B83A", "#47A8C9"];
 const FALLBACK_COLOR = "#9AA3B2";
 
-const fmt = (n: number | null | undefined) => (n ?? 0).toLocaleString("tr-TR");
-const pctText = (n: number) => `%${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+const fmt = (n: number | null | undefined) => (n ?? 0).toLocaleString(LOCALE);
+const pctText = (n: number) => `%${n.toLocaleString(LOCALE, { maximumFractionDigits: 1 })}`;
 const ratio = (a: number, b: number) => (b ? Math.round((1000 * a) / b) / 10 : 0);
 const hex = (c: string | undefined) => (c ? `#${c}` : FALLBACK_COLOR);
-const dateText = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString("tr-TR") : "—");
+const dateText = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(LOCALE) : "—");
 
 export default function Dashboard() {
   const { pid } = useProject();
@@ -67,25 +68,25 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
-  if (q.isLoading) return <Page><div className="muted">Yükleniyor…</div></Page>;
-  if (q.isError) return <Page><div className="card error">Proje özeti yüklenemedi: {errText(q.error)}</div></Page>;
+  if (q.isLoading) return <Page><div className="muted">{tx("Yükleniyor…")}</div></Page>;
+  if (q.isError) return <Page><div className="card error">{tx("Proje özeti yüklenemedi: {0}", errText(q.error))}</div></Page>;
   const d = q.data;
-  if (!d) return <Page><div className="muted">Veri yok.</div></Page>;
+  if (!d) return <Page><div className="muted">{tx("Veri yok.")}</div></Page>;
 
   return (
     <Page>
       <div className="dash">
         <div className="row dash-head">
-          <h2 style={{ margin: 0 }}>{d.project.name} · Proje Özeti</h2>
+          <h2 style={{ margin: 0 }}>{tx("{0} · Proje Özeti", d.project.name)}</h2>
           <span className="spacer" style={{ flex: 1 }} />
-          {q.isFetching && <span className="muted">Güncelleniyor…</span>}
+          {q.isFetching && <span className="muted">{tx("Güncelleniyor…")}</span>}
         </div>
         <VersionInfo pid={pid} d={d} />
         {d.version ? <Body pid={pid} d={d} fast={fq.data} fastErr={fq.isError ? errText(fq.error) : null} /> : (
           <div className="card dash-empty">
-            <h3>Onaylanmış BOM sürümü yok</h3>
-            <p className="muted">Bu projede henüz onaylanmış bir BOM sürümü bulunmuyor. Özet, BOM onaylandıktan sonra canlı veriden hesaplanır.</p>
-            <Link className="btn primary" to={`/p/${pid}/bom`}>BOM Sürümleri</Link>
+            <h3>{tx("Onaylanmış BOM sürümü yok")}</h3>
+            <p className="muted">{tx("Bu projede henüz onaylanmış bir BOM sürümü bulunmuyor. Özet, BOM onaylandıktan sonra canlı veriden hesaplanır.")}</p>
+            <Link className="btn primary" to={`/p/${pid}/bom`}>{tx("BOM Sürümleri")}</Link>
           </div>
         )}
       </div>
@@ -100,20 +101,19 @@ function VersionInfo({ pid, d }: { pid: number; d: DashboardData }) {
     <>
       {d.version && (
         <div className="card row dash-version">
-          <span><b>Güncel BOM:</b> Sürüm {fmt(d.version.seq)}</span>
+          <span><b>{tx("Güncel BOM:")}</b>{" "}{tx("Sürüm {0}", fmt(d.version.seq))}</span>
           <span className="muted" title={d.version.filename}>{d.version.filename}</span>
           <span className="muted">
-            Onaylayan: {cur?.approved_by ? String(cur.approved_by) : "—"} · {dateText(d.version.approved_at ?? cur?.approved_at)}
+            {tx("Onaylayan:")}{" "}{cur?.approved_by ? String(cur.approved_by) : "—"} · {dateText(d.version.approved_at ?? cur?.approved_at)}
           </span>
           <span style={{ flex: 1 }} />
-          <Link className="btn small" to={`/p/${pid}/bom`}>BOM Sürümleri</Link>
+          <Link className="btn small" to={`/p/${pid}/bom`}>{tx("BOM Sürümleri")}</Link>
         </div>
       )}
       {pending > 0 && (
         <div className="card dash-pending">
-          <span className="badge warn">Onay bekliyor</span>{" "}
-          {fmt(pending)} BOM sürümü onay bekliyor. Onaylanana kadar özet güncel sürüme göre hesaplanır.{" "}
-          <Link to={`/p/${pid}/bom`}>BOM Sürümleri sayfasına git</Link>
+          <span className="badge warn">{tx("Onay bekliyor")}</span>{" "}{tx("{0} BOM sürümü onay bekliyor. Onaylanana kadar özet güncel sürüme göre hesaplanır.", fmt(pending))}{" "}
+          <Link to={`/p/${pid}/bom`}>{tx("BOM Sürümleri sayfasına git")}</Link>
         </div>
       )}
     </>
@@ -126,18 +126,18 @@ function Body({ pid, d, fast, fastErr }: { pid: number; d: DashboardData; fast?:
 
   const slices = useMemo(() => {
     const fromCounts = (rows: StatusCount[]): Slice[] =>
-      rows.map((r) => ({ name: r.status, value: r.count, qty: r.qty, color: hex(r.color) }));
+      rows.map((r) => ({ name: tx(r.status), value: r.count, qty: r.qty, color: hex(r.color) }));
     const types: Slice[] = d.fastener_by_type.map((t, i) => ({
-      name: t.type || "Diğer", value: t.count, qty: t.qty, color: TYPE_PALETTE[i % TYPE_PALETTE.length],
+      name: t.type ? tx(t.type) : tx("Diğer"), value: t.count, qty: t.qty, color: TYPE_PALETTE[i % TYPE_PALETTE.length],
     }));
     let order: Slice[];
     if (fast) {
-      order = fast.statuses.map((s) => ({ name: s, value: fast.totals.by_status[s] ?? 0, color: hex(fast.colors[s]) }));
+      order = fast.statuses.map((s) => ({ name: tx(s), value: fast.totals.by_status[s] ?? 0, color: hex(fast.colors[s]) }));
     } else {
       // Fallback from KPI until the fastener summary arrives: delivered vs. not delivered.
       order = [
-        { name: "Teslim Edilmedi", value: k.fastener_unique - k.fastener_delivered, color: hex("FFC7CE") },
-        { name: "Teslim Edildi", value: k.fastener_delivered, color: hex("C6EFCE") },
+        { name: tx("Teslim Edilmedi"), value: k.fastener_unique - k.fastener_delivered, color: hex("FFC7CE") },
+        { name: tx("Teslim Edildi"), value: k.fastener_delivered, color: hex("C6EFCE") },
       ];
     }
     return { imalat: fromCounts(d.imalat), hazir: fromCounts(d.hazir), montaj: fromCounts(d.montaj), types, order };
@@ -146,33 +146,33 @@ function Body({ pid, d, fast, fastErr }: { pid: number; d: DashboardData; fast?:
   return (
     <>
       <div className="grid kpis">
-        <KpiCard label="İmalat ilerlemesi" value={pctText(imalatPct)} pct={imalatPct}
-          sub={`Üretilen ${fmt(k.imalat_done)} / ${fmt(k.imalat_count)} parça · ${fmt(k.imalat_done_qty)} / ${fmt(k.imalat_qty)} adet`} />
-        <KpiCard label="Genel ilerleme" value={pctText(k.progress_pct)} pct={k.progress_pct}
-          sub="İmalat + hazır alım + montaj tamamlanan" />
-        <KpiCard label="Toplam parça" value={fmt(k.unique_parts)} sub={`${fmt(k.total_qty)} adet`} to={`/p/${pid}/parts`} />
-        <KpiCard label="Hazır alım teslim" value={`${fmt(k.hazir_delivered)} / ${fmt(k.hazir_count)}`}
+        <KpiCard label={tx("İmalat ilerlemesi")} value={pctText(imalatPct)} pct={imalatPct}
+          sub={tx("Üretilen {0} / {1} parça · {2} / {3} adet", fmt(k.imalat_done), fmt(k.imalat_count), fmt(k.imalat_done_qty), fmt(k.imalat_qty))} />
+        <KpiCard label={tx("Genel ilerleme")} value={pctText(k.progress_pct)} pct={k.progress_pct}
+          sub={tx("İmalat + hazır alım + montaj tamamlanan")} />
+        <KpiCard label={tx("Toplam parça")} value={fmt(k.unique_parts)} sub={`${fmt(k.total_qty)} adet`} to={`/p/${pid}/parts`} />
+        <KpiCard label={tx("Hazır alım teslim")} value={`${fmt(k.hazir_delivered)} / ${fmt(k.hazir_count)}`}
           pct={ratio(k.hazir_delivered, k.hazir_count)} sub={`${fmt(k.hazir_qty)} adet`} />
-        <KpiCard label="Montaj" value={`${fmt(k.montaj_done)} / ${fmt(k.montaj_count)}`}
-          pct={ratio(k.montaj_done, k.montaj_count)} sub="Montajlanan / toplam" />
-        <KpiCard label="Bağlantı elemanı" value={`${fmt(k.fastener_qty)} adet`}
+        <KpiCard label={tx("Montaj")} value={`${fmt(k.montaj_done)} / ${fmt(k.montaj_count)}`}
+          pct={ratio(k.montaj_done, k.montaj_count)} sub={tx("Montajlanan / toplam")} />
+        <KpiCard label={tx("Bağlantı elemanı")} value={`${fmt(k.fastener_qty)} adet`}
           pct={ratio(k.fastener_delivered, k.fastener_unique)}
-          sub={`${fmt(k.fastener_unique)} kalem · teslim ${fmt(k.fastener_delivered)} kalem`} to={`/p/${pid}/fasteners`} />
-        <KpiCard label="Eksik" value={`${fmt(k.missing_qty)} adet`} sub={`${fmt(k.missing_rows)} satır`}
+          sub={tx("{0} kalem · teslim {1} kalem", fmt(k.fastener_unique), fmt(k.fastener_delivered))} to={`/p/${pid}/fasteners`} />
+        <KpiCard label={tx("Eksik")} value={`${fmt(k.missing_qty)} adet`} sub={tx("{0} satır", fmt(k.missing_rows))}
           tone={k.missing_rows ? "warn" : undefined} to={`/p/${pid}/parts`} />
-        <KpiCard label="Resmi olmayan imalat parçası" value={fmt(k.imalat_no_drawing)}
+        <KpiCard label={tx("Resmi olmayan imalat parçası")} value={fmt(k.imalat_no_drawing)}
           tone={k.imalat_no_drawing ? "warn" : undefined} to={`/p/${pid}/drawings`} />
-        <KpiCard label="Temin seçilmedi" value={fmt(k.no_temin)} tone={k.no_temin ? "err" : undefined} to={`/p/${pid}/parts`} />
-        <KpiCard label="Yeni parça" value={fmt(k.new_parts)} sub="Son sürümle gelen" />
+        <KpiCard label={tx("Temin seçilmedi")} value={fmt(k.no_temin)} tone={k.no_temin ? "err" : undefined} to={`/p/${pid}/parts`} />
+        <KpiCard label={tx("Yeni parça")} value={fmt(k.new_parts)} sub={tx("Son sürümle gelen")} />
       </div>
 
       <div className="dash-pies">
-        <PieCard title="İmalat durumu" data={slices.imalat} unit="parça" />
-        <PieCard title="Hazır alım sipariş durumu" data={slices.hazir} unit="parça" />
-        <PieCard title="Montaj durumu" data={slices.montaj} unit="montaj" />
-        <PieCard title="Bağlantı elemanı türleri" data={slices.types} unit="kalem" />
-        <PieCard title="Bağlantı elemanı sipariş durumu" data={slices.order} unit="kalem"
-          note={fastErr ? `Sipariş durumları alınamadı: ${fastErr}` : !fast ? "Yükleniyor…" : undefined} />
+        <PieCard title={tx("İmalat durumu")} data={slices.imalat} unit={tx("parça")} />
+        <PieCard title={tx("Hazır alım sipariş durumu")} data={slices.hazir} unit={tx("parça")} />
+        <PieCard title={tx("Montaj durumu")} data={slices.montaj} unit="montaj" />
+        <PieCard title={tx("Bağlantı elemanı türleri")} data={slices.types} unit="kalem" />
+        <PieCard title={tx("Bağlantı elemanı sipariş durumu")} data={slices.order} unit="kalem"
+          note={fastErr ? tx("Sipariş durumları alınamadı: {0}", fastErr) : !fast ? tx("Yükleniyor…") : undefined} />
       </div>
 
       <GroupSection d={d} />
@@ -204,7 +204,7 @@ function PieCard({ title, data, unit, note }: { title: string; data: Slice[]; un
   return (
     <div className="card dash-pie">
       <div className="dash-card-title">{title}</div>
-      {total === 0 ? <div className="muted dash-pie-empty">{note ?? "Veri yok"}</div> : (
+      {total === 0 ? <div className="muted dash-pie-empty">{note ?? tx("Veri yok")}</div> : (
         <div className="dash-pie-body">
           <div className="dash-pie-chart">
             <ResponsiveContainer width="100%" height={170}>
@@ -246,7 +246,7 @@ function GroupSection({ d }: { d: DashboardData }) {
   }, [d.groups, d.status_order]);
 
   const barData = useMemo(
-    () => d.groups.map((g) => ({ group: g.group, ...Object.fromEntries(statuses.map((s) => [s, g.by_status[s] ?? 0])) })),
+    () => d.groups.map((g) => ({ group: tx(g.group), ...Object.fromEntries(statuses.map((s) => [s, g.by_status[s] ?? 0])) })),
     [d.groups, statuses],
   );
 
@@ -261,7 +261,7 @@ function GroupSection({ d }: { d: DashboardData }) {
   }, [d.groups, statuses]);
 
   if (!d.groups.length) {
-    return <div className="card"><div className="dash-card-title">Ana gruplar</div><div className="muted">Ana grup verisi yok.</div></div>;
+    return <div className="card"><div className="dash-card-title">{tx("Ana gruplar")}</div><div className="muted">{tx("Ana grup verisi yok.")}</div></div>;
   }
 
   const chartHeight = Math.max(160, d.groups.length * 30 + 60);
@@ -269,22 +269,22 @@ function GroupSection({ d }: { d: DashboardData }) {
   return (
     <>
       <div className="card dash-groups">
-        <div className="dash-card-title">Ana grup tablosu</div>
+        <div className="dash-card-title">{tx("Ana grup tablosu")}</div>
         <div className="dash-table-wrap">
           <table className="simple">
             <thead>
               <tr>
-                <th>Ana Grup</th>
-                <th className="num">Toplam</th>
-                {statuses.map((s) => <th key={s} className="num" style={statusStyle(d.status_colors[s])}>{s}</th>)}
-                <th className="num">Tamamlanan</th>
-                <th style={{ minWidth: 160 }}>İlerleme</th>
+                <th>{tx("Ana Grup")}</th>
+                <th className="num">{tx("Toplam")}</th>
+                {statuses.map((s) => <th key={s} className="num" style={statusStyle(d.status_colors[s])}>{tx(s)}</th>)}
+                <th className="num">{tx("Tamamlanan")}</th>
+                <th style={{ minWidth: 160 }}>{tx("İlerleme")}</th>
               </tr>
             </thead>
             <tbody>
               {d.groups.map((g) => (
                 <tr key={g.group}>
-                  <td>{g.group}</td>
+                  <td>{tx(g.group)}</td>
                   <td className="num">{fmt(g.total)}</td>
                   {statuses.map((s) => {
                     const n = g.by_status[s] ?? 0;
@@ -297,7 +297,7 @@ function GroupSection({ d }: { d: DashboardData }) {
             </tbody>
             <tfoot>
               <tr>
-                <th>Toplam</th>
+                <th>{tx("Toplam")}</th>
                 <th className="num">{fmt(totals.total)}</th>
                 {statuses.map((s) => <th key={s} className="num">{fmt(totals.byStatus[s])}</th>)}
                 <th className="num">{fmt(totals.done)}</th>
@@ -306,15 +306,15 @@ function GroupSection({ d }: { d: DashboardData }) {
             </tfoot>
           </table>
         </div>
-        <div className="muted dash-sub">Bir parça birden fazla ana grupta kullanılıyorsa her grupta ayrı sayılır.</div>
+        <div className="muted dash-sub">{tx("Bir parça birden fazla ana grupta kullanılıyorsa her grupta ayrı sayılır.")}</div>
       </div>
 
       <div className="card dash-bars">
-        <div className="dash-card-title">Ana grup başına durum dağılımı</div>
+        <div className="dash-card-title">{tx("Ana grup başına durum dağılımı")}</div>
         <div className="row dash-bar-legend">
           {statuses.map((s) => (
             <span key={s} className="row" style={{ gap: 4 }}>
-              <span className="dash-swatch" style={{ background: hex(d.status_colors[s]) }} />{s}
+              <span className="dash-swatch" style={{ background: hex(d.status_colors[s]) }} />{tx(s)}
             </span>
           ))}
         </div>
@@ -330,7 +330,7 @@ function GroupSection({ d }: { d: DashboardData }) {
               <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "var(--fg)" }} labelStyle={{ color: "var(--fg)", fontWeight: 600 }}
                 cursor={{ fill: "var(--surface-2)", opacity: 0.6 }} formatter={(v: number, n: string) => [fmt(v), n]} />
               {statuses.map((s) => (
-                <Bar key={s} dataKey={s} stackId="st" fill={hex(d.status_colors[s])} isAnimationActive={false} />
+                <Bar key={s} dataKey={s} name={tx(s)} stackId="st" fill={hex(d.status_colors[s])} isAnimationActive={false} />
               ))}
             </BarChart>
           </ResponsiveContainer>

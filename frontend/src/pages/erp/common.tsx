@@ -5,6 +5,7 @@ import { curSign, sys } from "../../api/system";
 import type { Project } from "../../types";
 import { Field, Modal } from "../admin/shared";
 import { money, qty } from "../../api/num";
+import { LOCALE, tx } from "../../api/i18n";
 
 // ---------- types (backend/app/services/erp.py) ----------
 export type ItemKind = "part" | "fastener" | "other";
@@ -59,9 +60,9 @@ export type StockMove = {
 export type FirmBrief = { id: number; name: string; kind: string; contact: string; phone: string; email: string; lead_days: number };
 
 export const ITEM_KINDS: { value: ItemKind; label: string }[] = [
-  { value: "part", label: "Parça" },
-  { value: "fastener", label: "Bağlantı elemanı" },
-  { value: "other", label: "Diğer" },
+  { value: "part", label: tx("Parça") },
+  { value: "fastener", label: tx("Bağlantı elemanı") },
+  { value: "other", label: tx("Diğer") },
 ];
 
 // Status colours: hex without '#', rendered through statusStyle like part statuses
@@ -74,13 +75,13 @@ export const WO_COLORS: Record<string, string> = {
 export const OP_COLORS: Record<string, string> = { pending: "E7E6E6", in_progress: "FFEB9C", done: "C6EFCE" };
 
 export const fmtQty = (n: number | null | undefined) =>
-  n == null ? "" : qty(n).toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+  n == null ? "" : qty(n).toLocaleString(LOCALE, { maximumFractionDigits: 3 });
 export const fmtMoney = (n: number | null | undefined, cur = sys.currency) =>
-  n == null ? "" : `${money(n).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curSign(cur)}`;
+  n == null ? "" : `${money(n).toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curSign(cur)}`;
 export const fmtDay = (s: string | null | undefined) => {
   if (!s) return "";
-  const d = new Date(`${s.slice(0, 10)}T00:00:00`);
-  return isNaN(d.getTime()) ? s : d.toLocaleDateString("tr-TR");
+  const d = new Date(tx("{0}T00:00:00", s.slice(0, 10)));
+  return isNaN(d.getTime()) ? s : d.toLocaleDateString(LOCALE);
 };
 /** The local calendar day; toISOString would still say yesterday until 03:00 in Türkiye. */
 export const today = () => {
@@ -89,7 +90,7 @@ export const today = () => {
 };
 export const addDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 export const trIncludes = (hay: string, needle: string) =>
-  hay.toLocaleLowerCase("tr-TR").includes(needle.trim().toLocaleLowerCase("tr-TR"));
+  hay.toLocaleLowerCase(LOCALE).includes(needle.trim().toLocaleLowerCase(LOCALE));
 /** Number input value -> number | null (empty = null). */
 export const numOrNull = (v: string): number | null => {
   const t = v.trim().replace(",", ".");
@@ -100,7 +101,7 @@ export const numOrNull = (v: string): number | null => {
 
 /** Rate typed in a form: empty means "take it from the rate table". */
 export const fmtRate = (n: number | null | undefined) =>
-  n == null ? "" : n.toLocaleString("tr-TR", { maximumFractionDigits: 6 });
+  n == null ? "" : n.toLocaleString(LOCALE, { maximumFractionDigits: 6 });
 
 export type Rate = { id: number; rate_date: string; currency: string; rate: number; source: string; source_label: string };
 export type RateList = { base: string; latest: Rate[]; rows: Rate[] };
@@ -137,15 +138,15 @@ export function CurrencyRate({ currency, setCurrency, rate, setRate, day, locked
   const foreign = currency !== base;
   return (
     <>
-      <Field label="Para birimi">
+      <Field label={tx("Para birimi")}>
         <select value={currency} disabled={locked || currencyLocked} onChange={(e) => setCurrency(e.target.value)}>
-          {options.map((c) => <option key={c} value={c}>{c}</option>)}
+          {options.map((c) => <option key={c} value={c}>{tx(c)}</option>)}
         </select>
       </Field>
       {foreign ? (
-        <Field label={`Kur (1 ${currency} = ? ${base})`}
-          hint={locked ? "Mal kabulü veya onayı olan belgenin kuru değişmez."
-            : !rate.trim() && !looking ? "Bu tarih için kur yok. Buraya yazın veya Fatura ve ödeme > Kurlar'dan ekleyin; kursuz tutar toplamlara katılmaz." : undefined}>
+        <Field label={tx("Kur (1 {0} = ? {1})", currency, base)}
+          hint={locked ? tx("Mal kabulü veya onayı olan belgenin kuru değişmez.")
+            : !rate.trim() && !looking ? tx("Bu tarih için kur yok. Buraya yazın veya Fatura ve ödeme > Kurlar'dan ekleyin; kursuz tutar toplamlara katılmaz.") : undefined}>
           <input inputMode="decimal" disabled={locked} value={rate} onChange={(e) => setRate(e.target.value)} />
         </Field>
       ) : <span />}
@@ -159,7 +160,7 @@ export type QtyRow = {
 };
 
 /** Enter a quantity per order line: receipt, reversal, delivery, return, invoice. */
-export function QtyModal({ title, intro, heads, rows, qtyLabel, submit, noteLabel = "Not", danger, busy, children, ready = true, onSubmit, onClose }: {
+export function QtyModal({ title, intro, heads, rows, qtyLabel, submit, noteLabel = tx("Not"), danger, busy, children, ready = true, onSubmit, onClose }: {
   title: string; intro?: React.ReactNode; heads: string[]; rows: QtyRow[]; qtyLabel: string; submit: string;
   noteLabel?: string | null; danger?: boolean; busy?: boolean; children?: React.ReactNode; ready?: boolean;
   onSubmit: (lines: { line_id: number; qty: number }[], note: string) => void; onClose: () => void;
@@ -172,14 +173,14 @@ export function QtyModal({ title, intro, heads, rows, qtyLabel, submit, noteLabe
   return (
     <Modal wide title={title} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
         <button className={danger ? "btn danger" : "btn primary"} disabled={busy || !ready || !lines.length || rows.some(over)}
           onClick={() => onSubmit(lines, note)}>{submit}</button>
       </>}>
       {intro && <p className="muted">{intro}</p>}
       <div className="adm-scroll">
         <table className="simple erp-table">
-          <thead><tr><th>Kalem</th>{heads.map((h) => <th key={h} className="num">{h}</th>)}<th className="erp-qty-cell">{qtyLabel}</th></tr></thead>
+          <thead><tr><th>{tx("Kalem")}</th>{heads.map((h) => <th key={h} className="num">{h}</th>)}<th className="erp-qty-cell">{qtyLabel}</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
@@ -188,7 +189,7 @@ export function QtyModal({ title, intro, heads, rows, qtyLabel, submit, noteLabe
                 <td className="erp-qty-cell">
                   <input style={{ width: 84 }} inputMode="decimal" aria-label={`${r.code || r.description} ${qtyLabel}`} aria-invalid={over(r)}
                     value={qty[r.id] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [r.id]: e.target.value }))} />
-                  {over(r) && <div className="error">En fazla {fmtQty(r.max)} {r.unit}</div>}
+                  {over(r) && <div className="error">{tx("En fazla {0} {1}", fmtQty(r.max), r.unit)}</div>}
                 </td>
               </tr>
             ))}
@@ -212,12 +213,12 @@ export function MoveHistory({ title, rows, backLabel }: {
       <h2>{title}</h2>
       <div className="adm-scroll">
         <table className="simple erp-table">
-          <thead><tr><th>Tarih</th><th>Kalem</th><th className="num">Miktar</th><th>Kullanıcı</th><th>Not</th></tr></thead>
+          <thead><tr><th>{tx("Tarih")}</th><th>{tx("Kalem")}</th><th className="num">{tx("Miktar")}</th><th>{tx("Kullanıcı")}</th><th>{tx("Not")}</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{fmtDay(r.at)}</td><td>{r.code || r.description}</td>
-                <td className="num">{r.qty < 0 ? <span className="badge warn">{backLabel} {fmtQty(-r.qty)}</span> : fmtQty(r.qty)} {r.unit}</td>
+                <td className="num">{r.qty < 0 ? <span className="badge warn">{backLabel} {fmtQty(-r.qty)}</span> : fmtQty(r.qty)} {tx(r.unit)}</td>
                 <td>{r.username}</td><td className="muted">{r.note}</td>
               </tr>
             ))}
@@ -240,27 +241,27 @@ export function useProjects() {
   return useQuery({ queryKey: ["projects", "picker"], queryFn: () => api.get<Project[]>("/projects"), staleTime: 60_000 });
 }
 
-export function FirmSelect({ value, onChange, kind, emptyLabel = "(Firma seçilmedi)" }: {
+export function FirmSelect({ value, onChange, kind, emptyLabel = tx("(Firma seçilmedi)") }: {
   value: number | null; onChange: (id: number | null) => void; kind?: "supplier" | "manufacturer" | "customer"; emptyLabel?: string;
 }) {
   const firms = useFirms(kind);
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">{emptyLabel}</option>
+      <option value="">{tx(emptyLabel)}</option>
       {(firms.data ?? []).map((f) => (
-        <option key={f.id} value={f.id}>{f.name}{f.lead_days ? ` (termin ${f.lead_days} gün)` : ""}</option>
+        <option key={f.id} value={f.id}>{f.name}{f.lead_days ? tx(" (termin {0} gün)", f.lead_days) : ""}</option>
       ))}
     </select>
   );
 }
 
-export function ProjectSelect({ value, onChange, emptyLabel = "(Proje yok)" }: {
+export function ProjectSelect({ value, onChange, emptyLabel = tx("(Proje yok)") }: {
   value: number | null; onChange: (id: number | null) => void; emptyLabel?: string;
 }) {
   const projects = useProjects();
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">{emptyLabel}</option>
+      <option value="">{tx(emptyLabel)}</option>
       {(projects.data ?? []).filter((p) => !p.archived || p.id === value).map((p) => (
         <option key={p.id} value={p.id}>{p.name}</option>
       ))}
@@ -275,12 +276,12 @@ export function MakerInput({ value, onChange }: { value: string; onChange: (v: s
   return (
     <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
       <select value={sub ? "sub" : "in"} onChange={(e) => onChange(e.target.value === "sub" ? (firms.data?.[0]?.name ?? " ") : "")}>
-        <option value="in">İç üretim</option>
-        <option value="sub">Fason</option>
+        <option value="in">{tx("İç üretim")}</option>
+        <option value="sub">{tx("Fason")}</option>
       </select>
       {sub && (
         <>
-          <input list="erp-makers" value={value.trim() ? value : ""} placeholder="Fason firma" onChange={(e) => onChange(e.target.value || " ")} />
+          <input list="erp-makers" value={value.trim() ? value : ""} placeholder={tx("Fason firma")} onChange={(e) => onChange(e.target.value || " ")} />
           <datalist id="erp-makers">{(firms.data ?? []).map((f) => <option key={f.id} value={f.name} />)}</datalist>
         </>
       )}

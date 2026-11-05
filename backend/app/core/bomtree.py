@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 from .bomparse import EXPECTED_HEADER
 from .normalize import strip_cad_ext
+from app.core.i18n import tx
 
 MAX_NODES = 20000
 MAX_DEPTH = 30
@@ -35,32 +36,32 @@ def validate(root: dict[str, Any], temin: Iterable[str]) -> list[str]:
         where = f"{level} {pno}".strip()
         children = n.get("children") or []
         if not pno:
-            errors.append(f"{level}: parça numarası boş.")
+            errors.append(tx("{0}: parça numarası boş.", level))
         elif pno in parents:
-            errors.append(f"{where}: parça kendi altına eklenemez.")
+            errors.append(tx("{0}: parça kendi altına eklenemez.", where))
             return
         elif kinds.setdefault(pno, bool(n.get("assembly"))) != bool(n.get("assembly")):
-            errors.append(f"{where}: aynı numara hem parça hem montaj olamaz.")
+            errors.append(tx("{0}: aynı numara hem parça hem montaj olamaz.", where))
         if int(n.get("qty") or 0) < 1:
-            errors.append(f"{where}: adet en az 1 olmalı.")
+            errors.append(tx("{0}: adet en az 1 olmalı.", where))
         if children and not n.get("assembly"):
-            errors.append(f"{where}: alt satırı olan kalem montaj olmalı.")
+            errors.append(tx("{0}: alt satırı olan kalem montaj olmalı.", where))
         if n.get("procurement") and n["procurement"] not in allowed:
-            errors.append(f"{where}: geçersiz temin şekli.")
+            errors.append(tx("{0}: geçersiz temin şekli.", where))
         if level.count(".") + 1 >= MAX_DEPTH and children:
-            errors.append(f"{where}: ağaç en fazla {MAX_DEPTH} seviye olabilir.")
+            errors.append(tx("{0}: ağaç en fazla {1} seviye olabilir.", where, MAX_DEPTH))
             return
         seen: set[str] = set()
         for i, c in enumerate(children, 1):
             cno = part_no_of(c)
             if cno and cno in seen:
-                errors.append(f"{level}.{i} {cno}: aynı montajda iki kez var, adedini artırın.")
+                errors.append(tx("{0}.{1} {2}: aynı montajda iki kez var, adedini artırın.", level, i, cno))
             seen.add(cno)
             walk(c, f"{level}.{i}", (*parents, pno))
 
     walk(root, "1", ())
     if count > MAX_NODES:
-        errors.insert(0, f"Ağaçta en fazla {MAX_NODES} satır olabilir.")
+        errors.insert(0, tx("Ağaçta en fazla {0} satır olabilir.", MAX_NODES))
     return errors
 
 

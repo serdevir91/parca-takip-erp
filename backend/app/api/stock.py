@@ -13,6 +13,7 @@ from ..models import Firm, Project, StockItem, StockMove, User
 from ..services import audit, conflict, erp, reorder
 from ..permissions import require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 stock_view, stock_edit = require("stock", "view"), require("stock", "edit")
 purchasing_view, purchasing_edit = require("purchasing", "view"), require("purchasing", "edit")
@@ -68,13 +69,13 @@ class MoveIn(BaseModel):
 def _item_or_404(db: Session, item_id: int) -> StockItem:
     i = db.get(StockItem, item_id)
     if i is None:
-        raise HTTPException(404, "Stok kartı bulunamadı")
+        raise HTTPException(404, tx("Stok kartı bulunamadı"))
     return i
 
 
 def _check_firm(db: Session, firm_id: int | None) -> None:
     if firm_id is not None and db.get(Firm, firm_id) is None:
-        raise HTTPException(400, "Firma bulunamadı")
+        raise HTTPException(400, tx("Firma bulunamadı"))
 
 
 @router.get("/stock")
@@ -109,9 +110,9 @@ def reorder_orders(body: ReorderIn, me: User = Depends(purchasing_edit), db: Ses
 def create_item(body: ItemIn, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     code = body.code.strip()
     if db.scalar(select(StockItem).where(StockItem.code == code)):
-        raise HTTPException(409, "Bu kodla stok kartı zaten var")
+        raise HTTPException(409, tx("Bu kodla stok kartı zaten var"))
     if body.kind not in erp.ITEM_KINDS:
-        raise HTTPException(400, "Geçersiz kalem türü")
+        raise HTTPException(400, tx("Geçersiz kalem türü"))
     _check_firm(db, body.preferred_firm_id)
     i = StockItem(code=code, name=body.name.strip(), kind=body.kind, unit=body.unit or "Adet", qty=0.0,
                   min_qty=body.min_qty, unit_cost=body.unit_cost, location=body.location, note=body.note,
@@ -132,7 +133,7 @@ def update_item(item_id: int, body: ItemUpdate, me: User = Depends(stock_edit),
     conflict.claim(db, i, body.rev, me)
     changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set and k != "rev"}
     if "kind" in changes and changes["kind"] not in erp.ITEM_KINDS:
-        raise HTTPException(400, "Geçersiz kalem türü")
+        raise HTTPException(400, tx("Geçersiz kalem türü"))
     for k in ("name", "kind", "unit", "min_qty", "location", "note", "reorder_qty"):
         if k in changes and changes[k] is None:
             del changes[k]
@@ -147,9 +148,9 @@ def update_item(item_id: int, body: ItemUpdate, me: User = Depends(stock_edit),
 def delete_item(item_id: int, me: User = Depends(stock_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     i = _item_or_404(db, item_id)
     if abs(i.qty) > erp.EPS:
-        raise HTTPException(400, "Stokta miktar olan kart silinemez; önce sayım ile sıfırlayın")
+        raise HTTPException(400, tx("Stokta miktar olan kart silinemez; önce sayım ile sıfırlayın"))
     if db.scalar(select(StockMove.id).where(StockMove.item_id == i.id, StockMove.project_id.is_not(None)).limit(1)):
-        raise HTTPException(400, "Projeye hareketi olan kart silinemez: proje maliyeti bu hareketlerden hesaplanır")
+        raise HTTPException(400, tx("Projeye hareketi olan kart silinemez: proje maliyeti bu hareketlerden hesaplanır"))
     audit.record(db, me, "stock", i.code, "code", i.code, None, action="delete")
     db.delete(i)
     db.commit()
@@ -161,10 +162,10 @@ def add_move(item_id: int, body: MoveIn, me: User = Depends(stock_edit), db: Ses
     """Manual move. receipt/production are booked by purchase orders and work orders only."""
     i = _item_or_404(db, item_id)
     if body.kind not in ("in", "out", "count", "issue"):
-        raise HTTPException(400, "Elle yalnızca giriş, çıkış, sayım veya projeye çıkış yapılır")
+        raise HTTPException(400, tx("Elle yalnızca giriş, çıkış, sayım veya projeye çıkış yapılır"))
     if body.kind == "issue":
         if body.project_id is None:
-            raise HTTPException(400, "Projeye çıkış için proje seçin")
+            raise HTTPException(400, tx("Projeye çıkış için proje seçin"))
         erp.issue_from_stock(db, me, project_or_404(db, body.project_id), i.code, body.qty, body.note)
     else:
         if body.project_id is not None:

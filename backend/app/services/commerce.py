@@ -27,6 +27,7 @@ from ..models import (Firm, Invoice, InvoiceLine, Payment, PurchaseOrder, SalesD
                       StockItem, StockMove, User)
 from . import audit, erp, fx, system, xlsafe
 from .erp import next_no
+from app.core.i18n import tx
 
 SO_STATUS = {"draft": "Taslak", "quoted": "Teklif verildi", "confirmed": "Onaylandı", "partial": "Kısmi teslim",
              "delivered": "Teslim edildi", "closed": "Eksik kapatıldı", "cancelled": "İptal", "lost": "Kaybedildi"}
@@ -73,9 +74,9 @@ def inv_totals(inv: Invoice) -> dict[str, float]:
 def _check_lines(lines: list[dict[str, Any]]) -> None:
     for i, l in enumerate(lines, 1):
         if num.qty(l["qty"]) <= 0:
-            raise HTTPException(400, f"Satır {i}: miktar sıfırdan büyük olmalı")
+            raise HTTPException(400, tx("Satır {0}: miktar sıfırdan büyük olmalı", i))
         if not (l.get("code") or "").strip() and not (l.get("description") or "").strip():
-            raise HTTPException(400, f"Satır {i}: kod veya açıklama gerekli")
+            raise HTTPException(400, tx("Satır {0}: kod veya açıklama gerekli", i))
 
 
 def _line(model: type[Any], i: int, l: dict[str, Any]) -> Any:
@@ -99,7 +100,7 @@ def firm_or_404(db: Session, firm_id: int | None) -> Firm | None:
         return None
     f = db.get(Firm, firm_id)
     if f is None:
-        raise HTTPException(404, "Firma bulunamadı")
+        raise HTTPException(404, tx("Firma bulunamadı"))
     return f
 
 
@@ -136,13 +137,13 @@ def set_so_lines(so: SalesOrder, lines: list[dict[str, Any]]) -> None:
 
 def set_so_status(db: Session, user: User, so: SalesOrder, status: str) -> None:
     if status not in SO_STATUS:
-        raise HTTPException(400, "Geçersiz durum")
+        raise HTTPException(400, tx("Geçersiz durum"))
     if status == so.status:
         return
     if status not in SO_NEXT.get(so.status, set()):
-        raise HTTPException(400, f"{SO_STATUS[so.status]} → {SO_STATUS[status]} geçişi yapılamaz")
+        raise HTTPException(400, tx("{0} → {1} geçişi yapılamaz", tx(SO_STATUS[so.status]), tx(SO_STATUS[status])))
     if status in ("quoted", "confirmed") and not so.lines:
-        raise HTTPException(400, "Satırı olmayan teklif gönderilemez")
+        raise HTTPException(400, tx("Satırı olmayan teklif gönderilemez"))
     if status == "delivered":   # "everything went out": same path as a delivery, so stock and history stay right
         deliver(db, user, so, [(l, l.qty - l.delivered_qty) for l in so.lines if l.qty - l.delivered_qty > QTY_EPS])
         return
@@ -204,15 +205,14 @@ def deliver(db: Session, user: User, so: SalesOrder, items: list[tuple[SalesOrde
     erp.lock_order(db, so)
     for line, qty in items:
         if qty > 0 and so.status not in SO_SHIPPING:
-            raise HTTPException(400, "Sevk yalnızca onaylanmış siparişte yapılır")
+            raise HTTPException(400, tx("Sevk yalnızca onaylanmış siparişte yapılır"))
         if qty < 0 and so.status not in ("partial", "delivered", "closed"):
-            raise HTTPException(400, "Bu siparişte iade alınacak teslimat yok")
+            raise HTTPException(400, tx("Bu siparişte iade alınacak teslimat yok"))
         label = line.code or line.description
         if line.delivered_qty + qty > line.qty + QTY_EPS:
-            raise HTTPException(400, f"{label}: en fazla {num.text(max(line.qty - line.delivered_qty, 0.0))} {line.unit} daha "
-                                     f"teslim edilebilir (sipariş {num.text(line.qty)}, teslim {num.text(line.delivered_qty)})")
+            raise HTTPException(400, tx("{0}: en fazla {1} {2} daha teslim edilebilir (sipariş {3}, teslim {4})", label, num.text(max(line.qty - line.delivered_qty, 0.0)), line.unit, num.text(line.qty), num.text(line.delivered_qty)))
         if line.delivered_qty + qty < -QTY_EPS:
-            raise HTTPException(400, f"{label}: teslim edilen {num.text(line.delivered_qty)}, en fazla bu kadar iade alınır")
+            raise HTTPException(400, tx("{0}: teslim edilen {1}, en fazla bu kadar iade alınır", label, num.text(line.delivered_qty)))
         item = db.scalar(select(StockItem).where(StockItem.code == line.code)) if line.code else None
         if item is not None:
             if qty > 0:
@@ -238,7 +238,7 @@ def close_so(db: Session, user: User, so: SalesOrder, note: str = "") -> None:
     """Siparişi eksik kapat: what was delivered stays, the rest will not ship."""
     erp.lock_order(db, so)
     if so.status != "partial":
-        raise HTTPException(400, "Yalnızca kısmi teslim edilmiş sipariş eksik kapatılır; hiç sevk edilmediyse iptal edin")
+        raise HTTPException(400, tx("Yalnızca kısmi teslim edilmiş sipariş eksik kapatılır; hiç sevk edilmediyse iptal edin"))
     audit.record(db, user, "sales_order", so.no, "status", so.status, "closed", so.project_id)
     so.status = "closed"
     if note.strip():
@@ -388,19 +388,18 @@ def _chosen_lines(db: Session, order: SalesOrder | PurchaseOrder,
         want: dict[int, float] = defaultdict(float)
         for line_id, qty in picks:
             if line_id not in by_id:
-                raise HTTPException(400, f"Satır bu siparişe ait değil: {line_id}")
+                raise HTTPException(400, tx("Satır bu siparişe ait değil: {0}", line_id))
             want[line_id] += qty
         for line_id, qty in want.items():
             if qty > plan[line_id]["room"] + QTY_EPS:
                 l = by_id[line_id]
-                raise HTTPException(400, f"{l.code or l.description}: en fazla {num.text(plan[line_id]['room'])} {l.unit} "
-                                         f"faturalanabilir (sipariş {num.text(l.qty)}, faturalanan {num.text(plan[line_id]['billed'])})")
+                raise HTTPException(400, tx("{0}: en fazla {1} {2} faturalanabilir (sipariş {3}, faturalanan {4})", l.code or l.description, num.text(plan[line_id]['room']), l.unit, num.text(l.qty), num.text(plan[line_id]['billed'])))
         chosen = [(by_id[i], q) for i, q in want.items()]
     chosen = [(l, q) for l, q in chosen if q > QTY_EPS]
     if not chosen:
         any_bill = any(p["billed"] > QTY_EPS for p in plan.values())
-        raise HTTPException(400, "Bu siparişin faturası zaten var, faturalanacak miktar kalmadı" if any_bill
-                            else "Bu siparişte faturalanacak miktar yok")
+        raise HTTPException(400, tx("Bu siparişin faturası zaten var, faturalanacak miktar kalmadı") if any_bill
+                            else tx("Bu siparişte faturalanacak miktar yok"))
     return chosen
 
 
@@ -435,17 +434,16 @@ def set_order_inv_lines(db: Session, inv: Invoice, lines: list[dict[str, Any]]) 
     for l in order.lines:
         cap = min(_got(order, l), l.qty) if order.status == "closed" else l.qty
         if l.id in touched and plan[l.id]["billed"] > cap + QTY_EPS:
-            raise HTTPException(400, f"{l.code or l.description}: toplam faturalanan {num.text(plan[l.id]['billed'])}, "
-                                     f"en fazla {num.text(cap)} olabilir")
+            raise HTTPException(400, tx("{0}: toplam faturalanan {1}, en fazla {2} olabilir", l.code or l.description, num.text(plan[l.id]['billed']), num.text(cap)))
 
 
 def new_invoice(db: Session, user: User, kind: str, *, firm: Firm | None, no: str = "", **kw: Any) -> Invoice:
     if kind not in INV_KINDS:
-        raise HTTPException(400, "Fatura türü satış veya alış olmalı")
+        raise HTTPException(400, tx("Fatura türü satış veya alış olmalı"))
     if kind != "purchase":
         no = next_no(db, Invoice)
     elif not no.strip():
-        raise HTTPException(400, "Alış faturasında tedarikçinin fatura numarasını girin")
+        raise HTTPException(400, tx("Alış faturasında tedarikçinin fatura numarasını girin"))
     inv = Invoice(kind=kind, no=no.strip(), firm_id=firm.id if firm else None, firm_name=firm.name if firm else "",
                   status="draft", created_by=user.username, invoice_date=kw.pop("invoice_date", None) or date.today(),
                   **kw)
@@ -467,10 +465,10 @@ def invoice_from_so(db: Session, user: User, so: SalesOrder, picks: list[tuple[i
     It keeps the list prices and the order discount, so a whole order bills to exactly the order total."""
     erp.lock_order(db, so)
     if so.status not in ("confirmed", "partial", "delivered", "closed"):
-        raise HTTPException(400, "Yalnızca onaylanmış veya teslim edilmiş siparişin faturası kesilir")
+        raise HTTPException(400, tx("Yalnızca onaylanmış veya teslim edilmiş siparişin faturası kesilir"))
     chosen = _chosen_lines(db, so, picks)
     if any(l.unit_price is None for l, _ in chosen):
-        raise HTTPException(400, "Fiyatı girilmemiş satır var")
+        raise HTTPException(400, tx("Fiyatı girilmemiş satır var"))
     firm = db.get(Firm, so.firm_id) if so.firm_id else None
     inv = new_invoice(db, user, "sales", firm=firm, project_id=so.project_id, sales_order_id=so.id,
                       currency=so.currency, tax_rate=so.tax_rate, discount_pct=so.discount_pct or 0.0,
@@ -489,7 +487,7 @@ def invoice_from_po(db: Session, user: User, po: PurchaseOrder, no: str, tax_rat
     """Purchase invoice for the chosen lines and quantities (default: received and not billed yet)."""
     erp.lock_order(db, po)
     if po.status in ("draft", "cancelled"):
-        raise HTTPException(400, "Taslak veya iptal edilmiş siparişin faturası girilemez")
+        raise HTTPException(400, tx("Taslak veya iptal edilmiş siparişin faturası girilemez"))
     chosen = _chosen_lines(db, po, picks)
     firm = db.get(Firm, po.firm_id) if po.firm_id else None
     inv = new_invoice(db, user, "purchase", firm=firm, no=no, project_id=po.project_id, purchase_order_id=po.id,
@@ -537,7 +535,7 @@ def _check_credit_room(db: Session, order: SalesOrder | PurchaseOrder, inv: Invo
     room = next((r for src, r, _ in _credit_room(db, order, CREDIT_OF[inv.kind]) if src.id == inv.credit_of_id), {})
     for l in order.lines:
         if any(x.source_line_id == l.id for x in inv.lines) and room.get(l.id, -1.0) < -QTY_EPS:
-            raise HTTPException(400, f"{l.code or l.description}: dekont kaynak faturadaki miktarı aşıyor")
+            raise HTTPException(400, tx("{0}: dekont kaynak faturadaki miktarı aşıyor", l.code or l.description))
 
 
 def credits_for_return(db: Session, user: User, order: SalesOrder | PurchaseOrder,
@@ -619,7 +617,7 @@ def _entries(db: Session, firm_id: int | None = None) -> list[dict[str, Any]]:
 def basis_of(db: Session, basis: str | None = None) -> str:
     """The basis asked for, else the one in Sistem Ayarları."""
     if basis is not None and basis not in BALANCE_BASIS:
-        raise HTTPException(400, "Kur esası today veya doc olmalı")
+        raise HTTPException(400, tx("Kur esası today veya doc olmalı"))
     return basis or system.system(db)["commerce"]["balance_basis"]
 
 
@@ -672,7 +670,7 @@ def balances(db: Session, basis: str | None = None) -> list[dict[str, Any]]:
         else:
             open_base = today
             base_od = {k: num.money(x * rate) if rate is not None else None for k, x in od.items()}
-        out.append({"firm_id": fid, "firm_name": name or "(Firma yok)", "firm_kind": kinds.get(fid), "currency": cur,
+        out.append({"firm_id": fid, "firm_name": name or tx("(Firma yok)"), "firm_kind": kinds.get(fid), "currency": cur,
                     "rate": rate, "basis": basis, "base_balance": doc if basis == "doc" else today,
                     "base_receivable": max(open_base, 0.0) if open_base is not None else None,
                     "base_payable": max(-open_base, 0.0) if open_base is not None else None,
@@ -764,7 +762,7 @@ def form_xlsx(title: str, info: list[tuple[str, Any]], currency: str, lines: lis
     r = r0 + len(lines) + 1
     sums = [("Ara toplam", t["subtotal"])]
     if discount_pct:
-        sums.append((f"İskonto (%{num.text(discount_pct)})", -t["discount"]))
+        sums.append((tx("İskonto (%{0})", num.text(discount_pct)), -t["discount"]))
     sums += [(f"KDV (%{num.text(tax_rate)})", t["tax"]), ("Genel toplam", t["total"])]
     for k, v in sums:
         ws.cell(r, 6, k).font = bold

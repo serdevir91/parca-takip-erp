@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { setSys, type SystemDefaults } from "./system";
 import { adoptLegacyToken, api, isSignedIn, setSignedIn, setUnauthorizedHandler } from "./client";
 import { loadPrefs } from "./prefs";
+import { tx } from "./i18n";
 
 export type Role = "admin" | "designer" | "planner" | "viewer" | string;
 export type Level = "none" | "view" | "edit";
@@ -108,6 +109,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthState {
   const v = useContext(Ctx);
-  if (!v) throw new Error("useAuth outside AuthProvider");
+  if (!v) throw new Error(tx("useAuth outside AuthProvider"));
   return v;
 }

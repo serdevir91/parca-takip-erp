@@ -17,6 +17,7 @@ from ..services.settings import fastener_matcher
 from ..services.state import FASTENER_COLORS, FASTENER_ORDER_STATUSES, ProjectView
 from ..permissions import require
 from .deps import admin, get_db, project_or_404
+from app.core.i18n import tx
 
 fasteners_view, fasteners_edit = require("fasteners", "view"), require("fasteners", "edit")
 
@@ -83,10 +84,9 @@ def check_rule(body: RuleIn) -> dict[str, Any]:
     for f in TEMPLATE_FIELDS:
         for mm in _TPL.finditer(rule[f] or ""):
             if int(mm.group(1)) > groups:
-                raise HTTPException(400, f"'{f}' alanındaki {{{mm.group(1)}}} grubu desende yok "
-                                         f"(desende {groups} grup var)")
+                raise HTTPException(400, tx("'{0}' alanındaki {{1}} grubu desende yok (desende {2} grup var)", f, mm.group(1), groups))
             if mm.group(2) and mm.group(2) not in body.maps:
-                raise HTTPException(400, f"'{f}' alanındaki '{mm.group(2)}' eşleme tablosu tanımlı değil")
+                raise HTTPException(400, tx("'{0}' alanındaki '{1}' eşleme tablosu tanımlı değil", f, mm.group(2)))
     return rule
 
 
@@ -128,9 +128,9 @@ def put_settings(pid: int, body: SettingsIn, db: Session = Depends(get_db),
     known = {r.fastener_key for r in view.rows if r.fastener_key}
     unknown = [k for k in body.keys if k not in known]
     if unknown:
-        raise HTTPException(400, f"Bağlantı elemanı bulunamadı: {', '.join(unknown[:5])}")
+        raise HTTPException(400, tx("Bağlantı elemanı bulunamadı: {0}", ', '.join(unknown[:5])))
     if body.order_status is not None and body.order_status not in FASTENER_ORDER_STATUSES:
-        raise HTTPException(400, f"Geçersiz sipariş durumu. Seçenekler: {', '.join(FASTENER_ORDER_STATUSES)}")
+        raise HTTPException(400, tx("Geçersiz sipariş durumu. Seçenekler: {0}", ', '.join(FASTENER_ORDER_STATUSES)))
     changes: dict[str, Any] = {}
     for f in SETTING_FIELDS:
         v = getattr(body, f)
@@ -139,9 +139,9 @@ def put_settings(pid: int, body: SettingsIn, db: Session = Depends(get_db),
     if body.clear_price:
         changes["unit_price"] = None
     if not changes:
-        raise HTTPException(400, "Değiştirilecek alan yok")
+        raise HTTPException(400, tx("Değiştirilecek alan yok"))
     if "unit" in changes and not changes["unit"]:
-        raise HTTPException(400, "Birim boş olamaz")
+        raise HTTPException(400, tx("Birim boş olamaz"))
     n = 0
     for key in dict.fromkeys(body.keys):
         s = view.fastener_settings.get(key)
@@ -179,7 +179,7 @@ def create_rule(body: RuleIn, db: Session = Depends(get_db), user: User = Depend
 def update_rule(rid: int, body: RuleIn, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict[str, Any]:
     r = db.get(FastenerRule, rid)
     if r is None:
-        raise HTTPException(404, "Kural bulunamadı")
+        raise HTTPException(404, tx("Kural bulunamadı"))
     audit.record_changes(db, user, r, check_rule(body), "fastener_rule", r.id)
     bomimport.retag_fasteners(db)
     db.commit()
@@ -190,7 +190,7 @@ def update_rule(rid: int, body: RuleIn, db: Session = Depends(get_db), user: Use
 def delete_rule(rid: int, db: Session = Depends(get_db), user: User = Depends(admin)) -> dict[str, Any]:
     r = db.get(FastenerRule, rid)
     if r is None:
-        raise HTTPException(404, "Kural bulunamadı")
+        raise HTTPException(404, tx("Kural bulunamadı"))
     audit.record(db, user, "fastener_rule", r.id, "name", r.name, None, action="delete")
     db.delete(r)
     bomimport.retag_fasteners(db)
@@ -204,7 +204,7 @@ def reorder(body: ReorderIn, db: Session = Depends(get_db), user: User = Depends
     rules = {r.id: r for r in db.scalars(select(FastenerRule))}
     missing = [i for i in body.ids if i not in rules]
     if missing:
-        raise HTTPException(400, f"Kural bulunamadı: {', '.join(map(str, missing))}")
+        raise HTTPException(400, tx("Kural bulunamadı: {0}", ', '.join(map(str, missing))))
     for n, rid in enumerate(dict.fromkeys(body.ids), 1):
         audit.record_changes(db, user, rules[rid], {"priority": n * 10}, "fastener_rule", rid)
     bomimport.retag_fasteners(db)
@@ -217,7 +217,7 @@ def test_text(body: TestIn, db: Session = Depends(get_db), user: User = Depends(
     """Run each line of `text` through one draft rule or the saved rule set."""
     lines = [ln.strip() for ln in body.text.splitlines() if ln.strip()]
     if not lines:
-        raise HTTPException(400, "Test metni boş")
+        raise HTTPException(400, tx("Test metni boş"))
     results = []
     if body.rule is not None:
         rule = check_rule(body.rule)

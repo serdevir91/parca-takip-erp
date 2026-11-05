@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Firm, PurchaseOrder, PurchaseOrderLine, StockItem, User
 from . import audit, erp, system
+from app.core.i18n import tx
 
 
 def _on_order(db: Session) -> dict[str, float]:
@@ -90,7 +91,7 @@ def create_orders(db: Session, user: User, rows: list[dict[str, Any]]) -> list[P
         errors.append({"item_id": r["item_id"], "code": item.code if item else "", "error": problem})
     if errors:
         names = ", ".join(f'{e["code"] or e["item_id"]}: {e["error"]}' for e in errors[:5])
-        raise HTTPException(400, {"message": f"Sipariş oluşturulmadı. {names}", "errors": errors})
+        raise HTTPException(400, {"message": tx("Sipariş oluşturulmadı. {0}", names), "errors": errors})
 
     currency = system.system(db)["commerce"]["currency"]
     history = _history(db, [i.code for lines in by_firm.values() for i, _ in lines], firms)

@@ -4,6 +4,7 @@ import { useAuth, type Module } from "./api/auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Projects from "./pages/Projects";
+import { tx } from "./api/i18n";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Parts = lazy(() => import("./pages/Parts"));
@@ -30,14 +31,14 @@ const Chat = lazy(() => import("./pages/Chat"));
 function RequireAuth({ children, module }: { children: ReactNode; module?: Module }) {
   const { user, ready, can } = useAuth();
   const loc = useLocation();
-  if (!ready) return <div className="content muted">Yükleniyor…</div>;
+  if (!ready) return <div className="content muted">{tx("Yükleniyor…")}</div>;
   if (!user) return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
-  if (module && !can(module)) return <div className="content"><div className="card empty">Bu ekranı görme yetkiniz yok. Yöneticinizden yetki isteyin.</div></div>;
+  if (module && !can(module)) return <div className="content"><div className="card empty">{tx("Bu ekranı görme yetkiniz yok. Yöneticinizden yetki isteyin.")}</div></div>;
   return <>{children}</>;
 }
 
 const S = ({ children }: { children: ReactNode }) => (
-  <Suspense fallback={<div className="content muted">Yükleniyor…</div>}>{children}</Suspense>
+  <Suspense fallback={<div className="content muted">{tx("Yükleniyor…")}</div>}>{children}</Suspense>
 );
 
 /** Lazy page behind a module permission. */

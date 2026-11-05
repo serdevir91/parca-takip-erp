@@ -4,6 +4,7 @@ import { docTotals, money } from "../../api/num";
 import { sys } from "../../api/system";
 import { Loading, Modal } from "../admin/shared";
 import { fmtDay, fmtMoney, fmtQty, fmtRate, numOrNull } from "./common";
+import { tx } from "../../api/i18n";
 
 // ---------- types (backend/app/services/commerce.py, api/hr.py) ----------
 export type DocLine = {
@@ -46,7 +47,7 @@ export type Balance = {
   base_overdue_payable: number | null; basis: BalanceBasis; fx_diff: number | null;
 };
 export type BalanceBasis = "today" | "doc";
-export const BASIS_TEXT: Record<BalanceBasis, string> = { today: "bugünkü kurla", doc: "belge tarihindeki kurla" };
+export const BASIS_TEXT: Record<BalanceBasis, string> = { today: tx("bugünkü kurla"), doc: tx("belge tarihindeki kurla") };
 export type LedgerRow = {
   date: string | null; due_date: string | null; doc: "invoice" | "payment"; id: number; no: string; label: string;
   currency: string; debit: number; credit: number; balance: number; rate: number | null; base_amount: number | null;
@@ -69,8 +70,8 @@ export const SO_COLORS: Record<string, string> = {
 export const INV_COLORS: Record<string, string> = { draft: "E7E6E6", issued: "BDD7EE", cancelled: "D9D9D9" };
 export const PAY_COLORS: Record<string, string> = { unpaid: "FFEB9C", partial: "F8CBAD", paid: "C6EFCE", overdue: "FF9999" };
 export const SO_ACTIONS: Record<string, string> = {
-  quoted: "Teklif olarak gönder", confirmed: "Sipariş onaylandı", delivered: "Tümü teslim edildi", lost: "Kaybedildi",
-  cancelled: "İptal et", draft: "Taslağa al",
+  quoted: tx("Teklif olarak gönder"), confirmed: tx("Sipariş onaylandı"), delivered: tx("Tümü teslim edildi"), lost: tx("Kaybedildi"),
+  cancelled: tx("İptal et"), draft: tx("Taslağa al"),
 };
 
 export function useBalances(enabled = true, basis?: BalanceBasis) {
@@ -94,7 +95,7 @@ export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys
   return (
     <div className="adm-scroll" style={{ marginTop: 12 }}>
       <table className="simple erp-table erp-lines">
-        <thead><tr><th>Kod</th><th>Açıklama</th><th>Birim</th><th>Miktar</th><th>Birim fiyat</th><th className="num">Tutar</th><th></th></tr></thead>
+        <thead><tr><th>{tx("Kod")}</th><th>{tx("Açıklama")}</th><th>{tx("Birim")}</th><th>{tx("Miktar")}</th><th>{tx("Birim fiyat")}</th><th className="num">{tx("Tutar")}</th><th></th></tr></thead>
         <tbody>
           {lines.map((l, i) => (
             <tr key={i}>
@@ -106,7 +107,7 @@ export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys
                 onChange={(e) => setPrices((p) => { const n = [...p]; n[i] = e.target.value; return n; })} /></td>
               <td className="num">{fmtMoney(money((numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0)), currency)}</td>
               <td>
-                <button className="btn small" aria-label="Satırı sil" onClick={() => {
+                <button className="btn small" aria-label={tx("Satırı sil")} onClick={() => {
                   setLines((ls) => ls.filter((_, j) => j !== i));
                   setPrices((p) => p.filter((_, j) => j !== i));
                 }}>✕</button>
@@ -118,7 +119,7 @@ export function LinesEditor({ lines, setLines, prices, setPrices, currency = sys
       <button className="btn small" style={{ marginTop: 6 }} onClick={() => {
         setLines((ls) => [...ls, emptyLine()]);
         setPrices((p) => [...p, ""]);
-      }}>+ Satır ekle</button>
+      }}>{tx("+ Satır ekle")}</button>
     </div>
   );
 }
@@ -140,28 +141,28 @@ export function LinesTable({ lines, currency, subtotal, discount, discountPct, t
   return (
     <div className="adm-scroll">
       <table className="simple erp-table">
-        <thead><tr><th>#</th><th>Kod</th><th>Açıklama</th><th className="num">{progress ? "Sipariş" : "Miktar"}</th>
-          {progress && <><th className="num">Teslim</th><th className="num">Faturalanan</th><th className="num">Kalan</th></>}
-          <th className="num">Birim fiyat</th><th className="num">Tutar</th></tr></thead>
+        <thead><tr><th>#</th><th>{tx("Kod")}</th><th>{tx("Açıklama")}</th><th className="num">{progress ? tx("Sipariş") : tx("Miktar")}</th>
+          {progress && <><th className="num">{tx("Teslim")}</th><th className="num">{tx("Faturalanan")}</th><th className="num">{tx("Kalan")}</th></>}
+          <th className="num">{tx("Birim fiyat")}</th><th className="num">{tx("Tutar")}</th></tr></thead>
         <tbody>
           {lines.map((l) => (
             <tr key={l.id}>
               <td>{l.seq}</td><td className="mono">{l.code}</td><td>{l.description}</td>
-              <td className="num">{fmtQty(l.qty)} {l.unit}</td>
+              <td className="num">{fmtQty(l.qty)} {tx(l.unit)}</td>
               {progress && <>
                 <td className="num">{fmtQty(l.delivered_qty)}</td><td className="num">{fmtQty(l.billed_qty)}</td>
                 <td className="num">{l.remaining ? <b>{fmtQty(l.remaining)}</b> : "✓"}</td>
               </>}
-              <td className="num">{l.unit_price == null ? <span className="badge warn">fiyat yok</span> : fmtMoney(l.unit_price, currency)}</td>
+              <td className="num">{l.unit_price == null ? <span className="badge warn">{tx("fiyat yok")}</span> : fmtMoney(l.unit_price, currency)}</td>
               <td className="num">{fmtMoney(l.amount, currency)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr><td colSpan={span} className="num">Ara toplam</td><td className="num">{fmtMoney(subtotal, currency)}</td></tr>
-          {!!discount && <tr><td colSpan={span} className="num">İskonto (%{discountPct})</td><td className="num">-{fmtMoney(discount, currency)}</td></tr>}
-          <tr><td colSpan={span} className="num">KDV (%{taxRate})</td><td className="num">{fmtMoney(tax, currency)}</td></tr>
-          <tr><td colSpan={span} className="num"><b>Genel toplam</b></td><td className="num"><b>{fmtMoney(total, currency)}</b></td></tr>
+          <tr><td colSpan={span} className="num">{tx("Ara toplam")}</td><td className="num">{fmtMoney(subtotal, currency)}</td></tr>
+          {!!discount && <tr><td colSpan={span} className="num">{tx("İskonto (%{0})", discountPct)}</td><td className="num">-{fmtMoney(discount, currency)}</td></tr>}
+          <tr><td colSpan={span} className="num">{tx("KDV (%{0})", taxRate)}</td><td className="num">{fmtMoney(tax, currency)}</td></tr>
+          <tr><td colSpan={span} className="num"><b>{tx("Genel toplam")}</b></td><td className="num"><b>{fmtMoney(total, currency)}</b></td></tr>
         </tfoot>
       </table>
     </div>
@@ -176,28 +177,28 @@ export function LedgerModal({ firmId, firmName, onClose }: { firmId: number; fir
   });
   const rows = q.data?.rows ?? [];
   return (
-    <Modal wide title={`Cari ekstre: ${firmName}`} onClose={onClose}
-      footer={<button className="btn" onClick={onClose}>Kapat</button>}>
+    <Modal wide title={tx("Cari ekstre: {0}", firmName)} onClose={onClose}
+      footer={<button className="btn" onClick={onClose}>{tx("Kapat")}</button>}>
       <Loading error={q.error} loading={q.isLoading} />
       {q.data && (
         <>
           <div className="row" style={{ marginBottom: 8 }}>
             {Object.entries(q.data.balance).map(([cur, v]) => (
               <span key={cur} className={v > 0 ? "badge new" : v < 0 ? "badge warn" : "badge"}>
-                {v > 0 ? "Firma borçlu" : v < 0 ? "Firmaya borçluyuz" : "Bakiye sıfır"}: {fmtMoney(Math.abs(v), cur)}
+                {v > 0 ? tx("Firma borçlu") : v < 0 ? tx("Firmaya borçluyuz") : tx("Bakiye sıfır")}: {fmtMoney(Math.abs(v), cur)}
               </span>
             ))}
             {Object.keys(q.data.balance).some((c) => c !== q.data.base) && (
-              <span className="badge">Toplam: {fmtMoney(q.data.base_balance, q.data.base)} ({BASIS_TEXT[q.data.basis]})</span>
+              <span className="badge">{tx("Toplam: {0} ({1})", fmtMoney(q.data.base_balance, q.data.base), BASIS_TEXT[q.data.basis])}</span>
             )}
-            {!!q.data.fx_diff && <span className="badge" title="Belge kuruyla değer eksi bugünkü kurla değer">Kur farkı: {fmtMoney(q.data.fx_diff, q.data.base)}</span>}
-            {!!q.data.unconverted.length && <span className="badge warn">Kuru olmayan: {q.data.unconverted.join(", ")} toplama katılmadı</span>}
-            {!rows.length && <span className="muted">Kesilmiş fatura veya ödeme yok.</span>}
+            {!!q.data.fx_diff && <span className="badge" title={tx("Belge kuruyla değer eksi bugünkü kurla değer")}>{tx("Kur farkı: {0}", fmtMoney(q.data.fx_diff, q.data.base))}</span>}
+            {!!q.data.unconverted.length && <span className="badge warn">{tx("Kuru olmayan: {0} toplama katılmadı", q.data.unconverted.join(", "))}</span>}
+            {!rows.length && <span className="muted">{tx("Kesilmiş fatura veya ödeme yok.")}</span>}
           </div>
           {!!rows.length && (
             <div className="adm-scroll">
               <table className="simple erp-table">
-                <thead><tr><th>Tarih</th><th>Belge</th><th>No / yöntem</th><th>Vade</th><th className="num">Borç</th><th className="num">Alacak</th><th className="num">Bakiye</th><th className="num">Kur</th><th className="num">{q.data.base} karşılığı</th></tr></thead>
+                <thead><tr><th>{tx("Tarih")}</th><th>{tx("Belge")}</th><th>{tx("No / yöntem")}</th><th>{tx("Vade")}</th><th className="num">{tx("Borç")}</th><th className="num">{tx("Alacak")}</th><th className="num">{tx("Bakiye")}</th><th className="num">{tx("Kur")}</th><th className="num">{tx("{0} karşılığı", q.data.base)}</th></tr></thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={`${r.doc}${r.id}`}>
@@ -205,7 +206,7 @@ export function LedgerModal({ firmId, firmName, onClose }: { firmId: number; fir
                       <td className="num">{r.debit ? fmtMoney(r.debit, r.currency) : ""}</td>
                       <td className="num">{r.credit ? fmtMoney(r.credit, r.currency) : ""}</td>
                       <td className="num"><b>{fmtMoney(r.balance, r.currency)}</b></td>
-                      <td className="num">{r.currency === q.data.base ? "" : r.rate == null ? <span className="badge warn">kur yok</span> : fmtRate(r.rate)}</td>
+                      <td className="num">{r.currency === q.data.base ? "" : r.rate == null ? <span className="badge warn">{tx("kur yok")}</span> : fmtRate(r.rate)}</td>
                       <td className="num">{fmtMoney(r.base_amount, q.data.base)}</td>
                     </tr>
                   ))}
@@ -213,7 +214,7 @@ export function LedgerModal({ firmId, firmName, onClose }: { firmId: number; fir
               </table>
             </div>
           )}
-          <p className="muted">Borç: firmanın bize borcunu artırır (satış faturası, bizim yaptığımız ödeme). Alacak: azaltır (alış faturası, tahsilat).</p>
+          <p className="muted">{tx("Borç: firmanın bize borcunu artırır (satış faturası, bizim yaptığımız ödeme). Alacak: azaltır (alış faturası, tahsilat).")}</p>
         </>
       )}
     </Modal>

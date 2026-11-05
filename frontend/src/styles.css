@@ -120,7 +120,8 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .toast div.err { border-left-color: var(--danger); }
 .login { display: flex; align-items: center; justify-content: center; height: 100%; overflow-y: auto; padding: 16px 0; }
 .login form { margin: auto 0; }
-.login-desk { position: fixed; top: 8px; right: 10px; z-index: 40; }
+.login-desk { position: fixed; top: 8px; right: 10px; z-index: 40; display: flex; align-items: center; gap: 8px; }
+.lang-select { width: auto; padding: 4px 6px; font-size: 13px; background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
 .ok-box { background: color-mix(in srgb, var(--ok) 15%, transparent); border: 1px solid var(--ok); border-radius: 6px; padding: 8px 10px; }
 .small-note { font-size: 12px; text-align: center; }
 .login form { width: 320px; display: flex; flex-direction: column; gap: 10px; }
@@ -462,9 +463,15 @@ label.dw-qrow { cursor: pointer; }
 .chat-meta { display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .chat-meta .seen { color: var(--accent); }
 .chat-bubble { position: relative; }
-.chat-more-btn { position: absolute; top: 2px; right: 2px; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--muted); cursor: pointer; opacity: 0; }
-.chat-bubble:hover .chat-more-btn, .chat-more-btn:focus-visible { opacity: 1; }
-@media (hover: none) { .chat-more-btn { opacity: .75; background: transparent; } }
+.chat-msg { position: relative; align-items: center; }
+.chat-more-btn { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin: 0 4px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; }
+.chat-msg.mine .chat-more-btn { order: -1; }
+.chat-more-btn:hover { background: var(--surface-2); color: var(--fg); }
+.chat-msg:hover .chat-more-btn, .chat-more-btn:focus-visible { opacity: 1; }
+@media (hover: none) {
+  .chat-more-btn { display: none; }
+  .chat-bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}
 .chat-msg.picked { background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 8px; }
 .chat-msg.flash .chat-bubble { outline: 2px solid var(--accent); }
 .chat-check { align-self: center; margin: 0 8px 0 2px; flex: none; }
@@ -882,10 +889,10 @@ div.chat-pick-row { cursor: default; }
 .wo-section h4 { margin: 0; }
 .wo-qty { width: 70px; }
 .label-sheet { display: flex; flex-wrap: wrap; gap: 8px; max-height: 60vh; overflow: auto; }
-.label { width: 63mm; height: 37mm; box-sizing: border-box; padding: 2mm; display: flex; gap: 2mm; align-items: center; overflow: hidden; background: #fff; color: #000; border: .2mm dashed #bbb; }
-.label svg { width: 31mm; height: 31mm; flex: none; }
-.label div { min-width: 0; overflow: hidden; max-height: 100%; overflow-wrap: anywhere; font-size: 8pt; line-height: 1.25; }
-.label b { display: block; font-size: 9pt; }
+.label-sheet .label, .label-print .label { width: 63mm; height: 37mm; box-sizing: border-box; padding: 2mm; display: flex; gap: 2mm; align-items: center; overflow: hidden; background: #fff; color: #000; border: .2mm dashed #bbb; }
+.label-sheet .label svg, .label-print .label svg { width: 31mm; height: 31mm; flex: none; }
+.label-sheet .label div, .label-print .label div { min-width: 0; overflow: hidden; max-height: 100%; overflow-wrap: anywhere; font-size: 8pt; line-height: 1.25; }
+.label-sheet .label b, .label-print .label b { display: block; font-size: 9pt; }
 .label-print { display: none; }
 @media print {
   @page { size: A4; margin: 8mm; }
@@ -893,7 +900,7 @@ div.chat-pick-row { cursor: default; }
   html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
   body > *:not(.label-print) { display: none !important; }
   .label-print { display: flex; flex-wrap: wrap; align-content: flex-start; }
-  .label { break-inside: avoid; }
+  .label-print .label { break-inside: avoid; }
 }
 .scan-act .seg { display: flex; }
 .scan-act .seg button { flex: 1; min-height: 40px; }

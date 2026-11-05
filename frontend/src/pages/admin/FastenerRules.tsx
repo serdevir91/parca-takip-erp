@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal, fmtNum } from "./shared";
+import { LOCALE, tx } from "../../api/i18n";
 
 type Maps = Record<string, Record<string, string>>;
 type Rule = {
@@ -49,7 +50,7 @@ export default function FastenerRulesTab() {
   const del = useMutation({
     mutationFn: (r: Rule) => api.del(`/fastener-rules/${r.id}`),
     onSuccess: () => {
-      toast("Kural silindi");
+      toast(tx("Kural silindi"));
       invalidate();
     },
     onError: (e) => toast(errText(e), true),
@@ -64,8 +65,8 @@ export default function FastenerRulesTab() {
     reorder.mutate(ids);
   };
   const filtered = useMemo(() => {
-    const s = q.trim().toLocaleLowerCase("tr-TR");
-    return all.map((r, i) => ({ r, i })).filter(({ r }) => !s || `${r.name} ${r.pattern} ${r.type} ${r.std} ${r.desc}`.toLocaleLowerCase("tr-TR").includes(s));
+    const s = q.trim().toLocaleLowerCase(LOCALE);
+    return all.map((r, i) => ({ r, i })).filter(({ r }) => !s || `${r.name} ${r.pattern} ${r.type} ${r.std} ${r.desc}`.toLocaleLowerCase(LOCALE).includes(s));
   }, [all, q]);
 
   return (
@@ -73,30 +74,30 @@ export default function FastenerRulesTab() {
       <TestBox />
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
-          <button className="btn primary" onClick={() => setEditing("new")}>+ Yeni kural</button>
-          <input placeholder="Kurallarda ara…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <span className="muted">{fmtNum(all.length)} kural · düşük öncelik önce çalışır, ilk eşleşen kural kullanılır.</span>
+          <button className="btn primary" onClick={() => setEditing("new")}>{tx("+ Yeni kural")}</button>
+          <input placeholder={tx("Kurallarda ara…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <span className="muted">{tx("{0} kural · düşük öncelik önce çalışır, ilk eşleşen kural kullanılır.", fmtNum(all.length))}</span>
         </div>
         <Loading error={rules.error} loading={rules.isLoading} />
         {rules.data && (
           <div className="adm-scroll">
             <table className="simple">
               <thead>
-                <tr><th>Sıra</th><th>Öncelik</th><th>Ad</th><th>Desen (regex)</th><th>Tür</th><th>Standart</th><th>Ölçü</th><th>Aktif</th><th></th></tr>
+                <tr><th>{tx("Sıra")}</th><th>{tx("Öncelik")}</th><th>{tx("Ad")}</th><th>{tx("Desen (regex)")}</th><th>{tx("Tür")}</th><th>{tx("Standart")}</th><th>{tx("Ölçü")}</th><th>{tx("Aktif")}</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(({ r, i }) => (
                   <tr key={r.id} style={r.active ? undefined : { opacity: 0.55 }}>
                     <td>
                       <div className="row" style={{ gap: 2, flexWrap: "nowrap" }}>
-                        <button className="btn small" title="Yukarı taşı" disabled={i === 0 || reorder.isPending || !!q} onClick={() => move(i, -1)}>▲</button>
-                        <button className="btn small" title="Aşağı taşı" disabled={i === all.length - 1 || reorder.isPending || !!q} onClick={() => move(i, 1)}>▼</button>
+                        <button className="btn small" title={tx("Yukarı taşı")} disabled={i === 0 || reorder.isPending || !!q} onClick={() => move(i, -1)}>▲</button>
+                        <button className="btn small" title={tx("Aşağı taşı")} disabled={i === all.length - 1 || reorder.isPending || !!q} onClick={() => move(i, 1)}>▼</button>
                       </div>
                     </td>
                     <td>{fmtNum(r.priority)}</td>
                     <td><b>{r.name}</b>{r.desc && <div className="muted adm-small">{r.desc}</div>}</td>
                     <td style={{ ...mono, wordBreak: "break-all", maxWidth: 360 }}>{r.pattern}</td>
-                    <td>{r.type}</td>
+                    <td>{tx(r.type)}</td>
                     <td style={mono}>{r.std}</td>
                     <td style={mono}>{r.size}</td>
                     <td>
@@ -105,21 +106,20 @@ export default function FastenerRulesTab() {
                     </td>
                     <td>
                       <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                        <button className="btn small" onClick={() => setEditing(r)}>Düzenle</button>
+                        <button className="btn small" onClick={() => setEditing(r)}>{tx("Düzenle")}</button>
                         <button className="btn small danger" disabled={del.isPending}
-                          onClick={() => confirm(`"${r.name}" kuralı silinsin mi?`) && del.mutate(r)}>Sil</button>
+                          onClick={() => confirm(tx("\"{0}\" kuralı silinsin mi?", r.name)) && del.mutate(r)}>{tx("Sil")}</button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {!filtered.length && <tr><td colSpan={9} className="muted">Kural yok.</td></tr>}
+                {!filtered.length && <tr><td colSpan={9} className="muted">{tx("Kural yok.")}</td></tr>}
               </tbody>
             </table>
           </div>
         )}
         <p className="muted" style={{ marginTop: 10 }}>
-          Şablonlarda <code>{"{1}"}</code> desendeki 1. grubu, <code>{"{1|TABLO}"}</code> ise 1. grubun "TABLO" eşleme tablosundaki karşılığını verir.
-          Kural değişiklikleri sonraki BOM yüklemelerinde ve bağlantı elemanı özetinde kullanılır.
+          {tx("Şablonlarda")}{" "}<code>{"{1}"}</code>{" "}{tx("desendeki 1. grubu,")}{" "}<code>{tx("{1|TABLO}")}</code>{" "}{tx("ise 1. grubun \"TABLO\" eşleme tablosundaki karşılığını verir. Kural değişiklikleri sonraki BOM yüklemelerinde ve bağlantı elemanı özetinde kullanılır.")}
         </p>
       </div>
       {editing && (
@@ -132,19 +132,19 @@ export default function FastenerRulesTab() {
 }
 
 function MatchView({ m }: { m: Match | null }) {
-  if (!m) return <span className="badge warn">Tanınmadı (standart dışı isim)</span>;
+  if (!m) return <span className="badge warn">{tx("Tanınmadı (standart dışı isim)")}</span>;
   return (
     <span className="row" style={{ gap: 6 }}>
-      <span className="badge new">{m.type}</span>
+      <span className="badge new">{tx(m.type)}</span>
       <b style={mono}>{m.std}</b>
       <span style={mono}>{m.size}</span>
       {m.desc && <span className="muted">{m.desc}</span>}
       {(m.d != null || m.l != null) && (
         <span className="muted adm-small">
-          {m.d != null && `Ø ${m.d.toLocaleString("tr-TR")}`}{m.d != null && m.l != null && " · "}{m.l != null && `L ${m.l.toLocaleString("tr-TR")}`}
+          {m.d != null && `Ø ${m.d.toLocaleString(LOCALE)}`}{m.d != null && m.l != null && " · "}{m.l != null && `L ${m.l.toLocaleString(LOCALE)}`}
         </span>
       )}
-      {m.rule && <span className="muted adm-small">kural: {m.rule}</span>}
+      {m.rule && <span className="muted adm-small">{tx("kural: {0}", m.rule)}</span>}
     </span>
   );
 }
@@ -152,9 +152,9 @@ function MatchView({ m }: { m: Match | null }) {
 function Results({ data }: { data: TestResult }) {
   return (
     <div style={{ marginTop: 8 }}>
-      <div className="muted">{fmtNum(data.matched)} / {fmtNum(data.total)} satır tanındı</div>
+      <div className="muted">{tx("{0} / {1} satır tanındı", fmtNum(data.matched), fmtNum(data.total))}</div>
       <table className="simple" style={{ marginTop: 4 }}>
-        <thead><tr><th>Metin</th><th>Sonuç</th></tr></thead>
+        <thead><tr><th>{tx("Metin")}</th><th>{tx("Sonuç")}</th></tr></thead>
         <tbody>
           {data.results.map((r, i) => (
             <tr key={i}><td style={mono}>{r.text}</td><td><MatchView m={r.match} /></td></tr>
@@ -175,12 +175,12 @@ function TestBox() {
   });
   return (
     <div className="card">
-      <h3>Metni test et</h3>
-      <p className="muted">Her satıra bir dosya adı / açıklama yazın; kayıtlı aktif kurallarla nasıl tanındığını görün.</p>
+      <h3>{tx("Metni test et")}</h3>
+      <p className="muted">{tx("Her satıra bir dosya adı / açıklama yazın; kayıtlı aktif kurallarla nasıl tanındığını görün.")}</p>
       <textarea rows={4} style={{ width: "100%", ...mono }} value={text} onChange={(e) => setText(e.target.value)} />
       <div className="row" style={{ marginTop: 6 }}>
         <button className="btn primary" disabled={!text.trim() || test.isPending} onClick={() => test.mutate()}>
-          {test.isPending ? "Test ediliyor…" : "Metni test et"}
+          {test.isPending ? tx("Test ediliyor…") : tx("Metni test et")}
         </button>
       </div>
       {test.data && <Results data={test.data} />}
@@ -203,15 +203,15 @@ function RuleForm({ rule, nextPriority, onClose, onSaved }: {
     if (!mapsText.trim()) return { maps: {} };
     try {
       const v = JSON.parse(mapsText);
-      if (!v || typeof v !== "object" || Array.isArray(v)) return { err: "Eşleme tabloları bir nesne olmalı" };
+      if (!v || typeof v !== "object" || Array.isArray(v)) return { err: tx("Eşleme tabloları bir nesne olmalı") };
       for (const [k, t] of Object.entries(v)) {
-        if (!/^[A-Za-z0-9_]+$/.test(k)) return { err: `Tablo adı yalnızca harf, rakam ve _ içerebilir: ${k}` };
-        if (!t || typeof t !== "object" || Array.isArray(t)) return { err: `"${k}" tablosu {"anahtar": "değer"} biçiminde olmalı` };
-        for (const x of Object.values(t as object)) if (typeof x !== "string") return { err: `"${k}" tablosundaki değerler metin olmalı` };
+        if (!/^[A-Za-z0-9_]+$/.test(k)) return { err: tx("Tablo adı yalnızca harf, rakam ve _ içerebilir: {0}", k) };
+        if (!t || typeof t !== "object" || Array.isArray(t)) return { err: tx("\"{0}\" tablosu {\"anahtar\": \"değer\"} biçiminde olmalı", k) };
+        for (const x of Object.values(t as object)) if (typeof x !== "string") return { err: tx("\"{0}\" tablosundaki değerler metin olmalı", k) };
       }
       return { maps: v as Maps };
     } catch (e) {
-      return { err: `JSON hatası: ${e instanceof Error ? e.message : e}` };
+      return { err: tx("JSON hatası: {0}", e instanceof Error ? e.message : e) };
     }
   }, [mapsText]);
 
@@ -219,7 +219,7 @@ function RuleForm({ rule, nextPriority, onClose, onSaved }: {
   const save = useMutation({
     mutationFn: () => (rule ? api.put<Rule>(`/fastener-rules/${rule.id}`, body()) : api.post<Rule>("/fastener-rules", body())),
     onSuccess: () => {
-      toast(rule ? "Kural güncellendi" : "Kural eklendi");
+      toast(rule ? tx("Kural güncellendi") : tx("Kural eklendi"));
       onSaved();
       onClose();
     },
@@ -232,48 +232,48 @@ function RuleForm({ rule, nextPriority, onClose, onSaved }: {
 
   const invalid = !f.name.trim() || !f.pattern.trim() || !f.type.trim() || !!parsedMaps.err;
   return (
-    <Modal wide title={rule ? `Kuralı düzenle: ${rule.name}` : "Yeni bağlantı elemanı kuralı"} onClose={onClose}
+    <Modal wide title={rule ? tx("Kuralı düzenle: {0}", rule.name) : tx("Yeni bağlantı elemanı kuralı")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
       <div className="adm-form two">
-        <Field label="Ad"><input autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
-        <Field label="Tür">
+        <Field label={tx("Ad")}><input autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
+        <Field label={tx("Tür")}>
           <input list="adm-fastener-types" value={f.type} onChange={(e) => set("type", e.target.value)} />
           <datalist id="adm-fastener-types">{TYPES.map((t) => <option key={t} value={t} />)}</datalist>
         </Field>
         <div style={{ gridColumn: "1 / -1" }}>
-          <Field label="Desen (regex, Python sözdizimi)" hint="Gruplar () ile yakalanır; şablonlarda {1}, {2}… ile kullanılır.">
-            <input style={mono} value={f.pattern} onChange={(e) => set("pattern", e.target.value)} placeholder="(DIN 912|ISO 4762) M(\d+) x (\d+)" />
+          <Field label={tx("Desen (regex, Python sözdizimi)")} hint={tx("Gruplar () ile yakalanır; şablonlarda {1}, {2}… ile kullanılır.")}>
+            <input style={mono} value={f.pattern} onChange={(e) => set("pattern", e.target.value)} placeholder={tx("(DIN 912|ISO 4762) M(\\d+) x (\\d+)")} />
           </Field>
         </div>
-        <Field label="Açıklama şablonu"><input value={f.desc} onChange={(e) => set("desc", e.target.value)} placeholder="İmbus cıvata" /></Field>
-        <Field label="Standart şablonu"><input style={mono} value={f.std} onChange={(e) => set("std", e.target.value)} placeholder="DIN 912 / ISO 4762" /></Field>
-        <Field label="Ölçü şablonu"><input style={mono} value={f.size} onChange={(e) => set("size", e.target.value)} placeholder="M{2}x{3}" /></Field>
+        <Field label={tx("Açıklama şablonu")}><input value={f.desc} onChange={(e) => set("desc", e.target.value)} placeholder={tx("İmbus cıvata")} /></Field>
+        <Field label={tx("Standart şablonu")}><input style={mono} value={f.std} onChange={(e) => set("std", e.target.value)} placeholder={tx("DIN 912 / ISO 4762")} /></Field>
+        <Field label={tx("Ölçü şablonu")}><input style={mono} value={f.size} onChange={(e) => set("size", e.target.value)} placeholder={tx("M{2}x{3}")} /></Field>
         <div className="row" style={{ alignItems: "flex-end" }}>
-          <Field label="Çap (d)"><input style={{ ...mono, width: 110 }} value={f.d} onChange={(e) => set("d", e.target.value)} placeholder="{2}" /></Field>
-          <Field label="Boy (l)"><input style={{ ...mono, width: 110 }} value={f.l} onChange={(e) => set("l", e.target.value)} placeholder="{3}" /></Field>
+          <Field label={tx("Çap (d)")}><input style={{ ...mono, width: 110 }} value={f.d} onChange={(e) => set("d", e.target.value)} placeholder="{2}" /></Field>
+          <Field label={tx("Boy (l)")}><input style={{ ...mono, width: 110 }} value={f.l} onChange={(e) => set("l", e.target.value)} placeholder="{3}" /></Field>
         </div>
-        <Field label="Öncelik" hint="Küçük değer önce denenir.">
+        <Field label={tx("Öncelik")} hint={tx("Küçük değer önce denenir.")}>
           <input type="number" value={f.priority} onChange={(e) => set("priority", Number(e.target.value) || 0)} style={{ width: 120 }} />
         </Field>
         <label className="row" style={{ gap: 6, alignSelf: "end" }}>
-          <input type="checkbox" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Aktif
+          <input type="checkbox" checked={f.active} onChange={(e) => set("active", e.target.checked)} />{" "}{tx("Aktif")}
         </label>
         <div style={{ gridColumn: "1 / -1" }}>
-          <Field label="Eşleme tabloları (JSON, isteğe bağlı)" hint={<>Örnek: {'{"NUT_DESC": {"ISO 4032": "Altıgen somun"}}'} → şablonda {"{1|NUT_DESC}"}</>}>
+          <Field label={tx("Eşleme tabloları (JSON, isteğe bağlı)")} hint={<>{tx("Örnek: {\"NUT_DESC\": {\"ISO 4032\": \"Altıgen somun\"}} → şablonda {1|NUT_DESC}")}</>}>
             <textarea rows={5} style={mono} value={mapsText} onChange={(e) => setMapsText(e.target.value)} placeholder="{}" />
           </Field>
           {parsedMaps.err && <div className="error">{parsedMaps.err}</div>}
         </div>
       </div>
       <div className="card" style={{ marginTop: 12 }}>
-        <b>Taslağı test et</b>
-        <span className="muted"> (kaydetmeden, yalnızca bu kuralla)</span>
+        <b>{tx("Taslağı test et")}</b>
+        <span className="muted">{" "}{tx("(kaydetmeden, yalnızca bu kuralla)")}</span>
         <textarea rows={3} style={{ width: "100%", marginTop: 6, ...mono }} value={sample} onChange={(e) => setSample(e.target.value)}
-          placeholder="Her satıra bir örnek dosya adı" />
-        <button className="btn small" style={{ marginTop: 6 }} disabled={invalid || !sample.trim() || test.isPending} onClick={() => test.mutate()}>Test et</button>
+          placeholder={tx("Her satıra bir örnek dosya adı")} />
+        <button className="btn small" style={{ marginTop: 6 }} disabled={invalid || !sample.trim() || test.isPending} onClick={() => test.mutate()}>{tx("Test et")}</button>
         {test.data && <Results data={test.data} />}
       </div>
     </Modal>

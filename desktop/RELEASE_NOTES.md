@@ -1,180 +1,187 @@
-Windows masaüstü uygulaması: `LabERP-Setup-x.y.z.exe` dosyasını indirip çalıştırın.
-Android uygulaması: telefonda `LabERP-x.y.z.apk` dosyasını indirip kurun (Android 8.0 ve üstü). Bu dosya her telefonda çalışır; `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` ve `-x86` dosyaları işlemciye özel sürümlerdir.
+Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
+Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
-## 1.5.12 yenilikleri
+## What's new in 1.6.0
 
-- **Sohbet:** Mesaj düzenleme (48 saat), benden veya herkesten silme, yanıtlama, iletme, tepki, sabitleme, kopyalama ve çoklu seçim eklendi. Menü sağ tıkla veya mesajdaki oktan açılır.
-- **Android bildirimi:** Uygulama kapalıyken de yeni mesaj ve uyarı bildirimi gelir. Bildirime dokununca ilgili ekran açılır. Sunucuya ulaşılabilmesi gerekir. Ekran kapalıyken gecikme olabilir.
-- **Windows bildirimi:** Pencere kapalı veya arka plandayken bildirim gelir. İstemci modunda da pencere kapatılınca uygulama saatin yanındaki gizli simgelerde çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Çık" seçilir.
-- **Bağlantı elemanı stoğu:** Stok › Bağlantı elemanları sekmesi eklendi. BOM'daki civata ve somunlar kendiliğinden listelenir, stok ve açık ihtiyaç yan yana görünür. Giriş, çıkış, sayım ve projeye verme tek pencereden yapılır. Min. stok, raf ve QR etiket desteklenir.
-- **Okunmamış sayısı:** Silinmiş mesajlar artık okunmamış sayısına girmez.
+- **Four languages.** The interface now runs in Turkish, English, Spanish and German. Pick the language in the header or on the sign-in page; dates and numbers follow it. Server messages, notifications and the first-run screens are translated too. The Excel tracking workbook stays Turkish because its formulas and the import depend on that text.
+- **Chat.** The message menu button now sits beside the bubble and no longer covers the text. On phones, press and hold a message to open the menu.
+- **Open source licence.** The project is now under the GNU General Public License v3.0 or later.
+- **English project page.** The README, installation guide (now `INSTALL.md`), specification and screenshots are in English.
 
-## 1.5.11 yenilikleri
+## What's new in 1.5.12
 
-- **Proje silme:** Windows sunucuda "Kalıcı olarak sil" hata veriyor, proje silinmiyordu. Sorun silmeden önce alınan yedekteydi, düzeltildi.
-- **Yedekleme (Windows):** SQLite kullanan Windows kurulumlarında yedek hiç tamamlanmıyordu; gece yedeği dahil. Artık tamamlanır. Geri yükleme de aynı nedenle başarısız oluyordu, o da düzeldi.
-- **Yedek alınamazsa:** Proje silinmez ve neden ekranda yazar. Yönetici isterse "Yedeksiz kalıcı olarak sil" ile devam eder, bu denetim kaydına yazılır.
-- **Yedek sürerken silme:** Başka yedek sürüyorsa proje artık yedeksiz silinmez.
-- **Çok uzun metin, çok büyük sayı:** PostgreSQL'de "Internal Server Error" yerine anlaşılır uyarı gelir. Bağlantılı kayıt çakışmaları da açıkça yazılır.
-- **Yükselttikten sonra:** Windows sunucuda Yönetim › Yedekleme ekranından elle yedek alın ve dosyanın listede göründüğünü denetleyin.
+- **Chat:** Message editing (48 hours), deleting for me or for everyone, replying, forwarding, reactions, pinning, copying and multi-select were added. The menu opens with a right click or from the arrow on the message.
+- **Android notifications:** New messages and alerts arrive even when the app is closed. Tapping the notification opens the relevant screen. The server must be reachable. Delays are possible while the screen is off.
+- **Windows notifications:** Notifications arrive when the window is closed or in the background. In client mode too, closing the window leaves the app running in the hidden icons near the clock. To quit completely, right-click the icon and choose "Exit".
+- **Fastener stock:** A Stock › Fasteners tab was added. Bolts and nuts from the BOM are listed automatically, and stock and open requirement appear side by side. Receipts, issues, counts and issuing to a project all happen in one window. Minimum stock, shelf and QR label are supported.
+- **Unread count:** Deleted messages no longer count as unread.
 
-## 1.5.10 yenilikleri
+## What's new in 1.5.11
 
-- **Tek yuvarlama kuralı:** Tutar 2, miktar 3 ondalık, her zaman yarım yukarı. Ekran, Excel ve fatura aynı sonucu verir. Bağlantı elemanı yedek miktarı da Excel ile aynı çıkar.
-- **Ağırlık:** Ürün ağacı ve Excel artık aynı birimi kullanır, etiketler birimi yazar. Eski taslaklarda kg diye yazılmış değerler kendiliğinden çevrilmez, kontrol edin.
-- **Saatler:** Kayıt zamanları ekranda yerel saatle görünür.
-- **Telefon:** Ürün ağacı ekranı dar ekranda taşmıyor.
-- **Oturum çerezi:** Oturum artık tarayıcı belleğinde değil, betiklerin okuyamadığı httpOnly çerezde durur. Sürüm yükselince herkes bir kez yeniden giriş yapar.
-- **Yönetici uyarıları:** HTTPS kapalıysa ve hesap isteği ayarı açıksa yönetici ekranda uyarı görür. Ayarlar kendiliğinden değişmez.
-- **Sertifika sabitleme:** Masaüstü her bağlantıda sertifikayı denetler. Android, HTTPS'e geçmiş sunucuya düz HTTP ile bağlanmaz.
-- **Çakışma uyarısı:** Stok, personel, mesai, iş emri, firma, proje, sipariş ve fatura formlarında başkasının kaydının üzerine sessizce yazılmaz. Toplu düzenleme bilerek üzerine yazar.
-- **Resmi tatiller:** Yönetim › Resmi Tatiller ekranından düzenlenir. Beklenen mesai ve izin günleri tatilleri düşer. Dini bayramları yönetici girer.
-- **Satışta eksik kapatma:** Satış siparişi "Eksik kapatıldı" ile kapatılabilir.
-- **Otomatik alacak dekontu:** Faturalı malın iadesi taslak dekontu kendisi açar.
-- **Belge tarihi kuru:** Firma bakiyesi bugünkü kurla veya belge tarihindeki kurla gösterilebilir, kur farkı ayrı yazılır.
-- **Mal kabulde elle kur:** Kuru olmayan yabancı para siparişte kur ekranda girilir.
-- **Düz HTTP'de kamera:** Barkod ekranı canlı kameranın neden açılmadığını ve HTTPS yolunu söyler. Fotoğrafla okutma çalışır.
-- **Düzeltilen hatalar:** Android'de dosya açma çökmesi, eksik kapatılmış siparişte taslak dekontun düzenlenememesi, PostgreSQL'de iade ile dekont açarken oluşan hata, aynı anda iki kez fatura kesilmesi, koyu temada etiket çıktısındaki siyah kenarlık.
+- **Project deletion:** On a Windows server, "Delete permanently" returned an error and the project was not deleted. The problem was in the backup taken before deletion; it is fixed.
+- **Backup (Windows):** On Windows installations that use SQLite the backup never completed, the nightly backup included. It now completes. Restore failed for the same reason and is fixed as well.
+- **When the backup fails:** The project is not deleted and the reason is shown on screen. If the administrator chooses to continue with "Delete permanently without backup", this is written to the audit log.
+- **Deletion while a backup runs:** If another backup is running, the project is no longer deleted without a backup.
+- **Very long text, very large number:** PostgreSQL shows a clear warning instead of "Internal Server Error". Related-record conflicts are also reported clearly.
+- **After upgrading:** On a Windows server, take a manual backup from Administration › Backups and check that the file appears in the list.
 
-## 1.5.9 yenilikleri
+## What's new in 1.5.10
 
-- **Bildirim merkezi:** Üst çubuktaki zil geciken sipariş ve faturaları, düşük stoğu, bekleyen onayları gösterir. Herkes yalnızca yetkili olduğu konuları görür.
-- **İzin ve rapor:** Çalışan izin ister, yönetici onaylar. Mesai düzeltme talebi aynı yoldan gider.
-- **Mesaiden işe saat:** Günün mesaisi proje ve iş emirlerine dağıtılır, maliyete yansır.
-- **Barkod ve QR:** Telefon kamerası veya okuyucuyla stok, sipariş ve iş emri açılır. Etiket yazdırılır.
-- **Sipariş önerisi:** Düşük stok ve açık ihtiyaçlardan satın alma önerisi çıkar.
-- **İş emri:** Malzeme tüketimi, iade ve operasyon adımları iş emrinden yürür.
-- **Döviz:** TCMB kurları alınır, toplamlar ana para biriminde gösterilir.
-- **Kısmi sevk ve iade:** Satış siparişi parça parça sevk edilir, iade kaydedilir. Satırdan fatura kesilir.
-- **Tedarikçi performansı:** Zamanında teslim ve eksik teslim oranları görünür.
-- **Proje şablonları:** Bir proje şablon yapılır, yeni proje ondan açılır.
-- **Çakışma uyarısı:** Parça tablosunda başkasının değiştirdiği alanın üzerine sessizce yazılmaz, seçim size sorulur.
-- **Görünümler sunucuda:** Kayıtlı görünümler, sütun düzeni ve tema hesabınızla her cihaza gelir.
-- **Tek tıkla HTTPS:** Yönetim › HTTPS ekranından açılır. Android ve masaüstü sertifikayı kaydeder, değişirse bağlanmaz.
-- **Ekrandan geri yükleme:** Yönetim › Yedekler ekranından yedek seçilir veya dosya yüklenir.
-- **Güvenlik:** Masaüstü güncellemesi imza doğrulaması olmadan kurulmaz. SMTP şifresi şifreli saklanır. E-posta, firma ve proje okuma yetkiye bağlandı. Yeni kurulumlarda hesap isteği kapalı gelir. Sohbet dosyaları, tarayıcı güvenlik başlıkları ve sunucu değişikliği onayı sıkılaştırıldı.
+- **Single rounding rule:** Money 2 decimals, quantity 3, always half up. Screen, Excel and invoice give the same result. The fastener spare quantity also comes out the same as in Excel.
+- **Weight:** The product tree and Excel now use the same unit, and the labels state the unit. Values written as kg in old drafts are not converted automatically; check them.
+- **Times:** Record timestamps are shown in local time on screen.
+- **Phone:** The product tree screen no longer overflows on a narrow screen.
+- **Session cookie:** The session now lives in an httpOnly cookie that scripts cannot read, instead of browser memory. When the version is upgraded everyone signs in once.
+- **Administrator warnings:** If HTTPS is off and the account request setting is on, the administrator sees a warning on screen. Settings are not changed automatically.
+- **Certificate pinning:** The desktop app checks the certificate on every connection. Android does not connect over plain HTTP to a server that has switched to HTTPS.
+- **Conflict warning:** Stock, staff, attendance, work order, firm, project, order and invoice forms no longer silently overwrite someone else's record. Bulk edit overwrites on purpose.
+- **Public holidays:** Edited from Administration › Public Holidays. Expected attendance and leave days exclude holidays. The administrator enters religious holidays.
+- **Closing short in sales:** A sales order can be closed as "Closed incomplete".
+- **Automatic credit note:** Returning invoiced goods opens its draft credit note by itself.
+- **Document-date exchange rate:** The firm balance can be shown at today's rate or at the rate on the document date, and the exchange difference is written separately.
+- **Manual rate on goods receipt:** For a foreign-currency order without a rate, the rate is entered on screen.
+- **Camera on plain HTTP:** The barcode screen explains why the live camera did not open and gives the HTTPS path. Scanning from a photo works.
+- **Fixed bugs:** File-open crash on Android, the draft credit note of an incompletely closed order not being editable, an error when opening a credit note from a return on PostgreSQL, an invoice being issued twice at the same time, and a black border in label output in the dark theme.
 
-## 1.5.8 yenilikleri
+## What's new in 1.5.9
 
-- **Mesai takibi:** Çalışan giriş ve çıkış düğmesiyle mesaisini tutar, yalnızca kendisininkini görür. Yetkili yönetici herkesi görür, düzeltir, Excel'e aktarır. Haftalık fazla mesai otomatik hesaplanır.
-- **Önemli yedek düzeltmesi:** Veritabanı veri klasöründeyse (Sunucuma kur ile kurulan Linux sunucular) yedek alma sonraki kayıtların kaybolmasına yol açabiliyordu. Düzeltildi. Yedekler artık iç içe büyümüyor, geri yükleme eski yedekleri silmiyor.
-- **Stok:** Aynı anda yapılan hareketler artık birbirini ezmiyor.
-- **Numaralar:** Aynı anda açılan sipariş ve faturalar hata vermiyor.
-- **Çevrimdışı:** Bağlantı yokken kayıt sıraya girmiyor, hemen hata gösteriyor. Canlı göstergesi doğru durumu söylüyor.
-- **Tablo:** Başka bilgisayardan gelen değişiklikte seçili hücre aynı satırda kalıyor.
-- **Fatura:** Aynı satış siparişi iki kez faturalanamıyor. Satın alma siparişinde yalnızca faturalanmamış kısım gelir.
-- **Silme koruması:** Fatura veya siparişi olan firma, projeye hareketi olan stok kartı silinemiyor.
-- **Güvenlik:** Personel kartı e-posta ile eşleşmiyor (yönetici bağlamalı). Ana sayfa akışı yetkiye göre süzülüyor. Giriş kilidi başkasını dışarıda bırakmıyor. Girişsiz büyük istek reddediliyor. Yedekte imza anahtarı yok, yedek dosyası yalnızca sahibine açık. CSV formül koruması eklendi. Varsayılan admin şifresi için uyarı var. Kütüphaneler güncellendi.
+- **Notification centre:** The bell in the top bar shows overdue orders and invoices, low stock and pending approvals. Everyone sees only the subjects they are authorised for.
+- **Leave and reports:** An employee requests leave and the administrator approves. Attendance correction requests take the same path.
+- **Hours from attendance to work:** The day's attendance is distributed to projects and work orders and flows into cost.
+- **Barcode and QR:** Stock, orders and work orders open with the phone camera or a reader. Labels are printed.
+- **Order suggestion:** A purchasing suggestion is produced from low stock and open requirements.
+- **Work order:** Material consumption, returns and operation steps run from the work order.
+- **Foreign currency:** TCMB (Central Bank) rates are fetched and totals are shown in the base currency.
+- **Partial shipment and returns:** A sales order is shipped piece by piece and returns are recorded. An invoice is issued from the line.
+- **Supplier performance:** On-time and short delivery rates are visible.
+- **Project templates:** A project is made into a template and a new project is opened from it.
+- **Conflict warning:** In the parts grid a field changed by someone else is no longer silently overwritten; you are asked to choose.
+- **Views on the server:** Saved views, column layout and theme follow your account to every device.
+- **One-click HTTPS:** Enabled from Administration › HTTPS. Android and the desktop app store the certificate and refuse to connect if it changes.
+- **Restore from screen:** Pick a backup or upload a file from Administration › Backups.
+- **Security:** A desktop update is not installed without signature verification. The SMTP password is stored encrypted. Reading e-mail, firms and projects is tied to permission. New installations come with account requests off. Chat files, browser security headers and server change approval were tightened.
 
-## 1.5.7 yenilikleri
+## What's new in 1.5.8
 
-- **Temin şekilleri:** Fason İmalat, Standart Parça, Stoktan Karşılama ve Müşteri Malı eklendi. Sistem Ayarları'ndan yenisini ekleyin; davranışını, teknik resim ve sipariş önerisini seçin.
-- **Excel gibi tablo:** Hücre ve aralık seçimi, kopyala, kes, yapıştır, doldurma tutamağı, geri al, bul ve değiştir, sağ tık menüsü ve seçim toplamı geldi.
-- **Sütunlar:** Gizleyin, sıralayın, sabitleyin. Düzen hatırlanır.
-- **Gelişmiş filtre:** Sütunda koşullu filtre, VE ve VEYA gruplu kurallar, adla kayıtlı görünümler.
-- **Toplu değiştirme:** Liste ya da tablo modunda filtreleyip seçin, ilerleme ve temin şeklini hepsine birden atayın.
-- **Parça adı:** Yeni sütun. Tablodan yazın ya da parça no ve ad listesini Excel'den yapıştırın. Ürün ağacında da girilir.
-- **Excel dosyası:** Ekrandaki satır ve sütunlar `.xlsx` olarak iner.
+- **Attendance tracking:** An employee clocks in and out and sees only their own records. An authorised administrator sees everyone, corrects entries and exports to Excel. Weekly overtime is calculated automatically.
+- **Important backup fix:** If the database was inside the data folder (Linux servers installed with "Install on my server"), taking a backup could cause later records to be lost. Fixed. Backups no longer grow nested, and restore no longer deletes old backups.
+- **Stock:** Simultaneous movements no longer overwrite each other.
+- **Numbers:** Orders and invoices opened at the same time no longer fail.
+- **Offline:** Without a connection a save is not queued but shows an error immediately. The live indicator reports the correct state.
+- **Grid:** When a change arrives from another computer, the selected cell stays on the same row.
+- **Invoice:** The same sales order cannot be invoiced twice. A purchase order brings only the part not yet invoiced.
+- **Deletion protection:** A firm with invoices or orders, and a stock item with project movements, cannot be deleted.
+- **Security:** A staff card is not matched by e-mail (an administrator must link it). The home page feed is filtered by permission. A login lockout no longer locks out someone else. Large requests without login are rejected. The signing key is not in the backup and the backup file is readable only by its owner. CSV formula protection was added. There is a warning for the default admin password. Libraries were updated.
 
-## 1.5.6 yenilikleri
+## What's new in 1.5.7
 
-- **Ürün ağacı:** Proje menüsünde yeni ekran. CAD listesi olmadan ürünü montaj montaj kurun: alt montaj ve parça ekleyin, üst montajdaki adeti, temin şeklini, malzemeyi ve ağırlığı yazın, toplam adet kendiliğinden çarpılır.
-- **Kalem seçimi:** Daha önce kullanılan bir numarayı yazınca seçin. Bilgileri gelir, montajsa alt kalemleri de eklenir.
-- **Taslak ve sürüm:** Ağaç kendiliğinden taslak olarak kaydedilir. Var olan bir BOM sürümünden de başlayabilirsiniz. Gönderince bekleyen BOM sürümü olur, karşılaştırıp onaylarsınız.
-- **Gizle:** Parça listesi ve Bağlantı elemanları ekranlarında seçilen satırlar gizlenir. Satır listede kalır, yalnızca soluk görünür; İhtiyaç ekranında da soluktur. Adet, durum ve ihtiyaç hesabı değişmez.
+- **Procurement types:** Subcontracted Manufacturing, Standard Part, Supply from Stock and Customer Material were added. Add a new one in System Settings and choose its behaviour, drawing and order suggestion.
+- **Spreadsheet-like grid:** Cell and range selection, copy, cut, paste, fill handle, undo, find and replace, context menu and selection total arrived.
+- **Columns:** Hide, sort and pin. The layout is remembered.
+- **Advanced filter:** Conditional filter per column, AND and OR rule groups, and views saved by name.
+- **Bulk change:** Filter and select in list or table mode, then set progress and procurement type for all of them at once.
+- **Part name:** A new column. Type it in the grid or paste a part number and name list from Excel. It is also entered in the product tree.
+- **Excel file:** The rows and columns on screen download as `.xlsx`.
 
-## 1.5.5 yenilikleri
+## What's new in 1.5.6
 
-- **Arka planda çalışma:** Sunucu olan bilgisayarda pencereyi kapatınca sistem artık durmaz. Uygulama gizli simgelere iner, diğer cihazlar çalışmaya devam eder. Tamamen kapatmak için simgeye sağ tıklayıp "Sunucuyu durdur ve çık" seçin.
-- **Sistem Ayarları:** Yönetim'de yeni sekme. Uygulama adı, logo, şirket bilgileri, para birimi, KDV, vade, ödeme yöntemleri, belge numarası önekleri, varsayılan birim, şifre ve giriş kuralları, oturum süresi, yükleme sınırı, yedek saati ve açık modüller buradan değişir.
-- **Her şirkete uygun:** T-35'e özel adlar ve kurallar kaldırıldı. Eski "T-35 Ayarları" artık isteğe bağlı "Durum Listesi Kuralları" oldu. Mevcut kurulumların ayarları korunur.
-- **Sunucuma kur kılavuzu:** Sunucuda ve bilgisayarda yapılacaklar adım adım gösterilir. "Bağlantıyı dene" hangi adımın hazır olduğunu işaretler.
-- **Proje silme:** Proje adını yazmak yerine onay penceresi çıkar.
-- **Satın alma, satış ve fatura belgeleri:** Şirket bilgileri belgelere yazdırılır.
+- **Product tree:** A new screen in the project menu. Build the product assembly by assembly without a CAD list: add sub-assemblies and parts, enter the quantity in the parent assembly, the procurement type, material and weight, and the total quantity is multiplied automatically.
+- **Item picker:** Type a number used before to pick it. Its data arrives, and for an assembly its sub-items are added too.
+- **Draft and version:** The tree saves itself as a draft. You can also start from an existing BOM version. On submit it becomes a pending BOM version that you compare and approve.
+- **Hide:** On the Parts list and Fasteners screens the selected rows are hidden. The row stays in the list, only dimmed; it is dimmed on the Requirements screen too. Quantity, status and requirement calculation do not change.
 
-## 1.5.3 yenilikleri
+## What's new in 1.5.5
 
-- **Proje silme:** Yönetici, Projeler sayfasındaki "Sil" düğmesiyle projeyi kalıcı olarak silebilir. Pencere neyin silineceğini ve neyin kalacağını sayılarıyla gösterir, proje adının yazılmasını ister ve silmeden önce otomatik yedek alır. "Arşivle" aynen duruyor.
-- **BOM sürümü silme:** Reddedilen veya geri alınan BOM sürümleri "Sürümü sil" ile kaldırılır. Onaylı sürümler silinmez.
-- **Tümünü seç:** Seçim yapılan listelerde "Tümünü seç", "Tersine çevir" ve "Seçimi temizle" var. Shift ile tıklayınca aradaki satırların hepsi seçilir.
-- **Teknik resim yükleme:** Dosyalar artık önce listelenir; istenmeyenlerin işareti kaldırılır, sonra "Seçilenleri yükle" ile gönderilir.
-- **Toplu resim silme:** Teknik Resimler'de liste ve galeri görünümünde çoklu seçim, eşleşmeyen resimlerde de seçim ve "Seçilenleri sil" var.
+- **Running in the background:** On the server computer, closing the window no longer stops the system. The app drops to the hidden icons and other devices keep working. To quit completely, right-click the icon and choose "Stop the server and exit".
+- **System Settings:** A new tab in Administration. Application name, logo, company details, currency, VAT, payment term, payment methods, document number prefixes, default unit, password and login rules, session timeout, upload limit, backup time and enabled modules are changed here.
+- **Suitable for every company:** T-35-specific names and rules were removed. The old "T-35 Settings" is now the optional "Status List Rules". Settings of existing installations are preserved.
+- **Install on my server guide:** The steps on the server and on the computer are shown one by one. "Test connection" marks which step is ready.
+- **Project deletion:** Instead of typing the project name, a confirmation window appears.
+- **Purchasing, sales and invoice documents:** Company details are printed on the documents.
 
-## 1.5.2 yenilikleri
+## What's new in 1.5.3
 
-- **Düzeltme:** Excel'de açılıp kaydedilen BOM dosyası artık "geçersiz seviye '1.Oca'" hatası vermiyor. Excel'in tarihe çevirdiği seviye ve ağırlıklar otomatik geri düzeltilir, BOM sürümünde uyarı olarak gösterilir.
+- **Project deletion:** An administrator can delete a project permanently with the "Delete" button on the Projects page. The window shows with numbers what will be deleted and what will remain, asks for the project name and takes an automatic backup before deleting. "Archive" stays as it is.
+- **BOM version deletion:** Rejected or undone BOM versions are removed with "Delete version". Approved versions are not deleted.
+- **Select all:** Lists with selection have "Select all", "Invert" and "Clear selection". Shift-click selects all rows in between.
+- **Drawing upload:** Files are now listed first; unwanted ones are unticked and then sent with "Upload selected".
+- **Bulk drawing deletion:** In Drawings, multi-select is available in list and gallery view, including for unmatched drawings, with "Delete selected".
 
-## 1.5.1 yenilikleri
+## What's new in 1.5.2
 
-- **Yeni liste kartları:** Parça listesi, stok ve diğer listelerde her kayıt düzenli bir blok: üstte parça no ve tip, sağda durum rozeti, altında etiketli alan kutuları. Telefonda parça no tek satırda kalır, durum rozeti alt satıra geçer.
-- **Modern filtre:** Filtre paneli solda sütunlar, sağda değerler (telefonda alttan açılan sayfa). Değerlerin yanında kaç kayıt olduğu görünür; "Metin içerir" ve değer arama tek yerde.
-- **Etkin filtreler:** Arama çubuğunun altında çip olarak görünür. Çipe dokunmak filtreyi düzenler, ✕ kaldırır, "Tümünü temizle" hepsini siler.
-- **Sade araç çubuğu:** Arama kutusu simgeli ve temizleme düğmeli. Telefonda üstteki düğmeler tek satırda yana kaydırılır.
-- **Düzeltme:** Tablo görünümünde sütun başlığındaki filtre penceresi artık kesik açılmıyor.
+- **Fix:** A BOM file opened and saved in Excel no longer gives the "invalid level '1.Jan'" error. Levels and weights that Excel turned into dates are corrected back automatically and shown as a warning in the BOM version.
 
-## 1.5.0 yenilikleri
+## What's new in 1.5.1
 
-- **Sunucuma kur:** Windows uygulamasının ilk ekranında yeni seçenek. Linux sunucunun (Ubuntu, Debian, Rocky, Alma, Fedora) adresini ve SSH bilgilerini girin; LAB ERP sunucuya otomatik kurulur, açılışta kendiliğinden başlayan hizmet olarak çalışır ve bu bilgisayar ona bağlanır. Tekrar çalıştırmak sunucuyu günceller, veriler korunur.
-- **Personel gizliliği:** Personel ve zaman ekranını (saat ücretleri dahil) yalnızca admin ve bu yetkiyi verdiğiniz kişiler görür. Her çalışan "Personel kartım" ekranında yalnızca kendi kartını ve saatlerini görür. Personel kartı, Personel sekmesinde kullanıcı hesabına bağlanır.
-- **İşe göre yetkiler:** Varsayılan roller sıkılaştırıldı. Fatura ve ödemeler yalnızca admin'de. Satış yalnızca Planlama/Satın alma rolünde (görüntüleme). Tasarımcı ve İzleyici cari kartları görmez. Proje maliyetinde işçilik, personel yetkisi olmayanlara isimsiz tek satır olarak görünür. Yönetici gerekirse kullanıcı bazında yetki açabilir.
-- **Windows görünümü:** Beyaz menü çubuğu kaldırıldı. Uygulama menüsü (yeniden yükle, bağlantı ayarları, veri klasörü, güncelleme, kapat) üst çubukta temaya uygun açılır. Pencere başlığı açık, koyu ve siyah temaya göre renklenir.
+- **New list cards:** In the Parts list, stock and other lists every record is a tidy block: part number and type on top, status badge on the right, labelled field boxes below. On phones the part number stays on one line and the status badge moves to the next line.
+- **Modern filter:** The filter panel has columns on the left and values on the right (a bottom sheet on phones). Next to the values you see how many records there are; "Contains text" and value search are in one place.
+- **Active filters:** Shown as chips under the search bar. Tapping a chip edits the filter, ✕ removes it, "Clear all" removes them all.
+- **Clean toolbar:** The search box has an icon and a clear button. On phones the top buttons scroll sideways in one row.
+- **Fix:** In table view the filter popup on a column header no longer opens clipped.
 
-## 1.4.1 yenilikleri
+## What's new in 1.5.0
 
-- **Yeni ad: LAB ERP.** Yeni logo; Windows, Android ve tarayıcıda aynı ad ve simge. Veriler ve ayarlar aynen kalır.
-- **Düzeltme:** Windows uygulaması yeni bir bilgisayarda ilk açılışta "açılıyor" ekranında takılı kalmıyor.
-- Açılış uzun sürerse "Bağlantı ayarlarını aç" düğmesi çıkar.
+- **Install on my server:** A new option on the first screen of the Windows app. Enter the address and SSH details of a Linux server (Ubuntu, Debian, Rocky, Alma, Fedora); LAB ERP is installed on the server automatically, runs as a service that starts on boot, and this computer connects to it. Running it again updates the server and keeps the data.
+- **Staff privacy:** Only the admin and the people you grant that permission to see the staff and time screen (hourly rates included). Each employee sees only their own card and hours on the "My staff card" screen. A staff card is linked to a user account in the Staff tab.
+- **Permissions by job:** Default roles were tightened. Invoices and payments are admin-only. Sales is only in the Planning/Purchasing role (view). Designers and viewers do not see contacts. In project cost, labour appears as a single anonymous line to those without staff permission. An administrator can grant permission per user if needed.
+- **Windows look:** The white menu bar was removed. The app menu (reload, connection settings, data folder, update, close) opens in the top bar matching the theme. The window title bar is coloured for the light, dark and black themes.
 
-## 1.4.0 yenilikleri
+## What's new in 1.4.1
 
-- **Hesap oluştur:** Giriş ekranından hesap isteği gönderilir. Yönetici Yönetim › Kullanıcılar ekranında rol ve yetki vererek onaylar ya da reddeder; bekleyen istek sayısı menüde görünür.
-- **E-posta:** Kullanıcılara e-posta adresi eklenebilir. Yönetim › E-posta ekranında Gmail, Outlook, Yandex için hazır ayarlar ve test e-postası. Listeler ve Excel dosyaları tek tıkla e-postayla gönderilir; telefonda Gmail/WhatsApp ile paylaşılır.
-- **Yeni liste görünümü:** Parça listesi, stok ve diğer listeler varsayılan olarak kart görünümünde; telefonda yana kaydırma yok, rahat kaydırma, arama, filtre ve sıralama. "Tablo" düğmesi Excel benzeri görünüme geçer.
-- **Parça listesi:** Sadeleştirilmiş araç çubuğu (Göster, Excel / e-posta, İçe aktar menüleri).
-- **Bağlantı:** Sunucunun adresi değişirse Windows uygulaması ağdaki sunucuyu kendisi bulur. Kurulum Windows Güvenlik Duvarı iznini ekler.
-- **Düzeltme:** "Yeni sürüm var" uyarısı güncel sürümde artık görünmüyor ve kapatılabiliyor.
-- **Kurulum kılavuzu:** KURULUM_KILAVUZU.md ile adım adım kurulum.
+- **New name: LAB ERP.** A new logo; the same name and icon on Windows, Android and the browser. Data and settings stay as they are.
+- **Fix:** On a new computer the Windows app no longer gets stuck on the "opening" screen at first launch.
+- If startup takes long, an "Open connection settings" button appears.
 
-## 1.3.1 yenilikleri
+## What's new in 1.4.0
 
-- **Android:** İşlemciye göre ayrı APK dosyaları (arm64-v8a, armeabi-v7a, x86_64, x86) ve her telefonda çalışan genel APK.
-- **Güncelleme:** Uygulama yeni sürümde telefona uygun APK'yı kendisi seçer.
+- **Create account:** An account request is sent from the sign-in screen. The administrator approves or rejects it in Administration › Users by giving a role and permissions; the number of pending requests is shown in the menu.
+- **E-mail:** An e-mail address can be added to users. Administration › E-mail has ready-made settings for Gmail, Outlook and Yandex, plus a test e-mail. Lists and Excel files are sent by e-mail in one click; on a phone they are shared via Gmail/WhatsApp.
+- **New list view:** The Parts list, stock and other lists default to card view; no sideways scrolling on phones, comfortable scrolling, search, filter and sort. The "Table" button switches to the spreadsheet-like view.
+- **Parts list:** A simplified toolbar (Show, Excel / e-mail, Import menus).
+- **Connection:** If the server address changes, the Windows app finds the server on the network itself. The installation adds a Windows Firewall rule.
+- **Fix:** The "New version available" warning no longer appears on the current version and can be dismissed.
+- **Installation guide:** Step-by-step installation with INSTALL.md.
 
-## 1.3.0 yenilikleri
+## What's new in 1.3.1
 
-- **Android uygulaması:** Ağdaki sunucuyu kendisi bulur, son sunucuyu hatırlar. İndirmeler İndirilenler › LAB ERP klasörüne kaydedilir, fotoğraf eklerken kamera kullanılabilir, geri tuşu pencereleri ve menüyü kapatır.
-- **Telefona uyumlu arayüz:** Telefonda kayan yan menü, alttan açılan pencereler, kaydırılabilir tablolar ve büyük dokunma alanları.
-- **Profilim:** Her kullanıcı sağ üstteki adına tıklayarak kendi adını ve şifresini değiştirebilir.
-- **Güvenlik:**
-  - Hatalı giriş denemeleri sınırlandırıldı.
-  - Şifre değişince diğer cihazlardaki oturumlar kapanır.
-  - Şifreler en az 8 karakter.
-  - Zayıf oturum anahtarı otomatik olarak güçlüsüyle değiştirilir.
-  - Yüklenen dosyalar güvenli biçimde sunulur.
-  - Excel formül saldırılarına ve bozuk/aşırı büyük dosyalara karşı koruma eklendi.
-  - Tarayıcı güvenlik başlıkları eklendi.
+- **Android:** Separate APK files per processor (arm64-v8a, armeabi-v7a, x86_64, x86) and a universal APK that works on every phone.
+- **Update:** On a new version the app picks the APK suitable for the phone itself.
 
-## 1.2.0 yenilikleri
+## What's new in 1.3.0
 
-- **Parça fotoğrafları:** Parça detayında ve stok kartında birden fazla fotoğraf; sürükle-bırak, telefonda kamera, açıklama.
-- **Küçük resimler:** Teknik resimler ekranında "Galeri" görünümü; PDF ve resimler büyük küçük resimlerle listelenir.
-- **Yeni görüntüleyici:** Tıklayınca tam ekran; tekerlek veya iki parmakla yakınlaştırma, sürükleyerek kaydırma, çift tık, döndürme, ← → ile sonraki resim.
-- **Sohbet:** Kişiye özel ve grup mesajlaşma, dosya ve resim gönderme (sürükle-bırak, yapıştır), okundu işareti, okunmamış sayacı ve bildirim.
+- **Android app:** Finds the server on the network itself and remembers the last server. Downloads are saved to the Downloads › LAB ERP folder, the camera can be used when adding a photo, and the back key closes dialogs and the menu.
+- **Phone-friendly interface:** Slide-out side menu, bottom-sheet dialogs, scrollable tables and large touch areas on phones.
+- **My profile:** Every user can change their own name and password by tapping their name in the top right.
+- **Security:**
+  - Failed sign-in attempts are rate limited.
+  - Changing the password closes sessions on other devices.
+  - Passwords are at least 8 characters.
+  - A weak session key is replaced with a strong one automatically.
+  - Uploaded files are served securely.
+  - Protection against Excel formula attacks and corrupt or oversized files was added.
+  - Browser security headers were added.
 
-## 1.1.0 yenilikleri
+## What's new in 1.2.0
 
-- **Canlı eşitleme:** Aynı ağdaki cihazlarda yapılan değişiklikler birkaç saniye içinde tüm açık ekranlara yansır. Üst çubukta "Canlı" göstergesi vardır.
-- **Kullanıcı yetkileri:** Yönetim › Kullanıcılar ekranında her kullanıcıya modül bazında Yok / Görüntüle / Düzenle yetkisi verilir.
-- **Yeni ana sayfa:** Özet kutucukları, dikkat gerektirenler, işlem grafiği ve son işlemler.
-- **Satış ve teklif:** Teklif ve satış siparişleri, iskonto, KDV, Excel teklif formu, siparişten fatura.
-- **Fatura ve ödeme:** Satış ve alış faturaları, tahsilat ve ödemeler, vade takibi, cari bakiye ve ekstre.
-- **Personel ve zaman:** Personel kartları ve projeye yazılan çalışma saatleri; işçilik maliyeti projeye eklenir.
-- **Cari kartlar:** Müşteri firma türü ve firma bakiyesi.
-- **Yeni arayüz:** Gruplu, daraltılabilir yan menü, simgeler ve sade sayfa başlıkları.
+- **Part photos:** Several photos in the part detail and on the stock card; drag and drop, camera on phones, captions.
+- **Thumbnails:** A "Gallery" view on the Drawings screen; PDFs and images are listed with large thumbnails.
+- **New viewer:** Full screen on click; zoom with the wheel or two fingers, pan by dragging, double click, rotate, ← → for the next image.
+- **Chat:** Direct and group messaging, sending files and images (drag and drop, paste), read markers, unread counter and notifications.
 
-## Kurulum
+## What's new in 1.1.0
 
-- İlk açılışta "Bu bilgisayar sunucu" veya "Ağdaki sunucuya bağlan" seçilir.
-- Sunucu modunda veriler seçilen klasörde (varsayılan Belgeler\ParcaTakipERP) tutulur, her gece yedek alınır. Güvenlik duvarı sorarsa Özel ağlar için izin verin.
-- İstemci modunda "Ağda sunucu ara" düğmesi ağdaki sunucuları bulur.
-- Uygulama açılışta yeni sürümü kendisi denetler; menüde "Güncellemeleri denetle" de vardır.
+- **Live sync:** Changes made on devices on the same network appear on all open screens within seconds. A "Live" indicator is shown in the top bar.
+- **User permissions:** Administration › Users gives each user None / View / Edit permission per module.
+- **New home page:** Summary tiles, items needing attention, a transaction chart and recent transactions.
+- **Sales and quotations:** Quotations and sales orders, discount, VAT, an Excel quotation form, invoice from order.
+- **Invoice and payment:** Sales and purchase invoices, collections and payments, payment term tracking, account balance and statement.
+- **Staff and time:** Staff cards and work hours written to a project; labour cost is added to the project.
+- **Contacts:** Customer firm type and firm balance.
+- **New interface:** Grouped, collapsible side menu, icons and clean page headers.
+
+## Installation
+
+- On first launch, choose "This computer is the server" or "Connect to the server on the network".
+- In server mode the data is kept in the chosen folder (default Documents\ParcaTakipERP) and backed up every night. If the firewall asks, allow it for Private networks.
+- In client mode the "Search the network for a server" button finds servers on the network.
+- The app checks for a new version itself at startup; "Check for updates" is also in the menu.

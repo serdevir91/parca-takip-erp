@@ -4,6 +4,7 @@
 export type DesktopFileRequest = {
   path: string; // API path without the /api prefix
   token: string | null;
+  lang?: string;
   filename: string; // used when the response has no Content-Disposition name
   action: "save" | "open"; // save: "Farklı kaydet" dialog; open: temp file opened with the default program
   method?: "GET" | "POST";

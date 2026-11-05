@@ -1,9 +1,10 @@
 import { mobileApp } from "../api/mobile";
 import { savePref } from "../api/prefs";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { LANG, tx } from "../api/i18n";
 
 export type ThemeMode = "light" | "dark" | "amoled";
-export const THEME_LABELS: Record<ThemeMode, string> = { light: "Açık", dark: "Koyu", amoled: "Siyah (AMOLED)" };
+export const THEME_LABELS: Record<ThemeMode, string> = { light: LANG === "tr" ? "Açık" : tx("Açık tema"), dark: tx("Koyu"), amoled: tx("Siyah (AMOLED)") };
 const KEY = "erp_theme";
 
 function initial(): ThemeMode {

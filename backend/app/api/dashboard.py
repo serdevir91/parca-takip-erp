@@ -9,6 +9,7 @@ from ..services.state import ProjectView
 from ..permissions import require
 from .deps import get_db, project_or_404
 from .projects import project_out
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/projects", tags=["dashboard"])
 
@@ -22,6 +23,6 @@ def dashboard(pid: int, version_id: int | None = None, db: Session = Depends(get
     if version_id is not None:
         v = db.get(BomVersion, version_id)
         if v is None or v.project_id != project.id:
-            raise HTTPException(404, "BOM sürümü bulunamadı")
+            raise HTTPException(404, tx("BOM sürümü bulunamadı"))
     data = ProjectView.load(db, project, version_id).dashboard()
     return {"project": project_out(db, project), **data}

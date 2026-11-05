@@ -15,6 +15,7 @@ from ..services.settings import temin_choices
 from ..services.tracking import set_names
 from .bom import projects_edit, projects_view, version_out
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/projects", tags=["bomtree"])
 
@@ -45,7 +46,7 @@ class SubmitIn(BaseModel):
 def _editable(db: Session, pid: int):
     project = project_or_404(db, pid)
     if project.archived:
-        raise HTTPException(400, "Arşivlenmiş projede ürün ağacı değiştirilemez")
+        raise HTTPException(400, tx("Arşivlenmiş projede ürün ağacı değiştirilemez"))
     return project
 
 
@@ -60,7 +61,7 @@ def save_draft(pid: int, body: DraftIn, db: Session = Depends(get_db),
     project = _editable(db, pid)
     old = project.bom_draft or {}
     if body.rev is not None and body.rev != old.get("rev", 0):
-        raise HTTPException(409, f"Taslağı {old.get('by') or 'başka biri'} değiştirdi.")
+        raise HTTPException(409, tx("Taslağı {0} değiştirdi.", old.get('by') or 'başka biri'))
     project.bom_draft = {"tree": body.tree.model_dump(), "rev": old.get("rev", 0) + 1, "by": user.username,
                          "at": utcnow().isoformat()}
     db.commit()
@@ -117,7 +118,7 @@ def version_tree(pid: int, vid: int, db: Session = Depends(get_db), _: User = De
     project_or_404(db, pid)
     v = db.get(BomVersion, vid)
     if v is None or v.project_id != pid:
-        raise HTTPException(404, "BOM sürümü bulunamadı")
+        raise HTTPException(404, tx("BOM sürümü bulunamadı"))
     return {"tree": _named(db, bomtree.from_rows(v.rows))}
 
 
@@ -147,7 +148,7 @@ def item_tree(pid: int, part_no: str = Query(min_length=1, max_length=200), db: 
     r = db.scalar(select(BomRow).where(BomRow.part_no == part_no, BomRow.ext == "SLDASM")
                   .order_by(BomRow.id.desc()).limit(1))
     if r is None:
-        raise HTTPException(404, "Montaj bulunamadı")
+        raise HTTPException(404, tx("Montaj bulunamadı"))
     rows = db.scalars(select(BomRow).where(BomRow.version_id == r.version_id, or_(
         BomRow.level == r.level, BomRow.level.startswith(r.level + ".", autoescape=True))).order_by(BomRow.seq))
     return {"tree": _named(db, bomtree.from_rows(rows))}

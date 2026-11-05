@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import UploadFile
+from app.core.i18n import tx
 
 CHUNK = 1024 * 1024
 IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"}
@@ -54,7 +55,7 @@ async def store(file: UploadFile, folder: Path, max_mb: int) -> tuple[Path, int]
             while chunk := await file.read(CHUNK):
                 size += len(chunk)
                 if size > limit:
-                    raise UploadTooLarge(f"Dosya çok büyük (en fazla {max_mb} MB).")
+                    raise UploadTooLarge(tx("Dosya çok büyük (en fazla {0} MB).", max_mb))
                 out.write(chunk)
     except BaseException:
         path.unlink(missing_ok=True)

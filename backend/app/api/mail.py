@@ -15,6 +15,7 @@ from ..models import Firm, User
 from ..permissions import can, require
 from ..services import audit, mailer, system
 from .deps import admin, any_user, get_db
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/mail", tags=["mail"])
 mail_edit = require("mail", "edit")
@@ -45,7 +46,7 @@ def _addresses(raw: str, what: str) -> list[str]:
         if not a:
             continue
         if not mailer.valid_email(a):
-            raise HTTPException(400, f"{what} adresi geçersiz: {a}")
+            raise HTTPException(400, tx("{0} adresi geçersiz: {1}", what, a))
         if a.lower() not in (o.lower() for o in out):
             out.append(a)
     return out
@@ -75,12 +76,12 @@ async def send(to: str = Form(...), subject: str = Form(...), body: str = Form("
     """Send a message with attachments (the lists the screen exported). Reply-To is the sender."""
     cfg = mailer.config(db)
     if not cfg.ready:
-        raise HTTPException(400, "E-posta sunucusu ayarlanmamış. Yönetici Yönetim > E-posta ekranından ayarlamalı.")
+        raise HTTPException(400, tx("E-posta sunucusu ayarlanmamış. Yönetici Yönetim > E-posta ekranından ayarlamalı."))
     to_list, cc_list = _addresses(to, "Alıcı"), _addresses(cc, "Bilgi")
     if not to_list:
-        raise HTTPException(400, "En az bir alıcı yazın")
+        raise HTTPException(400, tx("En az bir alıcı yazın"))
     if len(to_list) + len(cc_list) > MAX_RECIPIENTS:
-        raise HTTPException(400, f"En fazla {MAX_RECIPIENTS} alıcı")
+        raise HTTPException(400, tx("En fazla {0} alıcı", MAX_RECIPIENTS))
     subject = subject.strip()[:200] or system.app_name(db)
     atts: list[mailer.Attachment] = []
     total = 0
@@ -88,10 +89,10 @@ async def send(to: str = Form(...), subject: str = Form(...), body: str = Form("
         data = await f.read(MAX_BYTES + 1)
         total += len(data)
         if total > MAX_BYTES:
-            raise HTTPException(413, "Ekler en fazla 20 MB olabilir")
+            raise HTTPException(413, tx("Ekler en fazla 20 MB olabilir"))
         atts.append(mailer.Attachment(f.filename or "dosya", data, f.content_type or "application/octet-stream"))
     if not _rate_ok(user.id):
-        raise HTTPException(429, "Saatte en fazla 60 e-posta gönderilebilir")
+        raise HTTPException(429, tx("Saatte en fazla 60 e-posta gönderilebilir"))
     sender = user.full_name or user.username
     text = (body.strip() + "\n\n" if body.strip() else "") + f"-- \n{sender} tarafından {system.app_name(db)} ile gönderildi."
     try:
@@ -146,10 +147,10 @@ def test_smtp(body: TestIn, me: User = Depends(admin), db: Session = Depends(get
     """Send a test message to the given address (default: the admin's own e-mail)."""
     to = _addresses(body.to or me.email or "", "Alıcı")
     if not to:
-        raise HTTPException(400, "Test için bir alıcı adresi yazın (veya Profilim'e e-posta ekleyin)")
+        raise HTTPException(400, tx("Test için bir alıcı adresi yazın (veya Profilim'e e-posta ekleyin)"))
     try:
-        mailer.send(mailer.config(db), to, f"{system.app_name(db)} test e-postası",
-                    "Bu bir test e-postasıdır. E-posta ayarlarınız çalışıyor.")
+        mailer.send(mailer.config(db), to, tx("{0} test e-postası", system.app_name(db)),
+                    tx("Bu bir test e-postasıdır. E-posta ayarlarınız çalışıyor."))
     except RuntimeError as e:
         raise HTTPException(502, str(e)) from e
     return {"ok": True, "to": to}

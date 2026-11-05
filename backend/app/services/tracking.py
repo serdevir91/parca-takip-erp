@@ -17,6 +17,7 @@ from ..core.status import MATERIAL_STATUS_CHOICES, PROGRESS_CHOICES
 from ..models import AuditLog, MissingRow, PartAlias, PartName, SyncState, Tracking, User
 from . import audit
 from .settings import get_setting, manufacturers, temin_choices
+from app.core.i18n import tx
 
 # Fields a user may change on a tracking row (inline or bulk edit)
 EDITABLE_FIELDS = ("procurement_override", "progress", "note", "t35_note", "manufacturer",
@@ -30,7 +31,7 @@ def material_status_choices(db: Session) -> list[str]:
 
 def check_progress(value: Any) -> str:
     if value not in PROGRESS_CHOICES:
-        raise HTTPException(400, f"Geçersiz ilerleme değeri: {value}. Seçenekler: {', '.join(PROGRESS_CHOICES)}")
+        raise HTTPException(400, tx("Geçersiz ilerleme değeri: {0}. Seçenekler: {1}", value, ', '.join(PROGRESS_CHOICES)))
     return value
 
 
@@ -38,7 +39,7 @@ def clean_changes(db: Session, changes: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalise tracking changes; unknown fields are rejected."""
     unknown = set(changes) - set(EDITABLE_FIELDS)
     if unknown:
-        raise HTTPException(400, f"Düzenlenemeyen alan: {', '.join(sorted(unknown))}")
+        raise HTTPException(400, tx("Düzenlenemeyen alan: {0}", ', '.join(sorted(unknown))))
     out: dict[str, Any] = {}
     for f, v in changes.items():
         if f == "progress":
@@ -47,23 +48,23 @@ def clean_changes(db: Session, changes: dict[str, Any]) -> dict[str, Any]:
             v = (v or "").strip() or None
             choices = temin_choices(db)
             if v is not None and v not in choices:
-                raise HTTPException(400, f"Geçersiz temin şekli: {v}. Seçenekler: {', '.join(choices)}")
+                raise HTTPException(400, tx("Geçersiz temin şekli: {0}. Seçenekler: {1}", v, ', '.join(choices)))
             out[f] = v
         elif f == "manufacturer":
             v = (v or "").strip()
             allowed = manufacturers(db)
             if v and allowed and v not in allowed:
-                raise HTTPException(400, f"Üretici/firma listede yok: {v}. Yönetim ekranından ekleyin.")
+                raise HTTPException(400, tx("Üretici/firma listede yok: {0}. Yönetim ekranından ekleyin.", v))
             out[f] = v
         elif f == "material_status":
             v = (v or "").strip()
             choices = material_status_choices(db)
             if v and v not in choices:
-                raise HTTPException(400, f"Geçersiz malzeme durumu: {v}. Seçenekler: {', '.join(choices)}")
+                raise HTTPException(400, tx("Geçersiz malzeme durumu: {0}. Seçenekler: {1}", v, ', '.join(choices)))
             out[f] = v
         elif f in ("is_new", "hidden"):
             if not isinstance(v, bool):
-                raise HTTPException(400, "Bu alan doğru/yanlış olmalı")
+                raise HTTPException(400, tx("Bu alan doğru/yanlış olmalı"))
             out[f] = v
         else:  # note, t35_note
             out[f] = "" if v is None else str(v)
@@ -187,7 +188,7 @@ async def read_upload(file: UploadFile, max_mb: int | None = None) -> bytes:
             break
         buf.extend(chunk)
         if len(buf) > limit:
-            raise HTTPException(413, f"Dosya çok büyük (en fazla {limit >> 20} MB).")
+            raise HTTPException(413, tx("Dosya çok büyük (en fazla {0} MB).", limit >> 20))
     return bytes(buf)
 
 
@@ -203,7 +204,7 @@ def read_upload_sync(file: UploadFile, max_mb: int | None = None) -> bytes:
             break
         buf.extend(chunk)
         if len(buf) > limit:
-            raise HTTPException(413, f"Dosya çok büyük (en fazla {limit >> 20} MB).")
+            raise HTTPException(413, tx("Dosya çok büyük (en fazla {0} MB).", limit >> 20))
     return bytes(buf)
 
 

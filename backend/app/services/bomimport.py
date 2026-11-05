@@ -26,6 +26,7 @@ from ..models import BomRow, BomVersion, MissingRow, Part, PartAlias, Project, T
 from . import audit
 from .settings import big_drop_ratio, buy_temins, fastener_matcher, part_no_patterns, purchased_assemblies
 from .state import ProjectView
+from app.core.i18n import tx
 
 TRACKING_FIELDS = ("part_no", "procurement_override", "progress", "note", "t35_note", "manufacturer",
                    "material_status", "is_new", "archived", "updated_by")
@@ -80,17 +81,15 @@ def compare_json(cmp: CompareResult | None, tracking: dict[str, Tracking], ratio
         t = tracking.get(pno)
         if t and t.progress != PROG_WAIT:
             warnings.append({"part_no": pno, "kind": "removed_with_progress", "severity": "error",
-                             "message": f"{pno}: ilerleme kaydı olan parça BOM'dan kalktı ({t.progress})."})
+                             "message": tx("{0}: ilerleme kaydı olan parça BOM'dan kalktı ({1}).", pno, t.progress)})
     for ch in cmp.rev_changed:
         t = tracking.get(ch.part_no)
         if t and t.progress == PROG_DONE:
             warnings.append({"part_no": ch.part_no, "kind": "rev_after_done", "severity": "warning",
-                             "message": f"{ch.part_no}: revizyon {ch.old or '(boş)'} → {ch.new or '(boş)'}; "
-                                        "eski revizyonla üretilmiş olabilir."})
+                             "message": tx("{0}: revizyon {1} → {2}; eski revizyonla üretilmiş olabilir.", ch.part_no, ch.old or '(boş)', ch.new or '(boş)')})
     if big_drop:
         warnings.append({"part_no": "", "kind": "fastener_big_drop", "severity": "warning",
-                         "message": f"Bağlantı elemanı toplam adedi {old} → {new} düştü "
-                                    f"(%{round((old - new) * 100 / old)})."})
+                         "message": tx("Bağlantı elemanı toplam adedi {0} → {1} düştü (%{2}).", old, new, round((old - new) * 100 / old))})
     d.update(first=False, warnings=warnings, fastener_big_drop=big_drop, is_empty=cmp.is_empty)
     return d
 
@@ -159,9 +158,9 @@ def upload_bom(db: Session, project: Project, filename: str, data: bytes, user: 
         parsed = parse_bom(data, purchased_assemblies=purchased_assemblies(db), matcher=fastener_matcher(db),
                            part_no_patterns=part_no_patterns(db), buy_temins=buy_temins(db))
     except Exception as e:  # noqa: BLE001 - any parse failure is a bad file for the user
-        raise BomImportError(f"BOM dosyası okunamadı: {e}") from e
+        raise BomImportError(tx("BOM dosyası okunamadı: {0}", e)) from e
     if not parsed.rows:
-        raise BomImportError("BOM dosyasında satır bulunamadı.")
+        raise BomImportError(tx("BOM dosyasında satır bulunamadı."))
 
     seq = (db.scalar(select(func.max(BomVersion.seq)).where(BomVersion.project_id == project.id)) or 0) + 1
     folder = get_settings().bom_dir / str(project.id)
@@ -177,8 +176,8 @@ def upload_bom(db: Session, project: Project, filename: str, data: bytes, user: 
     cj = compare_json(cmp, _tracking_map(db, project.id), big_drop_ratio(db))
     if project.root_part_no and parsed.root_part_no and parsed.root_part_no != project.root_part_no:
         cj["warnings"].insert(0, {"part_no": parsed.root_part_no, "kind": "root_mismatch", "severity": "error",
-                                  "message": f"Dosyanın ana montajı {parsed.root_part_no}, proje ise "
-                                             f"{project.root_part_no}. Doğru proje mi?"})
+                                  "message": tx("Dosyanın ana montajı {0}, proje ise {1}. Doğru proje mi?",
+                                                parsed.root_part_no, project.root_part_no)})
 
     v = BomVersion(project_id=project.id, seq=seq, filename=filename, file_path=str(path),
                    uploaded_by=user.username if user else "", note=note, status="pending",
@@ -204,7 +203,7 @@ def approve(db: Session, version: BomVersion, user: User | None,
             alias_accept: list[dict[str, str]] | None = None) -> BomVersion:
     """alias_accept: [{"removed": old_no, "added": new_no}] pairs the user confirmed as the same part."""
     if version.status != "pending":
-        raise BomImportError("Sadece bekleyen BOM sürümü onaylanabilir.")
+        raise BomImportError(tx("Sadece bekleyen BOM sürümü onaylanabilir."))
     project = db.get(Project, version.project_id)
     if version.previous_version_id != project.current_version_id:
         refresh_compare(db, project, version)
@@ -214,7 +213,7 @@ def approve(db: Session, version: BomVersion, user: User | None,
     for p in alias_accept or []:
         old_no, new_no = p.get("removed", ""), p.get("added", "")
         if old_no not in removed or new_no not in added:
-            raise BomImportError(f"Eşleştirme geçersiz: {old_no} → {new_no}")
+            raise BomImportError(tx("Eşleştirme geçersiz: {0} → {1}", old_no, new_no))
         pairs.append((old_no, new_no))
 
     tracking = _tracking_map(db, project.id)
@@ -292,7 +291,7 @@ def approve(db: Session, version: BomVersion, user: User | None,
 
 def reject(db: Session, version: BomVersion, user: User | None) -> BomVersion:
     if version.status != "pending":
-        raise BomImportError("Sadece bekleyen BOM sürümü reddedilebilir.")
+        raise BomImportError(tx("Sadece bekleyen BOM sürümü reddedilebilir."))
     version.status = "rejected"
     audit.record(db, user, "bom_version", version.id, "status", "pending", "rejected", version.project_id)
     db.flush()
@@ -302,7 +301,7 @@ def reject(db: Session, version: BomVersion, user: User | None) -> BomVersion:
 def delete_version(db: Session, version: BomVersion, user: User | None) -> str:
     """Remove a rejected or undone version with its rows. Returns the stored file to delete after the commit."""
     if version.status not in ("rejected", "undone"):
-        raise BomImportError("Sadece reddedilen veya geri alınan BOM sürümü silinebilir.")
+        raise BomImportError(tx("Sadece reddedilen veya geri alınan BOM sürümü silinebilir."))
     audit.record(db, user, "bom_version", version.id, "deleted", f"#{version.seq} {version.filename}", None,
                  version.project_id, action="delete")
     path = version.file_path
@@ -326,7 +325,7 @@ def undo_last(db: Session, project: Project, user: User | None) -> BomVersion:
     Edits made after that approval are lost; the API should confirm with the user."""
     version = db.get(BomVersion, project.current_version_id) if project.current_version_id else None
     if version is None or version.status != "approved" or not version.undo_json:
-        raise BomImportError("Geri alınacak onaylı BOM yüklemesi yok.")
+        raise BomImportError(tx("Geri alınacak onaylı BOM yüklemesi yok."))
     u = version.undo_json
     for t in db.scalars(select(Tracking).where(Tracking.project_id == project.id)):
         db.delete(t)

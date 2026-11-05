@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { api } from "../api/client";
 import { FIELD_LABELS, type PartChoices } from "./PartDetail";
 import { errText, useToast } from "./Toast";
+import { LOCALE, tx } from "../api/i18n";
 
 type BulkResult = { matched: number; updated: number; fields_changed: number; not_found: string[] };
 
@@ -40,8 +41,8 @@ export default function BulkEdit({ pid, partNos, choices, onClose, onDone }: {
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["parts", pid] });
       qc.invalidateQueries({ queryKey: ["dashboard", pid] });
-      const nf = r.not_found.length ? ` · bulunamayan: ${r.not_found.length.toLocaleString("tr-TR")}` : "";
-      toast(`${r.updated.toLocaleString("tr-TR")} parça güncellendi (${r.fields_changed.toLocaleString("tr-TR")} alan)${nf}`);
+      const nf = r.not_found.length ? tx(" · bulunamayan: {0}", r.not_found.length.toLocaleString(LOCALE)) : "";
+      toast(tx("{0} parça güncellendi ({1} alan){2}", r.updated.toLocaleString(LOCALE), r.fields_changed.toLocaleString(LOCALE), nf));
       onDone?.();
       onClose();
     },
@@ -53,35 +54,35 @@ export default function BulkEdit({ pid, partNos, choices, onClose, onDone }: {
 
   return (
     <div className="modal-back" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Toplu düzenle">
-        <h3 style={{ marginTop: 0 }}>Toplu düzenle</h3>
-        <p className="muted">{partNos.length.toLocaleString("tr-TR")} parça seçili. Seçilen alan hepsinde aynı değere ayarlanır.</p>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={tx("Toplu düzenle")}>
+        <h3 style={{ marginTop: 0 }}>{tx("Toplu düzenle")}</h3>
+        <p className="muted">{tx("{0} parça seçili. Seçilen alan hepsinde aynı değere ayarlanır.", partNos.length.toLocaleString(LOCALE))}</p>
         <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 10, alignItems: "center" }}>
-          <label htmlFor="bulk-field">Alan</label>
+          <label htmlFor="bulk-field">{tx("Alan")}</label>
           <select id="bulk-field" value={field} onChange={(e) => { setField(e.target.value as Field); setValue(""); }}>
             {FIELDS.map((f) => <option key={f} value={f}>{FIELD_LABELS[f]}</option>)}
           </select>
-          <label htmlFor="bulk-value">Değer</label>
+          <label htmlFor="bulk-value">{tx("Değer")}</label>
           {options ? (
             <select id="bulk-value" value={value} onChange={(e) => setValue(e.target.value)}>
-              <option value="" disabled>Seçin…</option>
+              <option value="" disabled>{tx("Seçin…")}</option>
               {field === "is_new"
-                ? <><option value="true">Yeni olarak işaretle</option><option value="false">Yeni etiketini kaldır</option></>
-                : options.map((o) => <option key={o} value={o}>{o}</option>)}
+                ? <><option value="true">{tx("Yeni olarak işaretle")}</option><option value="false">{tx("Yeni etiketini kaldır")}</option></>
+                : options.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
               {(field === "procurement_override" || field === "manufacturer" || field === "material_status") && (
-                <option value={CLEAR}>{field === "procurement_override" ? "(BOM değerine dön)" : "(Boşalt)"}</option>
+                <option value={CLEAR}>{field === "procurement_override" ? tx("(BOM değerine dön)") : tx("(Boşalt)")}</option>
               )}
             </select>
           ) : field === "note" || field === "t35_note" ? (
-            <textarea id="bulk-value" rows={3} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Boş bırakılırsa alan temizlenir" />
+            <textarea id="bulk-value" rows={3} value={value} onChange={(e) => setValue(e.target.value)} placeholder={tx("Boş bırakılırsa alan temizlenir")} />
           ) : (
             <input id="bulk-value" value={value} onChange={(e) => setValue(e.target.value)} />
           )}
         </div>
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-          <button className="btn" onClick={onClose} disabled={m.isPending}>Vazgeç</button>
+          <button className="btn" onClick={onClose} disabled={m.isPending}>{tx("Vazgeç")}</button>
           <button className="btn primary" disabled={!valid || m.isPending || partNos.length === 0} onClick={() => m.mutate()}>
-            {m.isPending ? "Uygulanıyor…" : "Uygula"}
+            {m.isPending ? tx("Uygulanıyor…") : tx("Uygula")}
           </button>
         </div>
       </div>

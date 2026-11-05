@@ -16,6 +16,7 @@ import {
 } from "./erp/common";
 import { formTotals } from "./erp/commerce";
 import { Suppliers } from "./erp/suppliers";
+import { LOCALE, tx } from "../api/i18n";
 
 type ListResp = { rows: PurchaseOrder[]; statuses: Record<string, string>; base: string };
 
@@ -53,23 +54,23 @@ export default function Purchasing() {
     <Page>
       {!pid && (
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Siparişler</button>
-          <button role="tab" aria-selected={tab === "suppliers"} className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>Tedarikçiler</button>
+          <button role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>{tx("Siparişler")}</button>
+          <button role="tab" aria-selected={tab === "suppliers"} className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>{tx("Tedarikçiler")}</button>
         </div>
       )}
       {tab === "suppliers" ? <Suppliers /> : <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, marginRight: 8 }}>Satın Alma Siparişleri{project ? ` · ${project.name}` : ""}</h2>
-          {canEdit && <button className="btn primary" onClick={() => setCreating(true)}>+ Yeni sipariş</button>}
-          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Durum">
-            <option value="open">Açık siparişler</option>
-            <option value="">Tümü</option>
-            {Object.entries(list.data?.statuses ?? {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <h2 style={{ margin: 0, marginRight: 8 }}>{tx("Satın Alma Siparişleri")}{project ? ` · ${project.name}` : ""}</h2>
+          {canEdit && <button className="btn primary" onClick={() => setCreating(true)}>{tx("+ Yeni sipariş")}</button>}
+          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={tx("Durum")}>
+            <option value="open">{tx("Açık siparişler")}</option>
+            <option value="">{tx("Tümü")}</option>
+            {Object.entries(list.data?.statuses ?? {}).map(([k, v]) => <option key={k} value={k}>{tx(v)}</option>)}
           </select>
-          {!pid && <ProjectSelect value={projectFilter} onChange={setProjectFilter} emptyLabel="Tüm projeler" />}
-          <input placeholder="Ara (no, firma, not)…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <span className="muted">{rows.length.toLocaleString("tr-TR")} sipariş · {fmtMoney(total)}</span>
-          {noRate > 0 && <span className="badge warn" title="Kuru bilinmediği için toplama katılmadı">{noRate} belgede kur yok</span>}
+          {!pid && <ProjectSelect value={projectFilter} onChange={setProjectFilter} emptyLabel={tx("Tüm projeler")} />}
+          <input placeholder={tx("Ara (no, firma, not)…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <span className="muted">{tx("{0} sipariş · {1}", rows.length.toLocaleString(LOCALE), fmtMoney(total))}</span>
+          {noRate > 0 && <span className="badge warn" title={tx("Kuru bilinmediği için toplama katılmadı")}>{tx("{0} belgede kur yok", noRate)}</span>}
         </div>
         <Loading error={list.error} loading={list.isLoading} />
         {list.data && (
@@ -77,28 +78,28 @@ export default function Purchasing() {
             <table className="simple erp-table">
               <thead>
                 <tr>
-                  <th>Sipariş no</th><th>Firma</th>{!pid && <th>Proje</th>}<th>Durum</th><th>Sipariş tarihi</th>
-                  <th>Termin</th><th className="num">Satır</th><th className="num">Tutar</th><th className="num">Teslim</th>
+                  <th>{tx("Sipariş no")}</th><th>{tx("Firma")}</th>{!pid && <th>{tx("Proje")}</th>}<th>{tx("Durum")}</th><th>{tx("Sipariş tarihi")}</th>
+                  <th>{tx("Termin")}</th><th className="num">{tx("Satır")}</th><th className="num">{tx("Tutar")}</th><th className="num">{tx("Teslim")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="clickable" onClick={() => setOpenId(r.id)}>
                     <td><b>{r.no}</b></td>
-                    <td>{r.firm_name || <span className="muted">(firma yok)</span>}</td>
-                    {!pid && <td>{r.project_name ?? <span className="muted">Stok</span>}</td>}
+                    <td>{r.firm_name || <span className="muted">{tx("(firma yok)")}</span>}</td>
+                    {!pid && <td>{r.project_name ?? <span className="muted">{tx("Stok")}</span>}</td>}
                     <td><span className="badge" style={statusStyle(PO_COLORS[r.status])}>{r.status_label}</span></td>
                     <td>{fmtDay(r.order_date)}</td>
-                    <td className={r.overdue ? "error" : undefined}>{fmtDay(r.due_date)}{r.overdue ? " (gecikti)" : ""}</td>
+                    <td className={r.overdue ? "error" : undefined}>{fmtDay(r.due_date)}{r.overdue ? tx(" (gecikti)") : ""}</td>
                     <td className="num">{r.line_count}</td>
                     <td className="num">
                       {fmtMoney(r.total, r.currency)}
-                      {r.missing_price > 0 && <span className="badge warn" title="Fiyatı girilmemiş satır" style={{ marginLeft: 4 }}>{r.missing_price}</span>}
+                      {r.missing_price > 0 && <span className="badge warn" title={tx("Fiyatı girilmemiş satır")} style={{ marginLeft: 4 }}>{r.missing_price}</span>}
                     </td>
-                    <td className="num">%{r.received_pct.toLocaleString("tr-TR")}</td>
+                    <td className="num">%{r.received_pct.toLocaleString(LOCALE)}</td>
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan={9} className="muted">Sipariş yok.</td></tr>}
+                {!rows.length && <tr><td colSpan={9} className="muted">{tx("Sipariş yok.")}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -145,7 +146,7 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
   });
   const del = useMutation({
     mutationFn: () => api.del(`/purchase-orders/${id}`),
-    onSuccess: () => { toast("Sipariş silindi"); refresh(); onClose(); },
+    onSuccess: () => { toast(tx("Sipariş silindi")); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
 
@@ -162,67 +163,67 @@ export function OrderModal({ id, onClose }: { id: number; onClose: () => void })
   const lines = po?.lines ?? [];
   const received = lines.some((l) => (l.received_qty ?? 0) > 0);
   return (
-    <Modal wide title={po ? `Sipariş ${po.no}` : "Sipariş"} onClose={onClose}
+    <Modal wide title={po ? tx("Sipariş {0}", po.no) : tx("Sipariş")} onClose={onClose}
       footer={po && <>
         <button className="btn" onClick={() => void download(`/purchase-orders/${id}/xlsx`, `${po.no}.xlsx`).catch((e) => toast(errText(e), true))}>
-          Sipariş formu (Excel)
+          {tx("Sipariş formu (Excel)")}
         </button>
-        <button className="btn" onClick={() => setLabels(true)}>QR etiket</button>
+        <button className="btn" onClick={() => setLabels(true)}>{tx("QR etiket")}</button>
         {can("finance", "edit") && s && ["sent", "partial", "received", "closed"].includes(s) && lines.some((l) => (l.billable ?? 0) > 0) && (
-          <button className="btn" onClick={() => setDialog("invoice")}>Alış faturası gir</button>
+          <button className="btn" onClick={() => setDialog("invoice")}>{tx("Alış faturası gir")}</button>
         )}
         <span style={{ flex: 1 }} />
         {canEdit && s === "draft" && <>
-          <button className="btn danger" disabled={busy} onClick={() => confirm(`${po.no} silinsin mi?`) && del.mutate()}>Sil</button>
-          <button className="btn" onClick={() => setEditing(true)}>Düzenle</button>
-          <button className="btn primary" disabled={busy || !po.lines?.length} onClick={() => setStatus.mutate("sent")}>Gönderildi olarak işaretle</button>
+          <button className="btn danger" disabled={busy} onClick={() => confirm(tx("{0} silinsin mi?", po.no)) && del.mutate()}>{tx("Sil")}</button>
+          <button className="btn" onClick={() => setEditing(true)}>{tx("Düzenle")}</button>
+          <button className="btn primary" disabled={busy || !po.lines?.length} onClick={() => setStatus.mutate("sent")}>{tx("Gönderildi olarak işaretle")}</button>
         </>}
-        {canEdit && received && <button className="btn" onClick={() => setDialog("reverse")}>Geri al / iade</button>}
+        {canEdit && received && <button className="btn" onClick={() => setDialog("reverse")}>{tx("Geri al / iade")}</button>}
         {canEdit && (s === "sent" || s === "partial") && <>
-          {s === "sent" && <button className="btn danger" disabled={busy} onClick={() => confirm(`${po.no} iptal edilsin mi?`) && setStatus.mutate("cancelled")}>İptal et</button>}
-          {s === "sent" && <button className="btn" disabled={busy} onClick={() => setStatus.mutate("draft")}>Taslağa al</button>}
-          {s === "partial" && <button className="btn" onClick={() => setDialog("close")}>Eksik kapat</button>}
-          <button className="btn" onClick={() => setEditing(true)}>Başlığı düzenle</button>
-          <button className="btn primary" onClick={() => setDialog("receive")}>Mal kabul</button>
+          {s === "sent" && <button className="btn danger" disabled={busy} onClick={() => confirm(tx("{0} iptal edilsin mi?", po.no)) && setStatus.mutate("cancelled")}>{tx("İptal et")}</button>}
+          {s === "sent" && <button className="btn" disabled={busy} onClick={() => setStatus.mutate("draft")}>{tx("Taslağa al")}</button>}
+          {s === "partial" && <button className="btn" onClick={() => setDialog("close")}>{tx("Eksik kapat")}</button>}
+          <button className="btn" onClick={() => setEditing(true)}>{tx("Başlığı düzenle")}</button>
+          <button className="btn primary" onClick={() => setDialog("receive")}>{tx("Mal kabul")}</button>
         </>}
       </>}>
       <Loading error={q.error} loading={q.isLoading} />
       {po && (
         <>
           <div className="erp-head">
-            <div><span className="muted">Durum</span><span className="badge" style={statusStyle(PO_COLORS[po.status])}>{po.status_label}</span></div>
-            <div><span className="muted">Firma</span><b>{po.firm_name || "—"}</b></div>
-            <div><span className="muted">Proje</span>{po.project_name ?? "Stok (projesiz)"}</div>
-            <div><span className="muted">Sipariş tarihi</span>{fmtDay(po.order_date) || "—"}</div>
-            <div><span className="muted">Termin</span><span className={po.overdue ? "error" : undefined}>{fmtDay(po.due_date) || "—"}</span></div>
-            <div><span className="muted">Oluşturan</span>{po.created_by}</div>
+            <div><span className="muted">{tx("Durum")}</span><span className="badge" style={statusStyle(PO_COLORS[po.status])}>{po.status_label}</span></div>
+            <div><span className="muted">{tx("Firma")}</span><b>{po.firm_name || "—"}</b></div>
+            <div><span className="muted">{tx("Proje")}</span>{po.project_name ?? tx("Stok (projesiz)")}</div>
+            <div><span className="muted">{tx("Sipariş tarihi")}</span>{fmtDay(po.order_date) || "—"}</div>
+            <div><span className="muted">{tx("Termin")}</span><span className={po.overdue ? "error" : undefined}>{fmtDay(po.due_date) || "—"}</span></div>
+            <div><span className="muted">{tx("Oluşturan")}</span>{po.created_by}</div>
             {po.base_total !== po.total && (
-              <div><span className="muted">Kur</span>{po.rate == null ? <span className="badge warn">kur yok</span> : `${fmtRate(po.rate)} · ${fmtMoney(po.base_total)}`}</div>
+              <div><span className="muted">{tx("Kur")}</span>{po.rate == null ? <span className="badge warn">{tx("kur yok")}</span> : `${fmtRate(po.rate)} · ${fmtMoney(po.base_total)}`}</div>
             )}
           </div>
           {po.note && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{po.note}</p>}
           <div className="adm-scroll">
             <table className="simple erp-table">
-              <thead><tr><th>#</th><th>Kod</th><th>Tür</th><th>Açıklama</th><th className="num">Sipariş</th><th className="num">Teslim</th><th className="num">Faturalanan</th><th className="num">Kalan</th><th className="num">Birim fiyat</th><th className="num">Tutar</th></tr></thead>
+              <thead><tr><th>#</th><th>{tx("Kod")}</th><th>{tx("Tür")}</th><th>{tx("Açıklama")}</th><th className="num">{tx("Sipariş")}</th><th className="num">{tx("Teslim")}</th><th className="num">{tx("Faturalanan")}</th><th className="num">{tx("Kalan")}</th><th className="num">{tx("Birim fiyat")}</th><th className="num">{tx("Tutar")}</th></tr></thead>
               <tbody>
                 {lines.map((l) => (
                   <tr key={l.id}>
                     <td>{l.seq}</td><td className="mono">{l.code}</td><td>{l.kind_label}</td><td>{l.description}</td>
-                    <td className="num">{fmtQty(l.qty)} {l.unit}</td><td className="num">{fmtQty(l.received_qty)}</td>
+                    <td className="num">{fmtQty(l.qty)} {tx(l.unit)}</td><td className="num">{fmtQty(l.received_qty)}</td>
                     <td className="num">{fmtQty(l.billed_qty)}</td>
-                    <td className="num">{!l.remaining ? "✓" : s === "closed" ? <span className="muted" title="Sipariş eksik kapatıldı, gelmeyecek">{fmtQty(l.remaining)} kapatıldı</span> : <b>{fmtQty(l.remaining)}</b>}</td>
-                    <td className="num">{l.unit_price == null ? <span className="badge warn">fiyat yok</span> : fmtMoney(l.unit_price, po.currency)}</td>
+                    <td className="num">{!l.remaining ? "✓" : s === "closed" ? <span className="muted" title={tx("Sipariş eksik kapatıldı, gelmeyecek")}>{tx("{0} kapatıldı", fmtQty(l.remaining))}</span> : <b>{fmtQty(l.remaining)}</b>}</td>
+                    <td className="num">{l.unit_price == null ? <span className="badge warn">{tx("fiyat yok")}</span> : fmtMoney(l.unit_price, po.currency)}</td>
                     <td className="num">{fmtMoney(l.amount, po.currency)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr><td colSpan={9} className="num"><b>Toplam</b></td><td className="num"><b>{fmtMoney(po.total, po.currency)}</b></td></tr></tfoot>
+              <tfoot><tr><td colSpan={9} className="num"><b>{tx("Toplam")}</b></td><td className="num"><b>{fmtMoney(po.total, po.currency)}</b></td></tr></tfoot>
             </table>
           </div>
           {po.project_id && (s === "draft") && (
-            <p className="muted">Gönderildiğinde projedeki parçalar "Sipariş Verildi", mal kabulden sonra "Sipariş Teslim Edildi" olur.</p>
+            <p className="muted">{tx("Gönderildiğinde projedeki parçalar \"Sipariş Verildi\", mal kabulden sonra \"Sipariş Teslim Edildi\" olur.")}</p>
           )}
-          <MoveHistory title="Mal kabul hareketleri" backLabel="geri alındı" rows={(po.receipts ?? []).map((r) => ({ ...r, at: r.received_at }))} />
+          <MoveHistory title={tx("Mal kabul hareketleri")} backLabel={tx("geri alındı")} rows={(po.receipts ?? []).map((r) => ({ ...r, at: r.received_at }))} />
         </>
       )}
     </Modal>
@@ -263,30 +264,30 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
       }
       return order ? saveRev(order.rev, (rev) => api.put<PurchaseOrder>(`/purchase-orders/${order.id}`, { ...body, rev })) : api.post<PurchaseOrder>("/purchase-orders", body);
     },
-    onSuccess: (po) => { toast(order ? "Sipariş güncellendi" : `${po.no} oluşturuldu`); refresh(); onSaved(po); },
+    onSuccess: (po) => { toast(order ? tx("Sipariş güncellendi") : tx("{0} oluşturuldu", po.no)); refresh(); onSaved(po); },
     onError: (e) => toast(errText(e), true),
   });
 
   return (
-    <Modal wide title={order ? `Siparişi düzenle: ${order.no}` : "Yeni satın alma siparişi"} onClose={onClose}
+    <Modal wide title={order ? tx("Siparişi düzenle: {0}", order.no) : tx("Yeni satın alma siparişi")} onClose={onClose}
       footer={<>
-        {draft && <span className="muted" style={{ marginRight: "auto" }}>Toplam: <b>{fmtMoney(total, currency)}</b></span>}
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+        {draft && <span className="muted" style={{ marginRight: "auto" }}>{tx("Toplam:")}{" "}<b>{fmtMoney(total, currency)}</b></span>}
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
       <div className="adm-form two">
-        <Field label="Tedarikçi"><FirmSelect kind="supplier" value={firmId} onChange={setFirmId} /></Field>
-        <Field label="Proje" hint={draft ? "Boş bırakılırsa mallar stoğa girer." : "Proje yalnızca taslakta değişir."}>
-          {draft ? <ProjectSelect value={project} onChange={setProject} emptyLabel="(Stok için, projesiz)" /> : <input disabled value={order?.project_name ?? "Stok"} />}
+        <Field label={tx("Tedarikçi")}><FirmSelect kind="supplier" value={firmId} onChange={setFirmId} /></Field>
+        <Field label={tx("Proje")} hint={draft ? tx("Boş bırakılırsa mallar stoğa girer.") : tx("Proje yalnızca taslakta değişir.")}>
+          {draft ? <ProjectSelect value={project} onChange={setProject} emptyLabel={tx("(Stok için, projesiz)")} /> : <input disabled value={order?.project_name ?? "Stok"} />}
         </Field>
-        <Field label="Termin"><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
+        <Field label={tx("Termin")}><input type="date" value={due ?? ""} onChange={(e) => setDue(e.target.value)} /></Field>
         <CurrencyRate currency={currency} setCurrency={setCurrency} rate={rate} setRate={setRate} day={order?.order_date} locked={rateLocked} />
-        <Field label="Not"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label={tx("Not")}><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
       {draft ? (
         <div className="adm-scroll" style={{ marginTop: 12 }}>
           <table className="simple erp-table erp-lines">
-            <thead><tr><th>Kod (parça no)</th><th>Tür</th><th>Açıklama</th><th>Birim</th><th>Miktar</th><th>Birim fiyat ({currency})</th><th className="num">Tutar</th><th></th></tr></thead>
+            <thead><tr><th>{tx("Kod (parça no)")}</th><th>{tx("Tür")}</th><th>{tx("Açıklama")}</th><th>{tx("Birim")}</th><th>{tx("Miktar")}</th><th>{tx("Birim fiyat ({0})", currency)}</th><th className="num">{tx("Tutar")}</th><th></th></tr></thead>
             <tbody>
               {lines.map((l, i) => (
                 <tr key={i}>
@@ -304,7 +305,7 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
                     onChange={(e) => setPrices((p) => { const n = [...p]; n[i] = e.target.value; return n; })} /></td>
                   <td className="num">{fmtMoney((numOrNull(prices[i] ?? "") ?? 0) * (l.qty || 0), currency)}</td>
                   <td>
-                    <button className="btn small" aria-label="Satırı sil" onClick={() => {
+                    <button className="btn small" aria-label={tx("Satırı sil")} onClick={() => {
                       setLines((ls) => ls.filter((_, j) => j !== i));
                       setPrices((p) => p.filter((_, j) => j !== i));
                     }}>✕</button>
@@ -313,10 +314,10 @@ function OrderEditor({ order, projectId, onClose, onSaved }: {
               ))}
             </tbody>
           </table>
-          <button className="btn small" style={{ marginTop: 6 }} onClick={() => { setLines((ls) => [...ls, emptyLine()]); setPrices((p) => [...p, ""]); }}>+ Satır ekle</button>
+          <button className="btn small" style={{ marginTop: 6 }} onClick={() => { setLines((ls) => [...ls, emptyLine()]); setPrices((p) => [...p, ""]); }}>{tx("+ Satır ekle")}</button>
         </div>
       ) : (
-        <p className="muted">Gönderilmiş siparişin satırları değiştirilemez; yalnızca firma, termin ve not güncellenir.</p>
+        <p className="muted">{tx("Gönderilmiş siparişin satırları değiştirilemez; yalnızca firma, termin ve not güncellenir.")}</p>
       )}
     </Modal>
   );
@@ -333,22 +334,22 @@ function ReceiveModal({ order, onClose }: { order: PurchaseOrder; onClose: () =>
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <QtyModal title={`Mal kabul: ${order.no}`} qtyLabel="Bu teslimat" submit="Teslim al" noteLabel="Not (irsaliye no vb.)" busy={save.isPending}
+    <QtyModal title={tx("Mal kabul: {0}", order.no)} qtyLabel={tx("Bu teslimat")} submit={tx("Teslim al")} noteLabel={tx("Not (irsaliye no vb.)")} busy={save.isPending}
       ready={!order.needs_rate || (typedRate ?? 0) > 0}
       intro={order.project_id
-        ? `Teslim alınan miktar stoğa girer ve aynı anda "${order.project_name}" projesine çıkılır.`
-        : "Teslim alınan miktar stoğa girer."}
-      heads={["Sipariş", "Teslim alınan"]}
+        ? tx("Teslim alınan miktar stoğa girer ve aynı anda \"{0}\" projesine çıkılır.", order.project_name)
+        : tx("Teslim alınan miktar stoğa girer.")}
+      heads={[tx("Sipariş"), tx("Teslim alınan")]}
       rows={(order.lines ?? []).filter((l) => (l.remaining ?? 0) > 0).map((l) => ({
         id: l.id!, code: l.code, description: l.description, unit: l.unit,
-        cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.received_qty)], start: l.remaining ?? 0,
+        cells: [`${fmtQty(l.qty)} ${tx(l.unit)}`, fmtQty(l.received_qty)], start: l.remaining ?? 0,
       }))}
       onSubmit={(lines, note) => save.mutate(order.needs_rate ? { lines, note, rate: typedRate } : { lines, note })} onClose={onClose}>
       {order.needs_rate && (
         <div style={{ marginTop: 10 }}>
-          <Field label={`Kur (1 ${order.currency} = ? ${sys.currency})`}
-            hint="Bu sipariş için kur bulunamadı. Stok maliyeti bu kurla hesaplanır, girilen değer siparişe yazılır.">
-            <input autoFocus inputMode="decimal" aria-label="Kur" value={rate} onChange={(e) => setRate(e.target.value)} />
+          <Field label={tx("Kur (1 {0} = ? {1})", order.currency, sys.currency)}
+            hint={tx("Bu sipariş için kur bulunamadı. Stok maliyeti bu kurla hesaplanır, girilen değer siparişe yazılır.")}>
+            <input autoFocus inputMode="decimal" aria-label={tx("Kur")} value={rate} onChange={(e) => setRate(e.target.value)} />
           </Field>
         </div>
       )}
@@ -366,25 +367,25 @@ function ReverseModal({ order, onClose }: { order: PurchaseOrder; onClose: () =>
       api.post<PurchaseOrder & { credits?: { no: string }[] }>(`/purchase-orders/${order.id}/reverse`, body),
     onSuccess: (po) => {
       const made = (po.credits ?? []).map((c) => c.no).join(", ");
-      toast(made ? `${po.no}: ${po.status_label}. Taslak iade faturası: ${made}` : `${po.no}: ${po.status_label}`);
+      toast(made ? tx("{0}: {1}. Taslak iade faturası: {2}", po.no, po.status_label, made) : `${po.no}: ${po.status_label}`);
       refresh();
       onClose();
     },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <QtyModal danger title={`Geri al / iade: ${order.no}`} qtyLabel="Geri alınacak" submit="Geri al" noteLabel="Neden (hatalı kabul, kusurlu mal vb.)" busy={save.isPending}
-      intro={`Mal stoktan geldiği maliyetle çıkar${order.project_id ? ", önce projeden geri alınır" : ""}. Stokta kalmadıysa işlem yapılmaz.`}
-      heads={["Sipariş", "Teslim alınan"]}
+    <QtyModal danger title={tx("Geri al / iade: {0}", order.no)} qtyLabel={tx("Geri alınacak")} submit={tx("Geri al")} noteLabel={tx("Neden (hatalı kabul, kusurlu mal vb.)")} busy={save.isPending}
+      intro={tx("Mal stoktan geldiği maliyetle çıkar{0}. Stokta kalmadıysa işlem yapılmaz.", order.project_id ? tx(", önce projeden geri alınır") : "")}
+      heads={[tx("Sipariş"), tx("Teslim alınan")]}
       rows={(order.lines ?? []).filter((l) => (l.received_qty ?? 0) > 0).map((l) => ({
         id: l.id!, code: l.code, description: l.description, unit: l.unit,
-        cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.received_qty)], start: 0, max: l.received_qty,
+        cells: [`${fmtQty(l.qty)} ${tx(l.unit)}`, fmtQty(l.received_qty)], start: 0, max: l.received_qty,
       }))}
       onSubmit={(lines, note) => save.mutate({ lines, note, credit_note: credit })} onClose={onClose}>
       {canBill && (
         <label className="row" style={{ marginTop: 10 }}>
           <input type="checkbox" checked={credit} onChange={(e) => setCredit(e.target.checked)} />
-          Faturalanmış miktar için alış iade faturası oluştur (taslak olarak, Fatura ve ödeme ekranından kesilir)
+          {tx("Faturalanmış miktar için alış iade faturası oluştur (taslak olarak, Fatura ve ödeme ekranından kesilir)")}
         </label>
       )}
     </QtyModal>
@@ -402,14 +403,14 @@ function CloseModal({ order, onClose }: { order: PurchaseOrder; onClose: () => v
   });
   const left = (order.lines ?? []).filter((l) => (l.remaining ?? 0) > 0);
   return (
-    <Modal title={`Eksik kapat: ${order.no}`} onClose={onClose}
+    <Modal title={tx("Eksik kapat: {0}", order.no)} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>Siparişi kapat</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending} onClick={() => save.mutate()}>{tx("Siparişi kapat")}</button>
       </>}>
-      <p className="muted">Teslim alınanlar kalır, gelmeyen miktar serbest kalır ve yeniden sipariş edilebilir. Proje maliyetinde yalnızca teslim alınan değer sayılır.</p>
-      <ul>{left.map((l) => <li key={l.id}>{l.code || l.description}: {fmtQty(l.remaining)} {l.unit} gelmeyecek</li>)}</ul>
-      <Field label="Not"><input maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      <p className="muted">{tx("Teslim alınanlar kalır, gelmeyen miktar serbest kalır ve yeniden sipariş edilebilir. Proje maliyetinde yalnızca teslim alınan değer sayılır.")}</p>
+      <ul>{left.map((l) => <li key={l.id}>{l.code || l.description}{tx(": {0} {1} gelmeyecek", fmtQty(l.remaining), l.unit)}</li>)}</ul>
+      <Field label={tx("Not")}><input maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
     </Modal>
   );
 }
@@ -420,19 +421,19 @@ function InvoiceModal({ order, onClose }: { order: PurchaseOrder; onClose: () =>
   const [no, setNo] = useState("");
   const save = useMutation({
     mutationFn: (lines: { line_id: number; qty: number }[]) => api.post<{ no: string }>(`/purchase-orders/${order.id}/invoice`, { no: no.trim(), lines }),
-    onSuccess: (r) => { toast(`Alış faturası ${r.no} taslak olarak oluşturuldu (Fatura ve ödeme)`); refresh(); onClose(); },
+    onSuccess: (r) => { toast(tx("Alış faturası {0} taslak olarak oluşturuldu (Fatura ve ödeme)", r.no)); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <QtyModal title={`Alış faturası: ${order.no}`} qtyLabel="Faturalanacak" submit="Taslak fatura oluştur" noteLabel={null} busy={save.isPending} ready={!!no.trim()}
-      intro="Teslim alınıp faturalanmamış miktar hazır gelir."
-      heads={["Sipariş", "Teslim alınan", "Faturalanan"]}
+    <QtyModal title={tx("Alış faturası: {0}", order.no)} qtyLabel={tx("Faturalanacak")} submit={tx("Taslak fatura oluştur")} noteLabel={null} busy={save.isPending} ready={!!no.trim()}
+      intro={tx("Teslim alınıp faturalanmamış miktar hazır gelir.")}
+      heads={[tx("Sipariş"), tx("Teslim alınan"), tx("Faturalanan")]}
       rows={(order.lines ?? []).filter((l) => (l.billable ?? 0) > 0).map((l) => ({
         id: l.id!, code: l.code, description: l.description, unit: l.unit,
-        cells: [`${fmtQty(l.qty)} ${l.unit}`, fmtQty(l.received_qty), fmtQty(l.billed_qty)], start: l.to_bill ?? 0, max: l.billable,
+        cells: [`${fmtQty(l.qty)} ${tx(l.unit)}`, fmtQty(l.received_qty), fmtQty(l.billed_qty)], start: l.to_bill ?? 0, max: l.billable,
       }))}
       onSubmit={(lines) => save.mutate(lines)} onClose={onClose}>
-      <div style={{ marginTop: 10 }}><Field label="Tedarikçi fatura numarası"><input autoFocus maxLength={40} value={no} onChange={(e) => setNo(e.target.value)} /></Field></div>
+      <div style={{ marginTop: 10 }}><Field label={tx("Tedarikçi fatura numarası")}><input autoFocus maxLength={40} value={no} onChange={(e) => setNo(e.target.value)} /></Field></div>
     </QtyModal>
   );
 }

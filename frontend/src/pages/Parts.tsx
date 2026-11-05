@@ -15,6 +15,7 @@ import PartNamesModal from "../components/PartNamesModal";
 import T35ImportModal from "../components/T35ImportModal";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
+import { LOCALE, tx } from "../api/i18n";
 
 // backend/app/api/excel.py: GET /excel/{project_id}/parca-takip and /takip-listesi
 const EXPORT_PARCA_TAKIP = (pid: number) => `/excel/${pid}/parca-takip`;
@@ -32,10 +33,10 @@ const LS = { view: "parts.view", widths: "parts.colWidths", inPurchased: "parts.
 // Row-type chips; the flat view starts without assemblies (the old "Sadece parçalar" behaviour)
 type Kind = "part" | "asm" | "purasm" | "fastener";
 const KINDS: { key: Kind; label: string }[] = [
-  { key: "part", label: "Parça" },
-  { key: "asm", label: "Montaj" },
-  { key: "purasm", label: "Satın alınan montaj" },
-  { key: "fastener", label: "Bağlantı elemanı" },
+  { key: "part", label: tx("Parça") },
+  { key: "asm", label: tx("Montaj") },
+  { key: "purasm", label: tx("Satın alınan montaj") },
+  { key: "fastener", label: tx("Bağlantı elemanı") },
 ];
 const DEFAULT_KINDS: Record<View, Kind[]> = { tree: ["part", "asm", "purasm", "fastener"], flat: ["part", "purasm", "fastener"] };
 const rowKind = (r: PartRow): Kind =>
@@ -76,7 +77,7 @@ function save(key: string, v: unknown): void {
   try { localStorage.setItem(key, JSON.stringify(v)); savePref(key); } catch { /* storage unavailable */ }
 }
 
-const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("tr-TR"));
+const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString(LOCALE));
 const getRowId = (r: GridRow) => r._key;
 const rowStyle = (r: GridRow): CSSProperties | undefined => (r._dim ? { opacity: 0.35 } : r.archived ? { opacity: 0.55 } : undefined);
 const cardColor = (r: GridRow) => (r.status_color ? `#${r.status_color}` : undefined);
@@ -84,8 +85,8 @@ const tracked = (r: PartRow) => !r.fastener && !r.archived && (r.depth ?? 1) > 0
 
 function drawingText(r: PartRow): string {
   if (r.archived || r.fastener) return "";
-  if (r.has_drawing) return `Var${r.drawing_rev ? ` (Rev ${r.drawing_rev})` : ""}${r.drawing_rev_mismatch ? " · Rev farkı" : ""}`;
-  if (r.needs_drawing && !r.in_purchased) return "Resim yok";
+  if (r.has_drawing) return tx("Var{0}{1}", r.drawing_rev ? tx(" (Rev {0})", r.drawing_rev) : "", r.drawing_rev_mismatch ? tx(" · Rev farkı") : "");
+  if (r.needs_drawing && !r.in_purchased) return tx("Resim yok");
   return "";
 }
 
@@ -313,8 +314,8 @@ export default function Parts() {
     },
     onSuccess: (res) => {
       if (res.conflicts.length) setClashes(res.conflicts);
-      if (res.error_count) toast(`${res.error_count.toLocaleString("tr-TR")} hücre kaydedilemedi: ${res.errors[0]}`, true);
-      else if (res.not_found.length) toast(`${res.not_found.length.toLocaleString("tr-TR")} parça bulunamadı`, true);
+      if (res.error_count) toast(tx("{0} hücre kaydedilemedi: {1}", res.error_count.toLocaleString(LOCALE), res.errors[0]), true);
+      else if (res.not_found.length) toast(tx("{0} parça bulunamadı", res.not_found.length.toLocaleString(LOCALE)), true);
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["parts", pid] });
@@ -347,7 +348,7 @@ export default function Parts() {
     const mans = choices?.manufacturers ?? [];
     return [
       {
-        id: "level", header: "Seviye", size: w("level", view === "tree" ? 170 : 110), card: view === "tree" ? "hide" : "field",
+        id: "level", header: tx("Seviye"), size: w("level", view === "tree" ? 170 : 110), card: view === "tree" ? "hide" : "field",
         accessorFn: (r) => (r.levels && r.levels.length > 1 ? `${r.levels[0]} (+${r.levels.length - 1})` : r.level ?? ""),
         cell: ({ row, getValue }) => {
           const r = row.original;
@@ -355,7 +356,7 @@ export default function Parts() {
           return (
             <span style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
               {r._kids ? (
-                <button className="tree-toggle" aria-label={r._open ? "Daralt" : "Genişlet"} aria-expanded={r._open}
+                <button className="tree-toggle" aria-label={r._open ? tx("Daralt") : tx("Genişlet")} aria-expanded={r._open}
                   onClick={(e) => { e.stopPropagation(); toggleRef.current(r._key); }}>{r._open ? "▾" : "▸"}</button>
               ) : <span className="tree-spacer" />}
               {r.level}
@@ -364,62 +365,62 @@ export default function Parts() {
         },
       },
       {
-        id: "part_no", accessorKey: "part_no", header: "Parça No", size: w("part_no", 200), card: "title",
+        id: "part_no", accessorKey: "part_no", header: tx("Parça No"), size: w("part_no", 200), card: "title",
         cellStyle: (r) => (r.is_new ? statusStyle(colors.new || NEW_COLOR) : undefined),
         cell: ({ row }) => <span style={{ fontWeight: row.original.is_assembly ? 600 : 400 }}>{row.original.part_no}</span>,
       },
       {
-        id: "part_name", header: "Parça Adı", size: w("part_name", 190), card: "sub", accessorFn: (r) => r.part_name ?? "",
+        id: "part_name", header: tx("Parça Adı"), size: w("part_name", 190), card: "sub", accessorFn: (r) => r.part_name ?? "",
         edit: { type: "text", canEdit: namable },
       },
-      { id: "row_type", header: "Tip", size: w("row_type", 120), card: "sub", accessorFn: (r) => (r.archived ? "Arşivlenmiş" : r.row_type ?? "") },
-      { id: "main_group", accessorKey: "main_group", header: "Ana Grup", size: w("main_group", 150) },
-      { id: "parent_part_no", accessorKey: "parent_part_no", header: "Üst Montaj", size: w("parent_part_no", 170), card: view === "tree" ? "hide" : "field" },
-      { id: "qty", accessorKey: "qty", header: "Adet", size: w("qty", 70), cell: ({ getValue }) => fmt(getValue() as number) },
-      { id: "total_qty", accessorKey: "total_qty", header: "Toplam Adet", size: w("total_qty", 95), cell: ({ getValue }) => fmt(getValue() as number) },
-      { id: "material", accessorKey: "material", header: "Malzeme", size: w("material", 130) },
-      { id: "weight", accessorKey: "weight", header: "Ağırlık (g)", size: w("weight", 80), cell: ({ getValue }) => fmt(getValue() as number | null) },
+      { id: "row_type", header: tx("Tip"), size: w("row_type", 120), card: "sub", accessorFn: (r) => (r.archived ? tx("Arşivlenmiş") : r.row_type ?? "") },
+      { id: "main_group", accessorKey: "main_group", header: tx("Ana Grup"), size: w("main_group", 150) },
+      { id: "parent_part_no", accessorKey: "parent_part_no", header: tx("Üst Montaj"), size: w("parent_part_no", 170), card: view === "tree" ? "hide" : "field" },
+      { id: "qty", accessorKey: "qty", header: tx("Adet"), size: w("qty", 70), cell: ({ getValue }) => fmt(getValue() as number) },
+      { id: "total_qty", accessorKey: "total_qty", header: tx("Toplam Adet"), size: w("total_qty", 95), cell: ({ getValue }) => fmt(getValue() as number) },
+      { id: "material", accessorKey: "material", header: tx("Malzeme"), size: w("material", 130) },
+      { id: "weight", accessorKey: "weight", header: tx("Ağırlık (g)"), size: w("weight", 80), cell: ({ getValue }) => fmt(getValue() as number | null) },
       {
-        id: "procurement", header: "Temin Şekli", size: w("procurement", 120),
+        id: "procurement", header: tx("Temin Şekli"), size: w("procurement", 120),
         accessorFn: (r) => r.procurement ?? r.procurement_override ?? "",
         cellStyle: (r) => (r.procurement === NONE ? { color: "var(--danger)", fontWeight: 600 } : undefined),
         cell: ({ row, getValue }) => (
-          <>{getValue() as string}{row.original.procurement_override ? <span className="muted" title="Elle değiştirildi"> *</span> : null}</>
+          <>{tx(getValue() as string)}{row.original.procurement_override ? <span className="muted" title={tx("Elle değiştirildi")}> *</span> : null}</>
         ),
         edit: { type: "select", options: [...(choices?.temin_choices ?? []), RESET_PROC], canEdit: (r) => can(r) && !r.is_purchased_assembly },
       },
-      { id: "coating", accessorKey: "coating", header: "Kaplama", size: w("coating", 100) },
-      { id: "rev", accessorKey: "rev", header: "Rev", size: w("rev", 60) },
+      { id: "coating", accessorKey: "coating", header: tx("Kaplama"), size: w("coating", 100) },
+      { id: "rev", accessorKey: "rev", header: tx("Rev"), size: w("rev", 60) },
       {
-        id: "progress", accessorKey: "progress", header: "İlerleme", size: w("progress", 115),
+        id: "progress", accessorKey: "progress", header: tx("İlerleme"), size: w("progress", 115),
         edit: { type: "select", options: choices?.progress_choices ?? [], canEdit: can },
       },
       {
-        id: "status", accessorKey: "status", header: "Durum", size: w("status", 160), card: "badge",
+        id: "status", accessorKey: "status", header: tx("Durum"), size: w("status", 160), card: "badge",
         cellStyle: (r) => statusStyle(r.status_color),
       },
       {
-        id: "manufacturer", accessorKey: "manufacturer", header: "Üretici", size: w("manufacturer", 120),
+        id: "manufacturer", accessorKey: "manufacturer", header: tx("Üretici"), size: w("manufacturer", 120),
         edit: mans.length ? { type: "select", options: ["", ...mans], canEdit: can } : { type: "text", canEdit: can },
       },
-      { id: "t35_note", accessorKey: "t35_note", header: "Durum Notu", size: w("t35_note", 210), edit: { type: "text", canEdit: can } },
-      { id: "note", accessorKey: "note", header: "Not", size: w("note", 210), edit: { type: "text", canEdit: can } },
+      { id: "t35_note", accessorKey: "t35_note", header: tx("Durum Notu"), size: w("t35_note", 210), edit: { type: "text", canEdit: can } },
+      { id: "note", accessorKey: "note", header: tx("Not"), size: w("note", 210), edit: { type: "text", canEdit: can } },
       {
-        id: "drawing", header: "Teknik Resim", size: w("drawing", 140), accessorFn: drawingText,
+        id: "drawing", header: tx("Teknik Resim"), size: w("drawing", 140), accessorFn: drawingText,
         cell: ({ getValue, row }) => {
           const t = getValue() as string;
-          if (t === "Resim yok") return <span className="badge warn">Resim yok</span>;
-          if (row.original.drawing_rev_mismatch) return <span className="warn" title="Resim revizyonu BOM revizyonundan farklı">{t}</span>;
+          if (t === tx("Resim yok")) return <span className="badge warn">{tx("Resim yok")}</span>;
+          if (row.original.drawing_rev_mismatch) return <span className="warn" title={tx("Resim revizyonu BOM revizyonundan farklı")}>{t}</span>;
           return t;
         },
       },
       {
-        id: "material_status", accessorKey: "material_status", header: "Malzeme Durumu", size: w("material_status", 140),
+        id: "material_status", accessorKey: "material_status", header: tx("Malzeme Durumu"), size: w("material_status", 140),
         edit: { type: "select", options: ["", ...(choices?.material_status_choices ?? [])], canEdit: can },
       },
       {
-        id: "is_new", header: "Yeni", size: w("is_new", 70), accessorFn: (r) => (r.is_new ? "Yeni" : ""), card: "badge",
-        cell: ({ getValue }) => (getValue() ? <span className="badge new">Yeni</span> : null),
+        id: "is_new", header: tx("Yeni"), size: w("is_new", 70), accessorFn: (r) => (r.is_new ? "Yeni" : ""), card: "badge",
+        cell: ({ getValue }) => (getValue() ? <span className="badge new">{tx("Yeni")}</span> : null),
         edit: { type: "select", options: ["Yeni", ""], canEdit: can },
       },
     ];
@@ -454,7 +455,7 @@ export default function Parts() {
   const bulk = useMutation({
     mutationFn: (changes: Record<string, unknown>) => api.post<{ updated: number }>(`/projects/${pid}/parts/bulk`, { part_nos: selectedPartNos, changes }),
     onSuccess: (r) => {
-      toast(`${r.updated.toLocaleString("tr-TR")} parça güncellendi`);
+      toast(tx("{0} parça güncellendi", r.updated.toLocaleString(LOCALE)));
       qc.invalidateQueries({ queryKey: ["parts", pid] });
       qc.invalidateQueries({ queryKey: ["dashboard", pid] });
     },
@@ -477,7 +478,7 @@ export default function Parts() {
     onError: (e) => toast(errText(e), true),
   });
 
-  const base = (project?.root_part_no || "Proje").replace(/[^\w.-]+/g, "_");
+  const base = (project?.root_part_no || tx("Proje")).replace(/[^\w.-]+/g, "_");
   const xlsxFile = (kind: "pt" | "tl"): MailFile => kind === "pt"
     ? { path: EXPORT_PARCA_TAKIP(pid), name: `${base}_Parca_Takip.xlsx` }
     : { path: EXPORT_TAKIP_LISTESI(pid), name: `${base}_Takip_Listesi.xlsx` };
@@ -501,7 +502,7 @@ export default function Parts() {
     return (
       <span className="tree-lead" style={{ "--d": Math.min(r.depth ?? 0, 8) } as CSSProperties}>
         {r._kids ? (
-          <button className="tree-toggle" aria-label={r._open ? "Daralt" : "Genişlet"} aria-expanded={r._open}
+          <button className="tree-toggle" aria-label={r._open ? tx("Daralt") : tx("Genişlet")} aria-expanded={r._open}
             onClick={(e) => { e.stopPropagation(); toggleRef.current(r._key); }}>{r._open ? "▾" : "▸"}</button>
         ) : null}
         <span className="tree-level">{r.level}</span>
@@ -511,17 +512,17 @@ export default function Parts() {
   return (
     <Page full>
       <div className="toolbar parts-top" onClick={(e) => e.target === e.currentTarget && setMenu(null)}>
-        <div className="seg" role="radiogroup" aria-label="Görünüm">
-          <button role="radio" aria-checked={view === "tree"} className={view === "tree" ? "on" : ""} onClick={() => setView("tree")}>Ağaç</button>
-          <button role="radio" aria-checked={view === "flat"} className={view === "flat" ? "on" : ""} onClick={() => setView("flat")}>Düz liste</button>
+        <div className="seg" role="radiogroup" aria-label={tx("Görünüm")}>
+          <button role="radio" aria-checked={view === "tree"} className={view === "tree" ? "on" : ""} onClick={() => setView("tree")}>{tx("Ağaç")}</button>
+          <button role="radio" aria-checked={view === "flat"} className={view === "flat" ? "on" : ""} onClick={() => setView("flat")}>{tx("Düz liste")}</button>
         </div>
         <div className="dg-menu-wrap">
           <button className={`btn small${shownChanged ? " primary" : ""}`} onClick={() => setMenu(menu === "show" ? null : "show")} aria-haspopup="true">
-            Göster ▾
+            {tx("Göster ▾")}
           </button>
           {menu === "show" && (
             <div className="dg-menu card parts-show">
-              <div className="row kind-chips" role="group" aria-label="Satır tipi filtresi">
+              <div className="row kind-chips" role="group" aria-label={tx("Satır tipi filtresi")}>
                 {KINDS.filter((k) => kindCounts[k.key] > 0).map((k) => (
                   <button key={k.key} className={`chip${kinds.has(k.key) ? " on" : ""}`} aria-pressed={kinds.has(k.key)}
                     onClick={() => toggleKind(k.key)}>
@@ -531,39 +532,39 @@ export default function Parts() {
               </div>
               <label className="row" style={{ gap: 6 }}>
                 <input type="checkbox" checked={inPurchased} onChange={(e) => setInPurchased(e.target.checked)} />
-                Satın alınan montajların içi
+                {tx("Satın alınan montajların içi")}
               </label>
               <label className="row" style={{ gap: 6 }}>
                 <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-                Arşivlenenler
+                {tx("Arşivlenenler")}
               </label>
-              <button className="btn small" onClick={() => setMenu(null)}>Tamam</button>
+              <button className="btn small" onClick={() => setMenu(null)}>{tx("Tamam")}</button>
             </div>
           )}
         </div>
         <div className="dg-menu-wrap">
           <button className="btn small" disabled={!!exporting} onClick={() => setMenu(menu === "export" ? null : "export")} aria-haspopup="menu">
-            {exporting ? "Hazırlanıyor…" : "Excel / e-posta ▾"}
+            {exporting ? tx("Hazırlanıyor…") : tx("Excel / e-posta ▾")}
           </button>
           {menu === "export" && (
             <div className="dg-menu card" role="menu">
-              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("pt")}>Excel indir: Parça Takip</button>
-              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("tl")}>Excel indir: Takip Listesi</button>
+              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("pt")}>{tx("Excel indir: Parça Takip")}</button>
+              <button role="menuitem" className="btn small" onClick={() => void exportXlsx("tl")}>{tx("Excel indir: Takip Listesi")}</button>
               {canMail && <>
-              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("pt")); }}>E-posta ile gönder: Parça Takip</button>
-              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("tl")); }}>E-posta ile gönder: Takip Listesi</button>
+              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("pt")); }}>{tx("E-posta ile gönder: Parça Takip")}</button>
+              <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setMail(xlsxFile("tl")); }}>{tx("E-posta ile gönder: Takip Listesi")}</button>
               </>}
             </div>
           )}
         </div>
         {canEdit && (
           <div className="dg-menu-wrap">
-            <button className="btn small" onClick={() => setMenu(menu === "import" ? null : "import")} aria-haspopup="menu">İçe aktar ▾</button>
+            <button className="btn small" onClick={() => setMenu(menu === "import" ? null : "import")} aria-haspopup="menu">{tx("İçe aktar ▾")}</button>
             {menu === "import" && (
               <div className="dg-menu card" role="menu">
-                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>Excel'den içe aktar</button>
-                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>Durum listesi içe aktar</button>
-                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("names"); }}>Parça adlarını yapıştır</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>{tx("Excel'den içe aktar")}</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>{tx("Durum listesi içe aktar")}</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("names"); }}>{tx("Parça adlarını yapıştır")}</button>
               </div>
             )}
           </div>
@@ -573,7 +574,7 @@ export default function Parts() {
       {mainQ.isError ? (
         <div className="error" style={{ padding: 16 }}>{errText(mainQ.error)}</div>
       ) : loading ? (
-        <div className="muted" style={{ padding: 16 }}>Yükleniyor…</div>
+        <div className="muted" style={{ padding: 16 }}>{tx("Yükleniyor…")}</div>
       ) : (
         <div className="parts-wrap">
           <DataGrid<GridRow>
@@ -593,39 +594,39 @@ export default function Parts() {
             stateKey="parts"
             selectionActions={canEdit ? (
               <>
-                <select className="dg-bulk" aria-label="Seçilenlere ilerleme ata" value="" disabled={!selectedPartNos.length || bulk.isPending}
+                <select className="dg-bulk" aria-label={tx("Seçilenlere ilerleme ata")} value="" disabled={!selectedPartNos.length || bulk.isPending}
                   onChange={(e) => e.target.value && bulk.mutate({ progress: e.target.value })}>
-                  <option value="">İlerleme ata…</option>
-                  {choices?.progress_choices.map((o) => <option key={o} value={o}>{o}</option>)}
+                  <option value="">{tx("İlerleme ata…")}</option>
+                  {choices?.progress_choices.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
                 </select>
-                <select className="dg-bulk" aria-label="Seçilenlere temin şekli ata" value="" disabled={!selectedPartNos.length || bulk.isPending}
+                <select className="dg-bulk" aria-label={tx("Seçilenlere temin şekli ata")} value="" disabled={!selectedPartNos.length || bulk.isPending}
                   onChange={(e) => e.target.value && bulk.mutate({ procurement_override: e.target.value })}>
-                  <option value="">Temin ata…</option>
-                  {choices?.temin_choices.map((o) => <option key={o} value={o}>{o}</option>)}
+                  <option value="">{tx("Temin ata…")}</option>
+                  {choices?.temin_choices.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
                 </select>
-                <button className="btn small" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>Diğer alanlar</button>
+                <button className="btn small" disabled={!selectedPartNos.length} onClick={() => setBulkOpen(true)}>{tx("Diğer alanlar")}</button>
                 <button className="btn small" disabled={!selectedCount || hide.isPending} onClick={() => hide.mutate(!allHidden)}
-                  title="Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez.">
-                  {allHidden ? "Gizlemeyi kaldır" : "Gizle"}
+                  title={tx("Seçilenler listede kalır, yalnızca soluk görünür. Adet ve durumlar değişmez.")}>
+                  {allHidden ? tx("Gizlemeyi kaldır") : tx("Gizle")}
                 </button>
-                {selectedFasteners.length > 0 && <span className="muted">Bağlantı elemanları yalnızca gizlenebilir; durumları Bağlantı Elemanları sayfasından değişir.</span>}
+                {selectedFasteners.length > 0 && <span className="muted">{tx("Bağlantı elemanları yalnızca gizlenebilir; durumları Bağlantı Elemanları sayfasından değişir.")}</span>}
               </>
             ) : undefined}
             cardLead={cardLead}
             cardColor={cardColor}
-            emptyText={project && !project.current_version_id ? "Bu projede onaylı BOM sürümü yok." : "Kayıt yok."}
+            emptyText={project && !project.current_version_id ? tx("Bu projede onaylı BOM sürümü yok.") : tx("Kayıt yok.")}
             toolbar={
               <>
                 {view === "tree" && (
                   <>
-                    <button className="btn small" onClick={() => setCollapsed(new Set())}>Tümünü aç</button>
-                    <button className="btn small" onClick={collapseAll}>Tümünü kapat</button>
+                    <button className="btn small" onClick={() => setCollapsed(new Set())}>{tx("Tümünü aç")}</button>
+                    <button className="btn small" onClick={collapseAll}>{tx("Tümünü kapat")}</button>
                   </>
                 )}
-                <span className="muted">Toplam adet: <b>{visibleQty.toLocaleString("tr-TR")}</b></span>
-                {(mainQ.isFetching || archQ.isFetching) && <span className="muted">Yenileniyor…</span>}
-                {archQ.isError && <span className="error">Arşiv: {errText(archQ.error)}</span>}
-                {choicesQ.isError && <span className="error">Seçenekler: {errText(choicesQ.error)}</span>}
+                <span className="muted">{tx("Toplam adet:")}{" "}<b>{visibleQty.toLocaleString(LOCALE)}</b></span>
+                {(mainQ.isFetching || archQ.isFetching) && <span className="muted">{tx("Yenileniyor…")}</span>}
+                {archQ.isError && <span className="error">{tx("Arşiv: {0}", errText(archQ.error))}</span>}
+                {choicesQ.isError && <span className="error">{tx("Seçenekler: {0}", errText(choicesQ.error))}</span>}
               </>
             }
           />
@@ -646,7 +647,7 @@ export default function Parts() {
       {imp === "excel" && <ExcelImportModal pid={pid} open onClose={() => setImp(null)} />}
       {imp === "names" && <PartNamesModal pid={pid} onClose={() => setImp(null)} />}
       {mail && <MailDialog files={[mail]} subject={`${project?.name ?? base}: ${mail.name.replace(/\.xlsx$/, "").replace(/_/g, " ")}`}
-        body="Güncel liste ektedir." onClose={() => setMail(null)} />}
+        body={tx("Güncel liste ektedir.")} onClose={() => setMail(null)} />}
     </Page>
   );
 }

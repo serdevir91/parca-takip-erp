@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..auth import DESIGN_ROLES, EDIT_ROLES, current_user, require_roles
 from ..db import get_db
 from ..models import ROLE_ADMIN, Project, User
+from app.core.i18n import tx
 
 # Ready-made role guards
 any_user = current_user
@@ -20,5 +21,5 @@ __all__ = ["any_user", "editor", "designer", "admin", "get_db", "project_or_404"
 def project_or_404(db: Session, project_id: int) -> Project:
     p = db.get(Project, project_id)
     if p is None:
-        raise HTTPException(404, "Proje bulunamadı")
+        raise HTTPException(404, tx("Proje bulunamadı"))
     return p

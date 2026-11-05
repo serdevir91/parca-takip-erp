@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LAB ERP</string>
+    <string name="notif_ch_run">Hintergrundverbindung</string>
+    <string name="notif_ch_messages">Nachrichten</string>
+    <string name="notif_ch_items">Benachrichtigungen</string>
+    <string name="notif_watching">Überwachung auf neue Nachrichten und Benachrichtigungen</string>
+    <string name="notif_items_summary">%1$d neue Benachrichtigungen</string>
+    <string name="pin_cert_changed">Serverzertifikat wurde geändert</string>
+    <string name="cert_dialog_title">Serverzertifikat</string>
+    <string name="cert_dialog_msg">Erstmalige sichere Verbindung zu diesem Server. Fingerabdruck:\n\n%1$s\n\nStimmt er mit dem Fingerabdruck unter Verwaltung &gt; HTTPS auf dem Server überein?</string>
+    <string name="cert_btn_trust">Stimmt überein, vertrauen</string>
+    <string name="btn_cancel">Abbrechen</string>
+    <string name="err_server_downgrade">Dieser Server verwendet HTTPS; unverschlüsselte Verbindung nicht hergestellt</string>
+    <string name="choose_file">Datei auswählen</string>
+    <string name="err_no_file_chooser">Keine Dateiauswahl gefunden</string>
+    <string name="toast_downloading">Wird heruntergeladen…</string>
+    <string name="err_server_response">Serverantwort %1$d</string>
+    <string name="downloaded_title">Heruntergeladen</string>
+    <string name="downloaded_msg">%1$s\nIm Download-Ordner gespeichert.</string>
+    <string name="btn_open">Öffnen</string>
+    <string name="btn_close">Schließen</string>
+    <string name="err_download_failed">Download fehlgeschlagen: %1$s</string>
+    <string name="toast_preparing">Wird vorbereitet…</string>
+    <string name="err_share_failed">Konnte nicht geteilt werden: %1$s</string>
+    <string name="share_title">Teilen: %1$s</string>
+    <string name="err_no_share_app">Keine App zum Teilen gefunden</string>
+    <string name="err_file_create">Datei konnte nicht erstellt werden</string>
+    <string name="err_no_app_for_file">Keine App zum Öffnen dieser Datei verfügbar</string>
+    <string name="toast_checking_update">Nach Updates suchen…</string>
+    <string name="err_server_unreachable">Server konnte nicht erreicht werden</string>
+    <string name="update_dialog_title">Update verfügbar</string>
+    <string name="update_dialog_msg">LAB ERP %1$s veröffentlicht (installiert: %2$s).\nAPK wird heruntergeladen; öffnen Sie die Datei zur Installation.</string>
+    <string name="btn_download">Herunterladen</string>
+    <string name="btn_later">Später</string>
+    <string name="toast_app_up_to_date">App ist aktuell (%1$s)</string>
+    <string name="toast_update_check_failed">Updates konnten nicht geprüft werden</string>
+    <string name="err_open_link_failed">Link konnte nicht geöffnet werden</string>
+    <string name="setup_error_https_required">Dieser Server verwendet HTTPS. Verbinden Sie sich mit https://. Wenn HTTPS auf dem Server deaktiviert wurde, entfernen Sie ihn zuerst aus der Liste</string>
+</resources>

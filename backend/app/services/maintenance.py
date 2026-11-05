@@ -5,6 +5,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from app.core.i18n import tx
 
 _lock = threading.Lock()
 _active = False
@@ -33,7 +34,7 @@ def exclusive(wait: float = 20) -> Iterator[None]:
     global _active
     with _lock:
         if _active:
-            raise TimeoutError("Başka bir geri yükleme sürüyor")
+            raise TimeoutError(tx("Başka bir geri yükleme sürüyor"))
         _active = True
     try:
         end = time.monotonic() + wait
@@ -42,7 +43,7 @@ def exclusive(wait: float = 20) -> Iterator[None]:
                 if _running <= 1:
                     break
             if time.monotonic() > end:
-                raise TimeoutError("Devam eden işlemler bitmedi, biraz sonra tekrar deneyin")
+                raise TimeoutError(tx("Devam eden işlemler bitmedi, biraz sonra tekrar deneyin"))
             time.sleep(0.05)
         yield
     finally:

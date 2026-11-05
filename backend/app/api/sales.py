@@ -14,6 +14,7 @@ from ..models import Firm, Project, SalesOrder, User
 from ..permissions import can, require
 from ..services import audit, commerce, conflict, fx, system
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 sales_view, sales_edit = require("sales", "view"), require("sales", "edit")
 finance_edit = require("finance", "edit")
@@ -95,7 +96,7 @@ class FromSoIn(BaseModel):
 def _so_or_404(db: Session, so_id: int) -> SalesOrder:
     so = db.get(SalesOrder, so_id)
     if so is None:
-        raise HTTPException(404, "Sipariş bulunamadı")
+        raise HTTPException(404, tx("Sipariş bulunamadı"))
     return so
 
 
@@ -131,7 +132,7 @@ def create_order(body: SoIn, me: User = Depends(sales_edit), db: Session = Depen
     if body.project_id is not None:
         project_or_404(db, body.project_id)
     if not firm and not body.firm_name.strip():
-        raise HTTPException(400, "Müşteri seçin")
+        raise HTTPException(400, tx("Müşteri seçin"))
     sets = system.system(db)["commerce"]
     currency = fx.clean_currency(body.currency or sets["currency"])
     so = SalesOrder(no=commerce.next_no(db, SalesOrder), firm_id=firm.id if firm else None,
@@ -160,7 +161,7 @@ def update_order(so_id: int, body: SoUpdate, me: User = Depends(sales_edit),
     so = _so_or_404(db, so_id)
     conflict.claim(db, so, body.rev, me)
     if so.status in ("delivered", "closed", "cancelled"):
-        raise HTTPException(400, f"{commerce.SO_STATUS[so.status]} durumundaki sipariş düzenlenemez")
+        raise HTTPException(400, tx("{0} durumundaki sipariş düzenlenemez", tx(commerce.SO_STATUS[so.status])))
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
     if "firm_id" in sent:
@@ -184,7 +185,7 @@ def update_order(so_id: int, body: SoUpdate, me: User = Depends(sales_edit),
     if so.status in commerce.SO_SHIPPING and (
             any(k in changes and changes[k] != getattr(so, k) for k in ("tax_rate", "discount_pct", "currency", "rate"))
             or body.lines is not None):
-        raise HTTPException(400, "Onaylanmış siparişin fiyatları değiştirilemez; önce iptal edip yenisini açın")
+        raise HTTPException(400, tx("Onaylanmış siparişin fiyatları değiştirilemez; önce iptal edip yenisini açın"))
     audit.record_changes(db, me, so, changes, "sales_order", so.no, so.project_id)
     if body.lines is not None:
         commerce.set_so_lines(so, [l.model_dump() for l in body.lines])
@@ -207,11 +208,11 @@ def _picked(so: SalesOrder, rows: list[DeliverLine]) -> list[tuple[Any, float]]:
     items = []
     for r in rows:
         if r.line_id not in by_id:
-            raise HTTPException(400, f"Satır bu siparişe ait değil: {r.line_id}")
+            raise HTTPException(400, tx("Satır bu siparişe ait değil: {0}", r.line_id))
         if r.qty:
             items.append((by_id[r.line_id], r.qty))
     if not items:
-        raise HTTPException(400, "Miktar girin")
+        raise HTTPException(400, tx("Miktar girin"))
     return items
 
 
@@ -231,9 +232,9 @@ def take_back(so_id: int, body: ReturnIn, me: User = Depends(sales_edit),
     so = _so_or_404(db, so_id)
     items = _picked(so, body.lines)
     if any(q < 0 for _, q in items):
-        raise HTTPException(400, "İade miktarı sıfırdan büyük olmalı")
+        raise HTTPException(400, tx("İade miktarı sıfırdan büyük olmalı"))
     if body.credit_note and not can(me, "finance", "edit"):
-        raise HTTPException(403, "Alacak dekontu için finans düzenleme yetkisi gerekli")
+        raise HTTPException(403, tx("Alacak dekontu için finans düzenleme yetkisi gerekli"))
     commerce.deliver(db, me, so, [(l, -q) for l, q in items], body.note)
     made = commerce.credits_for_return(db, me, so, items) if body.credit_note else []
     db.commit()
@@ -280,7 +281,7 @@ def copy_order(so_id: int, me: User = Depends(sales_edit), db: Session = Depends
 def delete_order(so_id: int, me: User = Depends(sales_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     so = _so_or_404(db, so_id)
     if so.status != "draft":
-        raise HTTPException(400, "Yalnızca taslak silinebilir; gönderilmiş teklifi iptal edin")
+        raise HTTPException(400, tx("Yalnızca taslak silinebilir; gönderilmiş teklifi iptal edin"))
     audit.record(db, me, "sales_order", so.no, "no", so.no, None, so.project_id, action="delete")
     db.delete(so)
     db.commit()
@@ -295,14 +296,14 @@ def order_xlsx(so_id: int, _: User = Depends(sales_view), db: Session = Depends(
     project = db.get(Project, so.project_id) if so.project_id else None
     quote_doc = so.status in ("draft", "quoted", "lost")
     d = lambda v: v.strftime("%d.%m.%Y") if v else ""  # noqa: E731
-    info = [("Teklif no" if quote_doc else "Sipariş no", so.no), ("Tarih", d(so.order_date)),
+    info = [(tx("Teklif no") if quote_doc else tx("Sipariş no"), so.no), (tx("Tarih"), d(so.order_date)),
             ("Geçerlilik" if quote_doc else "Teslim tarihi", d(so.valid_until if quote_doc else so.due_date)),
             ("Müşteri", so.firm_name),
             ("İletişim", " / ".join(x for x in (firm.contact, firm.phone, firm.email) if x) if firm else ""),
             ("Adres", firm.address if firm else ""),
             ("Vergi dairesi / no", f"{firm.tax_office} {firm.tax_no}".strip() if firm else ""),
             ("Proje", project.name if project else ""), ("Not", so.note)]
-    body = commerce.form_xlsx("Fiyat teklifi" if quote_doc else "Sipariş onayı", info, so.currency, so.lines,
+    body = commerce.form_xlsx(tx("Fiyat teklifi") if quote_doc else tx("Sipariş onayı"), info, so.currency, so.lines,
                               commerce.totals(so.lines, so.tax_rate, so.discount_pct), so.tax_rate, so.discount_pct,
                               company=system.system(db)["company"])
     name = f"{so.no}.xlsx"

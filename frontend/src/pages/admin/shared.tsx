@@ -1,22 +1,23 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { errText } from "../../components/Toast";
+import { LOCALE, tx } from "../../api/i18n";
 
 /** Turkish role labels (backend labels are overridden for the admin screen). */
 export const ROLE_TR: Record<string, string> = {
-  admin: "Yönetici (Admin)",
-  designer: "Tasarımcı",
-  planner: "Planlama/Satın alma",
-  viewer: "İzleyici",
+  admin: tx("Yönetici (Admin)"),
+  designer: tx("Tasarımcı"),
+  planner: tx("Planlama/Satın alma"),
+  viewer: tx("İzleyici"),
 };
 export const roleLabel = (r: string) => ROLE_TR[r] ?? r;
 
 export const fmtNum = (n: number | null | undefined, digits = 0) =>
-  n == null ? "" : n.toLocaleString("tr-TR", { maximumFractionDigits: digits });
+  n == null ? "" : n.toLocaleString(LOCALE, { maximumFractionDigits: digits });
 
 export function fmtDate(s: string | null | undefined): string {
   if (!s) return "";
   const d = new Date(s);
-  return isNaN(d.getTime()) ? s : d.toLocaleString("tr-TR");
+  return isNaN(d.getTime()) ? s : d.toLocaleString(LOCALE);
 }
 
 export function fmtBytes(n: number | null | undefined): string {
@@ -28,7 +29,7 @@ export function fmtBytes(n: number | null | undefined): string {
     v /= 1024;
     i++;
   }
-  return `${v.toLocaleString("tr-TR", { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
+  return `${v.toLocaleString(LOCALE, { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
 }
 
 export function Modal({ title, onClose, children, footer, wide }: {
@@ -44,7 +45,7 @@ export function Modal({ title, onClose, children, footer, wide }: {
       <div className="modal" style={{ maxWidth: wide ? "min(1000px, 95vw)" : "min(560px, 95vw)" }} role="dialog" aria-label={title}>
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button className="btn small" onClick={onClose} aria-label="Kapat">✕</button>
+          <button className="btn small" onClick={onClose} aria-label={tx("Kapat")}>✕</button>
         </div>
         {children}
         {footer && <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>{footer}</div>}
@@ -99,21 +100,21 @@ export function ListEditor({ value, onChange, placeholder, validate, disabled, m
     return (
       <div>
         <textarea rows={12} style={{ width: "100%", ...style }} value={bulkText} onChange={(e) => setBulkText(e.target.value)}
-          placeholder="Her satıra bir değer" />
+          placeholder={tx("Her satıra bir değer")} />
         <div className="row" style={{ marginTop: 6 }}>
-          <button className="btn small primary" onClick={applyBulk}>Listeye uygula</button>
-          <button className="btn small" onClick={() => setBulk(false)}>Vazgeç</button>
-          <span className="muted">{fmtNum(bulkText.split(/\r?\n/).filter((x) => x.trim()).length)} satır</span>
+          <button className="btn small primary" onClick={applyBulk}>{tx("Listeye uygula")}</button>
+          <button className="btn small" onClick={() => setBulk(false)}>{tx("Vazgeç")}</button>
+          <span className="muted">{tx("{0} satır", fmtNum(bulkText.split(/\r?\n/).filter((x) => x.trim()).length))}</span>
         </div>
       </div>
     );
 
-  const f = filter.trim().toLocaleLowerCase("tr-TR");
-  const shown = value.map((v, i) => ({ v, i })).filter((x) => !f || x.v.toLocaleLowerCase("tr-TR").includes(f));
+  const f = filter.trim().toLocaleLowerCase(LOCALE);
+  const shown = value.map((v, i) => ({ v, i })).filter((x) => !f || x.v.toLocaleLowerCase(LOCALE).includes(f));
   return (
     <div>
       {value.length > 15 && (
-        <input placeholder="Listede ara…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 6, width: "100%" }} />
+        <input placeholder={tx("Listede ara…")} value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 6, width: "100%" }} />
       )}
       <div className="adm-list">
         {shown.map(({ v, i }) => {
@@ -123,27 +124,27 @@ export function ListEditor({ value, onChange, placeholder, validate, disabled, m
               <input style={{ flex: 1, ...style }} value={v} disabled={disabled}
                 onChange={(e) => onChange(value.map((x, j) => (j === i ? e.target.value : x)))} />
               {err && <span className="error" title={err}>⚠ {err}</span>}
-              {!disabled && <button className="btn small" title="Kaldır" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>}
+              {!disabled && <button className="btn small" title={tx("Kaldır")} onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>}
             </div>
           );
         })}
-        {!value.length && <div className="muted">Liste boş.</div>}
+        {!value.length && <div className="muted">{tx("Liste boş.")}</div>}
       </div>
       {!disabled && (
         <div className="row" style={{ marginTop: 6 }}>
           <input style={{ flex: 1, ...style }} value={draft} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())} />
-          <button className="btn small" onClick={add} disabled={!draft.trim()}>Ekle</button>
-          <button className="btn small" onClick={openBulk}>Toplu düzenle</button>
+          <button className="btn small" onClick={add} disabled={!draft.trim()}>{tx("Ekle")}</button>
+          <button className="btn small" onClick={openBulk}>{tx("Toplu düzenle")}</button>
         </div>
       )}
-      <div className="muted" style={{ marginTop: 4 }}>{fmtNum(value.length)} kayıt</div>
+      <div className="muted" style={{ marginTop: 4 }}>{tx("{0} kayıt", fmtNum(value.length))}</div>
     </div>
   );
 }
 
 export function Loading({ error, loading }: { error: unknown; loading: boolean }) {
   if (error) return <div className="error">{errText(error)}</div>;
-  if (loading) return <div className="muted">Yükleniyor…</div>;
+  if (loading) return <div className="muted">{tx("Yükleniyor…")}</div>;
   return null;
 }

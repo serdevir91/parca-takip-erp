@@ -7,6 +7,7 @@ import { fmtMoney } from "../erp/common";
 import { LedgerModal, useBalances } from "../erp/commerce";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal } from "./shared";
+import { LOCALE, tx } from "../../api/i18n";
 
 type Firm = {
   rev?: number;
@@ -15,10 +16,10 @@ type Firm = {
 };
 
 export const FIRM_KINDS: { value: string; label: string }[] = [
-  { value: "manufacturer", label: "Üretici" },
-  { value: "supplier", label: "Tedarikçi" },
-  { value: "both", label: "Üretici + tedarikçi" },
-  { value: "customer", label: "Müşteri" },
+  { value: "manufacturer", label: tx("Üretici") },
+  { value: "supplier", label: tx("Tedarikçi") },
+  { value: "both", label: tx("Üretici + tedarikçi") },
+  { value: "customer", label: tx("Müşteri") },
 ];
 const kindLabel = (k: string) => FIRM_KINDS.find((x) => x.value === k)?.label ?? k;
 
@@ -49,7 +50,7 @@ export default function FirmsTab() {
   const del = useMutation({
     mutationFn: (f: Firm) => api.del(`/admin/firms/${f.id}`),
     onSuccess: () => {
-      toast("Firma silindi");
+      toast(tx("Firma silindi"));
       refresh();
     },
     onError: (e) => toast(errText(e), true),
@@ -61,28 +62,28 @@ export default function FirmsTab() {
   });
 
   const list = useMemo(() => {
-    const s = q.trim().toLocaleLowerCase("tr-TR");
+    const s = q.trim().toLocaleLowerCase(LOCALE);
     return (firms.data ?? []).filter(
-      (f) => (!kind || f.kind === kind) && (!s || `${f.name} ${f.contact} ${f.phone} ${f.email} ${f.note}`.toLocaleLowerCase("tr-TR").includes(s)),
+      (f) => (!kind || f.kind === kind) && (!s || `${f.name} ${f.contact} ${f.phone} ${f.email} ${f.note}`.toLocaleLowerCase(LOCALE).includes(s)),
     );
   }, [firms.data, kind, q]);
 
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
-        {canEdit && <button className="btn primary" onClick={() => setEditing("new")}>+ Yeni cari kart</button>}
+        {canEdit && <button className="btn primary" onClick={() => setEditing("new")}>{tx("+ Yeni cari kart")}</button>}
         <select value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="">Tüm türler</option>
+          <option value="">{tx("Tüm türler")}</option>
           {FIRM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
-        <input placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="muted">{list.length.toLocaleString("tr-TR")} / {(firms.data?.length ?? 0).toLocaleString("tr-TR")} firma</span>
+        <input placeholder={tx("Ara…")} value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="muted">{tx("{0} / {1} firma", list.length.toLocaleString(LOCALE), (firms.data?.length ?? 0).toLocaleString(LOCALE))}</span>
       </div>
       <Loading error={firms.error} loading={firms.isLoading} />
       {firms.data && (
         <div className="adm-scroll">
           <table className="simple">
-            <thead><tr><th>Firma adı</th><th>Tür</th><th>İletişim</th>{fin && <th className="num">Bakiye</th>}<th>Not</th><th>Durum</th><th></th></tr></thead>
+            <thead><tr><th>{tx("Firma adı")}</th><th>{tx("Tür")}</th><th>{tx("İletişim")}</th>{fin && <th className="num">{tx("Bakiye")}</th>}<th>{tx("Not")}</th><th>{tx("Durum")}</th><th></th></tr></thead>
             <tbody>
               {list.map((f) => (
                 <tr key={f.id} style={f.active ? undefined : { opacity: 0.6 }}>
@@ -91,13 +92,13 @@ export default function FirmsTab() {
                   <td>
                     {f.contact}
                     {(f.phone || f.email) && <div className="muted">{[f.phone, f.email].filter(Boolean).join(" · ")}</div>}
-                    {f.lead_days > 0 && <div className="muted">Termin {f.lead_days} gün</div>}
+                    {f.lead_days > 0 && <div className="muted">{tx("Termin {0} gün", f.lead_days)}</div>}
                   </td>
                   {fin && (
                     <td className="num">
                       {(balance.get(f.id) ?? []).map((b) => (
-                        <div key={b.cur} className={b.v > 0 ? "ok" : b.v < 0 ? "warn" : "muted"} title={b.v > 0 ? "Firma bize borçlu" : b.v < 0 ? "Biz firmaya borçluyuz" : undefined}>
-                          {fmtMoney(b.v, b.cur)}{b.overdue > 0 && <span className="badge err" style={{ marginLeft: 4 }} title="Vadesi geçen">!</span>}
+                        <div key={b.cur} className={b.v > 0 ? "ok" : b.v < 0 ? "warn" : "muted"} title={b.v > 0 ? tx("Firma bize borçlu") : b.v < 0 ? tx("Biz firmaya borçluyuz") : undefined}>
+                          {fmtMoney(b.v, b.cur)}{b.overdue > 0 && <span className="badge err" style={{ marginLeft: 4 }} title={tx("Vadesi geçen")}>!</span>}
                         </div>
                       ))}
                     </td>
@@ -106,26 +107,26 @@ export default function FirmsTab() {
                   <td>
                     <label className="row" style={{ gap: 4 }}>
                       <input type="checkbox" checked={f.active} disabled={!canEdit || toggle.isPending} onChange={() => toggle.mutate(f)} />
-                      {f.active ? "Aktif" : "Pasif"}
+                      {f.active ? tx("Aktif") : tx("Pasif")}
                     </label>
                   </td>
                   <td>
                     <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                      {fin && <button className="btn small" onClick={() => setLedger(f)}>Ekstre</button>}
-                      {canEdit && <button className="btn small" onClick={() => setEditing(f)}>Düzenle</button>}
+                      {fin && <button className="btn small" onClick={() => setLedger(f)}>{tx("Ekstre")}</button>}
+                      {canEdit && <button className="btn small" onClick={() => setEditing(f)}>{tx("Düzenle")}</button>}
                       {canEdit && <button className="btn small danger" disabled={del.isPending}
-                        onClick={() => confirm(`"${f.name}" firması silinsin mi? Parça kayıtlarındaki firma adı metin olarak korunur.`) && del.mutate(f)}>Sil</button>}
+                        onClick={() => confirm(tx("\"{0}\" firması silinsin mi? Parça kayıtlarındaki firma adı metin olarak korunur.", f.name)) && del.mutate(f)}>{tx("Sil")}</button>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!list.length && <tr><td colSpan={fin ? 7 : 6} className="muted empty">Kayıt yok.</td></tr>}
+              {!list.length && <tr><td colSpan={fin ? 7 : 6} className="muted empty">{tx("Kayıt yok.")}</td></tr>}
             </tbody>
           </table>
         </div>
       )}
       <p className="muted" style={{ marginTop: 10 }}>
-        Üretici firmalar durum listesindeki metinden üretici tespiti için de kullanılır. Müşteriler satış ve faturada seçilir.
+        {tx("Üretici firmalar durum listesindeki metinden üretici tespiti için de kullanılır. Müşteriler satış ve faturada seçilir.")}
       </p>
       {ledger && <LedgerModal firmId={ledger.id} firmName={ledger.name} onClose={() => setLedger(null)} />}
       {editing && <FirmForm firm={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={refresh} />}
@@ -153,36 +154,36 @@ function FirmForm({ firm, onClose, onSaved }: { firm?: Firm; onClose: () => void
       return firm ? saveRev(firm.rev, (rev) => api.put<Firm>(`/admin/firms/${firm.id}`, { ...body, rev })) : api.post<Firm>("/admin/firms", body);
     },
     onSuccess: () => {
-      toast(firm ? "Firma güncellendi" : "Firma eklendi");
+      toast(firm ? tx("Firma güncellendi") : tx("Firma eklendi"));
       onSaved();
       onClose();
     },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title={firm ? `Firmayı düzenle: ${firm.name}` : "Yeni firma"} onClose={onClose}
+    <Modal title={firm ? tx("Firmayı düzenle: {0}", firm.name) : tx("Yeni firma")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
       <div className="adm-form">
-        <Field label="Firma adı"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Tür">
+        <Field label={tx("Firma adı")}><input autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label={tx("Tür")}>
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
             {FIRM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </Field>
-        <Field label="İletişim (yetkili kişi)"><input value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
+        <Field label={tx("İletişim (yetkili kişi)")}><input value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
         <div className="adm-form two">
-          <Field label="Telefon"><input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
-          <Field label="E-posta"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-          <Field label="Vergi dairesi"><input value={taxOffice} onChange={(e) => setTaxOffice(e.target.value)} /></Field>
-          <Field label="Vergi no"><input value={taxNo} onChange={(e) => setTaxNo(e.target.value)} /></Field>
+          <Field label={tx("Telefon")}><input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <Field label={tx("E-posta")}><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label={tx("Vergi dairesi")}><input value={taxOffice} onChange={(e) => setTaxOffice(e.target.value)} /></Field>
+          <Field label={tx("Vergi no")}><input value={taxNo} onChange={(e) => setTaxNo(e.target.value)} /></Field>
         </div>
-        <Field label="Adres"><textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
-        <Field label="Termin süresi (gün)" hint="Satın alma siparişinde varsayılan teslim süresi."><input type="number" min={0} value={leadDays} onChange={(e) => setLeadDays(e.target.value)} /></Field>
-        <Field label="Not"><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-        <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Aktif</label>
+        <Field label={tx("Adres")}><textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+        <Field label={tx("Termin süresi (gün)")} hint={tx("Satın alma siparişinde varsayılan teslim süresi.")}><input type="number" min={0} value={leadDays} onChange={(e) => setLeadDays(e.target.value)} /></Field>
+        <Field label={tx("Not")}><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />{" "}{tx("Aktif")}</label>
       </div>
     </Modal>
   );

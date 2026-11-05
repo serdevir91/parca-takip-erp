@@ -16,6 +16,7 @@ from ..services import audit
 from ..services.state import ProjectView
 from ..permissions import require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 control_view, control_edit = require("control", "view"), require("control", "edit")
 
@@ -114,7 +115,7 @@ def _find_or_create(db: Session, view: ProjectView, key: str, user: User) -> Con
         return row
     issue = next((i for i in detect(view) if i.key == key), None)
     if issue is None:
-        raise HTTPException(404, "Kontrol maddesi bulunamadı")
+        raise HTTPException(404, tx("Kontrol maddesi bulunamadı"))
     row = ControlIssue(project_id=pid, key=key, kind=issue.kind, part_no=issue.part_no, message=issue.message,
                        levels=list(issue.levels), severity=issue.severity, status=OPEN, manual=False,
                        present=True, created_by=user.username)
@@ -144,7 +145,7 @@ def unresolve(pid: int, body: ResolveIn, db: Session = Depends(get_db),
     project_or_404(db, pid)
     row = db.scalar(select(ControlIssue).where(ControlIssue.project_id == pid, ControlIssue.key == body.key))
     if row is None:
-        raise HTTPException(404, "Kontrol maddesi bulunamadı")
+        raise HTTPException(404, tx("Kontrol maddesi bulunamadı"))
     audit.record(db, user, "control", row.key, "status", row.status, OPEN, pid)
     if body.note and body.note != row.note:
         audit.record(db, user, "control", row.key, "note", row.note, body.note, pid)
@@ -159,7 +160,7 @@ def create_manual(pid: int, body: ManualIn, db: Session = Depends(get_db),
                   user: User = Depends(control_edit)) -> dict[str, Any]:
     project_or_404(db, pid)
     if body.severity not in SEVERITIES:
-        raise HTTPException(400, f"Geçersiz önem derecesi. Seçenekler: {', '.join(SEVERITIES)}")
+        raise HTTPException(400, tx("Geçersiz önem derecesi. Seçenekler: {0}", ', '.join(SEVERITIES)))
     row = ControlIssue(project_id=pid, key=f"manual|tmp|{datetime.now(timezone.utc).timestamp()}",
                        kind=body.kind.strip() or KIND_MANUAL, part_no=body.part_no.strip(),
                        message=body.message.strip(), levels=[], severity=body.severity, status=OPEN,
@@ -176,9 +177,9 @@ def create_manual(pid: int, body: ManualIn, db: Session = Depends(get_db),
 def delete_manual(pid: int, iid: int, db: Session = Depends(get_db), user: User = Depends(control_edit)) -> dict[str, Any]:
     row = db.get(ControlIssue, iid)
     if row is None or row.project_id != pid:
-        raise HTTPException(404, "Kontrol maddesi bulunamadı")
+        raise HTTPException(404, tx("Kontrol maddesi bulunamadı"))
     if not row.manual:
-        raise HTTPException(400, "Otomatik kontrol maddeleri silinemez; çözüldü olarak işaretleyin")
+        raise HTTPException(400, tx("Otomatik kontrol maddeleri silinemez; çözüldü olarak işaretleyin"))
     audit.record(db, user, "control", row.key, "message", row.message, None, pid, action="delete")
     db.delete(row)
     db.commit()

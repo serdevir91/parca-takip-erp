@@ -65,9 +65,9 @@ public class AlertService extends Service {
     public void onCreate() {
         super.onCreate();
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(CH_RUN, "Arka plan bağlantısı", NotificationManager.IMPORTANCE_MIN));
-        nm.createNotificationChannel(new NotificationChannel(CH_MESSAGES, "Mesajlar", NotificationManager.IMPORTANCE_HIGH));
-        nm.createNotificationChannel(new NotificationChannel(CH_ITEMS, "Uyarılar", NotificationManager.IMPORTANCE_DEFAULT));
+        nm.createNotificationChannel(new NotificationChannel(CH_RUN, getString(R.string.notif_ch_run), NotificationManager.IMPORTANCE_MIN));
+        nm.createNotificationChannel(new NotificationChannel(CH_MESSAGES, getString(R.string.notif_ch_messages), NotificationManager.IMPORTANCE_HIGH));
+        nm.createNotificationChannel(new NotificationChannel(CH_ITEMS, getString(R.string.notif_ch_items), NotificationManager.IMPORTANCE_DEFAULT));
     }
 
     @Override
@@ -75,7 +75,7 @@ public class AlertService extends Service {
         Notification running = new Notification.Builder(this, CH_RUN)
                 .setSmallIcon(R.drawable.ic_notify)
                 .setContentTitle(getString(R.string.app_name))
-                .setContentText("Yeni mesajlar ve uyarılar izleniyor")
+                .setContentText(getString(R.string.notif_watching))
                 .setContentIntent(open(this, 0, null))
                 .setOngoing(true)
                 .build();
@@ -124,8 +124,8 @@ public class AlertService extends Service {
         c.getSystemService(NotificationManager.class).notify(id, n);
     }
 
-    private static JSONObject fetch(SharedPreferences prefs, String url, String cookie) throws Exception {
-        HttpURLConnection http = MainActivity.open(prefs, url);
+    private static JSONObject fetch(Context c, SharedPreferences prefs, String url, String cookie) throws Exception {
+        HttpURLConnection http = MainActivity.open(c, prefs, url);
         try {
             http.setConnectTimeout(TIMEOUT_MS);
             http.setReadTimeout(TIMEOUT_MS);
@@ -153,7 +153,7 @@ public class AlertService extends Service {
         if (cookie == null) return;
         String afterKey = "feed_after:" + server;
         String seenKey = "feed_seen:" + server;
-        JSONObject feed = fetch(prefs, url + "?after=" + prefs.getInt(afterKey, 0), cookie);
+        JSONObject feed = fetch(c, prefs, url + "?after=" + prefs.getInt(afterKey, 0), cookie);
         if (feed == null) return;
 
         Set<String> seen = prefs.getStringSet(seenKey, null);
@@ -187,7 +187,7 @@ public class AlertService extends Service {
             show(c, ID_ROOM + room.getKey(), CH_MESSAGES, last.getString("title"), text.toString(), last.getString("link"));
         }
         if (fresh.size() > MAX_ITEMS) {
-            show(c, ID_ITEMS_SUMMARY, CH_ITEMS, c.getString(R.string.app_name), fresh.size() + " yeni uyarı", "/");
+            show(c, ID_ITEMS_SUMMARY, CH_ITEMS, c.getString(R.string.app_name), c.getString(R.string.notif_items_summary, fresh.size()), "/");
             return;
         }
         for (JSONObject item : fresh) {

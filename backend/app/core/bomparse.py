@@ -12,6 +12,7 @@ from typing import Iterable
 
 from .fastener import FastenerMatch, FastenerMatcher
 from .normalize import strip_cad_ext
+from app.core.i18n import tx
 
 EXPECTED_HEADER = ["Level", "Dosya Adı", "Reference Count", "Malzeme", "Ağırlık", "Revizyon", "TeminSekli", "Kaplama Bilgisi"]
 
@@ -156,7 +157,7 @@ def decode_csv(data: bytes) -> str:
             return data.decode(enc)
         except UnicodeDecodeError:
             continue
-    raise BomParseError("CSV kodlaması çözülemedi")
+    raise BomParseError(tx("CSV kodlaması çözülemedi"))
 
 
 def read_rows(text: str) -> list[list[str]]:
@@ -164,17 +165,17 @@ def read_rows(text: str) -> list[list[str]]:
     try:
         header = next(reader)
     except StopIteration as e:
-        raise BomParseError("CSV boş") from e
+        raise BomParseError(tx("CSV boş")) from e
     header = [h.strip().lstrip("﻿") for h in header]
     if [h.lower() for h in header[:8]] != [h.lower() for h in EXPECTED_HEADER]:
-        raise BomParseError("Beklenmeyen başlık: " + ";".join(header))
+        raise BomParseError(tx("Beklenmeyen başlık: ") + ";".join(header))
     rows = []
     for x in reader:
         if x and x[0].strip():
             cells = [c.strip() for c in x] + [""] * 8
             rows.append(cells[:8])
     if not rows:
-        raise BomParseError("CSV satır içermiyor")
+        raise BomParseError(tx("CSV satır içermiyor"))
     return rows
 
 
@@ -207,19 +208,19 @@ def parse_bom(
         restored += (fixed_lvl != lvl) + (fixed_w != w)
         lvl, w = fixed_lvl, fixed_w
         if not re.fullmatch(r"\d+(?:\.\d+)*", lvl):
-            raise BomParseError(f"Satır {seq + 2}: geçersiz seviye '{lvl}'")
+            raise BomParseError(tx("Satır {0}: geçersiz seviye '{1}'", seq + 2, lvl))
         if lvl in seen_levels:
-            raise BomParseError(f"Satır {seq + 2}: tekrarlanan seviye '{lvl}'")
+            raise BomParseError(tx("Satır {0}: tekrarlanan seviye '{1}'", seq + 2, lvl))
         seen_levels.add(lvl)
         depth = lvl.count(".")
         par = lvl.rsplit(".", 1)[0] if depth else None
         if par is not None and par not in qty_at:
-            raise BomParseError(f"Satır {seq + 2}: üst seviye '{par}' bulunamadı")
+            raise BomParseError(tx("Satır {0}: üst seviye '{1}' bulunamadı", seq + 2, par))
         mult = qty_at.get(par, 1) if par else 1
         try:
             q = int(float(cnt.replace(",", "."))) if cnt else 0
         except ValueError as e:
-            raise BomParseError(f"Satır {seq + 2}: geçersiz adet '{cnt}'") from e
+            raise BomParseError(tx("Satır {0}: geçersiz adet '{1}'", seq + 2, cnt)) from e
         tot = q * mult
         qty_at[lvl] = tot
         base = strip_cad_ext(name)
@@ -254,7 +255,6 @@ def parse_bom(
         out.append(row)
 
     if restored:
-        warnings.append(f"Excel'in tarihe çevirdiği {restored} değer (seviye, ağırlık) geri düzeltildi. "
-                        "Bu sorunu önlemek için SolidWorks'ten alınan CSV'yi Excel'de kaydetmeden yükleyin.")
+        warnings.append(tx("Excel'in tarihe çevirdiği {0} değer (seviye, ağırlık) geri düzeltildi. Bu sorunu önlemek için SolidWorks'ten alınan CSV'yi Excel'de kaydetmeden yükleyin.", restored))
     root = out[0].part_no if out and out[0].depth == 0 else ""
     return ParsedBom(rows=out, root_part_no=root, warnings=warnings)

@@ -24,6 +24,7 @@ from .excel_export import (H_FX_STATUS, H_KEY, H_MANUF, H_MATST, H_NOTE, H_PNO, 
 from .settings import manufacturers
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import material_status_choices
+from app.core.i18n import tx
 
 KIND_TRACKING, KIND_MISSING, KIND_FASTENER = "tracking", "missing", "fastener"
 
@@ -117,31 +118,31 @@ class _Ctx:
             try:
                 v = _num(raw)
             except ValueError:
-                raise ValueError("Sayı olmalı") from None
+                raise ValueError(tx("Sayı olmalı")) from None
             if v is None:
                 return None if field == "unit_price" else 0.0
             if v < 0 or (field == "spare_pct" and v > 1000):
-                raise ValueError("Geçersiz sayı")
+                raise ValueError(tx("Geçersiz sayı"))
             return v
         v = _txt(raw)
         if field == "progress":
             if v not in PROGRESS_CHOICES:
-                raise ValueError("Seçenekler: " + ", ".join(PROGRESS_CHOICES))
+                raise ValueError(tx("Seçenekler: ") + ", ".join(PROGRESS_CHOICES))
         elif field == "procurement_override":
             if v not in TEMIN_CHOICES:
-                raise ValueError("Seçenekler: " + ", ".join(TEMIN_CHOICES))
+                raise ValueError(tx("Seçenekler: ") + ", ".join(TEMIN_CHOICES))
             p = self.parts[key]
             if p["is_purchased_assembly"] and v != p["procurement"]:
-                raise ValueError("Satın alınan montajın temin şekli değiştirilemez")
+                raise ValueError(tx("Satın alınan montajın temin şekli değiştirilemez"))
         elif field == "manufacturer":
             if v and self.manufacturers and v not in self.manufacturers:
-                raise ValueError("Üretici/firma listede yok")
+                raise ValueError(tx("Üretici/firma listede yok"))
         elif field == "material_status":
             if v and v not in self.material:
-                raise ValueError("Seçenekler: " + ", ".join(self.material))
+                raise ValueError(tx("Seçenekler: ") + ", ".join(self.material))
         elif field == "order_status":
             if v not in FASTENER_ORDER_STATUSES:
-                raise ValueError("Seçenekler: " + ", ".join(FASTENER_ORDER_STATUSES))
+                raise ValueError(tx("Seçenekler: ") + ", ".join(FASTENER_ORDER_STATUSES))
         return v
 
     def stored(self, kind: str, key: str, field: str, value: Any) -> Any:
@@ -186,10 +187,10 @@ def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
         check_xlsx(path)
         wb = load_workbook(path, data_only=False, read_only=False)
     except Exception as e:                                      # noqa: BLE001 - any parse failure
-        raise ImportError_("Excel dosyası okunamadı") from e
+        raise ImportError_(tx("Excel dosyası okunamadı")) from e
     ctx = _Ctx(db, project)
     if ctx.view.version is None:
-        raise ImportError_("Projede onaylı BOM sürümü yok")
+        raise ImportError_(tx("Projede onaylı BOM sürümü yok"))
     # one item can be on several rows (a part under several assemblies): every value read is kept, and
     # only the values that differ from the DB count; two different new values for one item are a conflict
     seen: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -280,7 +281,7 @@ def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
                         continue
                     take(KIND_FASTENER, key, field, raw, ws.title, r, label)
     if not sheets_used:
-        raise ImportError_("Dosyada tanınan bir sayfa yok (Parça No / İlerleme başlıkları bulunamadı)")
+        raise ImportError_(tx("Dosyada tanınan bir sayfa yok (Parça No / İlerleme başlıkları bulunamadı)"))
 
     changes = []
     for ch in seen.values():
@@ -290,7 +291,7 @@ def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
         if len(vals) > 1:
             for v, sheet, row in vals:
                 invalid.append({"sheet": sheet, "row": row, "key": ch["label"], "field": ch["field_label"],
-                                "value": _txt(v), "message": "Aynı kalem için farklı değerler var"})
+                                "value": _txt(v), "message": tx("Aynı kalem için farklı değerler var")})
             continue
         ch["new"], ch["sheet"], ch["row"] = vals[0]
         changes.append(ch)
@@ -312,12 +313,12 @@ def apply(db: Session, project: Project, user: User | None, changes: list[dict[s
         label = f"{key} / {LABELS.get(field or '', field)}"
         allowed = {KIND_TRACKING: PART_FIELDS, KIND_MISSING: MISSING_FIELDS, KIND_FASTENER: FASTENER_FIELDS}.get(kind)
         if allowed is None or field not in allowed.values():
-            skipped.append({"key": label, "message": "Desteklenmeyen alan"})
+            skipped.append({"key": label, "message": tx("Desteklenmeyen alan")})
             continue
         exists = (key in ctx.parts if kind == KIND_TRACKING else
                   (key.isdigit() and int(key) in ctx.missing) if kind == KIND_MISSING else key in ctx.fasteners)
         if not exists:
-            skipped.append({"key": label, "message": "Kalem güncel BOM'da yok"})
+            skipped.append({"key": label, "message": tx("Kalem güncel BOM'da yok")})
             continue
         try:
             new = ctx.clean(kind, key, field, ch.get("new"))
@@ -325,7 +326,7 @@ def apply(db: Session, project: Project, user: User | None, changes: list[dict[s
             skipped.append({"key": label, "message": str(e)})
             continue
         if "old" in ch and not _same(ctx.current(kind, key, field), ch["old"]):
-            skipped.append({"key": label, "message": "Değer bu arada değişmiş"})
+            skipped.append({"key": label, "message": tx("Değer bu arada değişmiş")})
             continue
         by_obj.setdefault((kind, key), {})[field] = ctx.stored(kind, key, field, new)
 

@@ -24,6 +24,7 @@ from ..services.tracking import (apply_changes, check_progress, clean_changes, c
                                  tracking_view)
 from ..permissions import require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 parts_view, parts_edit = require("parts", "view"), require("parts", "edit")
 
@@ -89,7 +90,7 @@ def _patch_changes(body: TrackingPatch) -> dict[str, Any]:
     """Sent fields only; an explicit null clears procurement_override / text fields."""
     ch = body.model_dump(exclude_unset=True)
     if "progress" in ch and ch["progress"] is None:
-        raise HTTPException(400, "İlerleme boş olamaz")
+        raise HTTPException(400, tx("İlerleme boş olamaz"))
     for f in ("is_new", "hidden"):
         if f in ch and ch[f] is None:
             del ch[f]
@@ -130,7 +131,7 @@ def _check_version(db: Session, project, version_id: int | None) -> None:
     if version_id is not None:
         v = db.get(BomVersion, version_id)
         if v is None or v.project_id != project.id:
-            raise HTTPException(404, "BOM sürümü bulunamadı")
+            raise HTTPException(404, tx("BOM sürümü bulunamadı"))
 
 
 def _part_row(view: ProjectView, part_no: str) -> dict[str, Any] | None:
@@ -144,7 +145,7 @@ def _part_or_tracking(db: Session, view: ProjectView, part_no: str) -> dict[str,
         return row
     t = view.tracking.get(part_no)
     if t is None:
-        raise HTTPException(404, f"Parça bu projede bulunamadı: {part_no}")
+        raise HTTPException(404, tx("Parça bu projede bulunamadı: {0}", part_no))
     return tracking_view(t)
 
 
@@ -205,7 +206,7 @@ def bulk_edit(pid: int, body: BulkIn, db: Session = Depends(get_db), user: User 
     project = project_or_404(db, pid)
     changes = clean_changes(db, _patch_changes(body.changes))
     if not changes:
-        raise HTTPException(400, "Değiştirilecek alan seçilmedi")
+        raise HTTPException(400, tx("Değiştirilecek alan seçilmedi"))
     wanted = resolve_aliases(db, [p.strip() for p in body.part_nos if p.strip()])
     tmap = tracking_map(db, project.id, wanted)
     updated = fields = 0
@@ -279,11 +280,11 @@ def edit_part(pid: int, part_no: str, body: TrackingPatch, rev: int | None = Non
     pno = resolve_alias(db, part_no)
     t = tracking_of(db, project.id, pno)
     if t is None:
-        raise HTTPException(404, f"Parça bu projede takip edilmiyor: {part_no}")
+        raise HTTPException(404, tx("Parça bu projede takip edilmiyor: {0}", part_no))
     changes = clean_changes(db, _patch_changes(body))
     clashes = [c for f, v in changes.items() if (c := conflict_of(edits, pno, f, v))]
     if clashes:
-        raise HTTPException(409, {"message": "Bu alanı başkası değiştirdi", "conflicts": jsonable_encoder(clashes)})
+        raise HTTPException(409, {"message": tx("Bu alanı başkası değiştirdi"), "conflicts": jsonable_encoder(clashes)})
     n = apply_changes(db, user, t, changes)
     db.commit()
     row = _part_or_tracking(db, ProjectView.load(db, project), pno)
@@ -299,7 +300,7 @@ def _missing_view(db: Session, project, mid: int) -> dict[str, Any]:
 def _missing_or_404(db: Session, pid: int, mid: int) -> MissingRow:
     m = db.get(MissingRow, mid)
     if m is None or m.project_id != pid:
-        raise HTTPException(404, "Eksik satırı bulunamadı")
+        raise HTTPException(404, tx("Eksik satırı bulunamadı"))
     return m
 
 
@@ -319,7 +320,7 @@ def create_missing(pid: int, body: MissingIn, db: Session = Depends(get_db), use
     project = project_or_404(db, pid)
     pno = resolve_alias(db, body.part_no.strip())
     if tracking_of(db, project.id, pno) is None:
-        raise HTTPException(400, f"Parça bu projede bulunamadı: {body.part_no}")
+        raise HTTPException(400, tx("Parça bu projede bulunamadı: {0}", body.part_no))
     m = MissingRow(project_id=project.id, part_no=pno, qty=body.qty, reason=body.reason.strip(),
                    progress=check_progress(body.progress), note=body.note, created_by=user.username)
     db.add(m)

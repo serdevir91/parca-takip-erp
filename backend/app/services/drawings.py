@@ -26,6 +26,7 @@ from ..models import BomRow, Drawing, DrawingVersion, Part, PartAlias, User
 from . import audit
 from .state import ProjectView
 from .thumbs import make_thumb
+from app.core.i18n import tx
 
 CHUNK = 1 << 20
 ZIP_EXTS = {"zip"}
@@ -68,7 +69,7 @@ async def save_upload(file: UploadFile) -> tuple[Path, int, str]:
             while chunk := await file.read(CHUNK):
                 size += len(chunk)
                 if size > limit:
-                    raise DrawingError(f"Dosya çok büyük (en fazla {get_settings().max_upload_mb} MB).")
+                    raise DrawingError(tx("Dosya çok büyük (en fazla {0} MB).", get_settings().max_upload_mb))
                 h.update(chunk)
                 out.write(chunk)
     except BaseException:
@@ -77,15 +78,16 @@ async def save_upload(file: UploadFile) -> tuple[Path, int, str]:
     return path, size, h.hexdigest()
 
 
-def _copy_stream(src: IO[bytes], too_big: str = "Zip içindeki dosya çok büyük") -> tuple[Path, int, str]:
+def _copy_stream(src: IO[bytes], too_big: str | None = None) -> tuple[Path, int, str]:
     """Copy a binary stream to a temp file in 1 MB chunks. Returns (path, size, sha256)."""
+    too_big = too_big or tx("Zip içindeki dosya çok büyük")
     path, size, h, limit = _tmp_path(), 0, hashlib.sha256(), _max_bytes()
     try:
         with path.open("wb") as out:
             while chunk := src.read(CHUNK):
                 size += len(chunk)
                 if size > limit:
-                    raise DrawingError(f"{too_big} (en fazla {get_settings().max_upload_mb} MB).")
+                    raise DrawingError(tx("{0} (en fazla {1} MB).", too_big, get_settings().max_upload_mb))
                 h.update(chunk)
                 out.write(chunk)
     except BaseException:
@@ -97,7 +99,7 @@ def _copy_stream(src: IO[bytes], too_big: str = "Zip içindeki dosya çok büyü
 def save_upload_sync(file: UploadFile) -> tuple[Path, int, str]:
     """Sync twin of save_upload for sync endpoints (runs in the threadpool)."""
     file.file.seek(0)
-    return _copy_stream(file.file, "Dosya çok büyük")
+    return _copy_stream(file.file, tx("Dosya çok büyük"))
 
 
 ZIP_MAX_ENTRIES = 5000
@@ -109,22 +111,22 @@ def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | Non
     try:
         zf = zipfile.ZipFile(path)
     except zipfile.BadZipFile:
-        yield "", None, 0, "", "Zip dosyası okunamadı."
+        yield "", None, 0, "", tx("Zip dosyası okunamadı.")
         return
     with zf:
         infos = zf.infolist()
         # Zip bomb guard: entry count and total unpacked size (header sizes, then the bytes really read)
         budget = max(ZIP_MAX_RATIO * path.stat().st_size, 64 * 1024 * 1024)
         if len(infos) > ZIP_MAX_ENTRIES:
-            yield "", None, 0, "", f"Zip içinde çok fazla dosya var (en fazla {ZIP_MAX_ENTRIES})."
+            yield "", None, 0, "", tx("Zip içinde çok fazla dosya var (en fazla {0}).", ZIP_MAX_ENTRIES)
             return
         if sum(i.file_size for i in infos) > budget:
-            yield "", None, 0, "", "Zip açıldığında çok büyük (sıkıştırma oranı şüpheli)."
+            yield "", None, 0, "", tx("Zip açıldığında çok büyük (sıkıştırma oranı şüpheli).")
             return
         used = 0
         for info in infos:
             if used > budget:
-                yield info.filename, None, 0, "", "Zip açıldığında çok büyük; kalan dosyalar atlandı."
+                yield info.filename, None, 0, "", tx("Zip açıldığında çok büyük; kalan dosyalar atlandı.")
                 return
             name = info.filename
             base = name.replace("\\", "/").rsplit("/", 1)[-1]
@@ -132,7 +134,7 @@ def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | Non
                 continue
             ext = split_ext(base)[1]
             if ext not in DRAWING_EXTS:
-                yield name, None, 0, "", f"Desteklenmeyen dosya türü: .{ext or '?'}"
+                yield name, None, 0, "", tx("Desteklenmeyen dosya türü: .{0}", ext or "?")
                 continue
             try:
                 with zf.open(info) as src:
@@ -142,7 +144,7 @@ def iter_zip(path: Path) -> Iterator[tuple[str, Path | None, int, str, str | Non
                 yield name, None, 0, "", str(e)
                 continue
             except (zipfile.BadZipFile, RuntimeError, OSError) as e:
-                yield name, None, 0, "", f"Zip içindeki dosya açılamadı: {e}"
+                yield name, None, 0, "", tx("Zip içindeki dosya açılamadı: {0}", e)
                 continue
             yield name, tmp, size, sha, None
 
@@ -183,7 +185,7 @@ def ingest(db: Session, matcher: DrawingMatcher, filename: str, tmp: Path, size:
     stem, ext = split_ext(base)
     if ext not in DRAWING_EXTS or not stem:
         tmp.unlink(missing_ok=True)
-        return {"filename": filename, "status": "rejected", "error": f"Desteklenmeyen dosya türü: .{ext or '?'}"}
+        return {"filename": filename, "status": "rejected", "error": tx("Desteklenmeyen dosya türü: .{0}", ext or "?")}
     m = matcher.match(base)
     key = tr_casefold(base)
     d = db.scalar(select(Drawing).where(Drawing.filename_key == key))

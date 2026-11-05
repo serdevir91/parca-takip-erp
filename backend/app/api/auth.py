@@ -20,6 +20,7 @@ from ..permissions import effective
 from ..services import audit, loginguard, mailer, system
 from ..services.settings import signup_enabled
 from .deps import any_user, get_db
+from app.core.i18n import tx
 
 log = logging.getLogger("erp.auth")
 
@@ -48,14 +49,14 @@ def session_out(u: User, db: Session) -> dict:
 def check_email(email: str) -> str:
     email = (email or "").strip()
     if email and not mailer.valid_email(email):
-        raise HTTPException(400, "E-posta adresi geçersiz")
+        raise HTTPException(400, tx("E-posta adresi geçersiz"))
     return email
 
 
 def check_password_rules(pw: str) -> None:
     least = get_settings().password_min_length
     if len(pw) < least:
-        raise HTTPException(400, f"Şifre en az {least} karakter olmalı")
+        raise HTTPException(400, tx("Şifre en az {0} karakter olmalı", least))
 
 
 @router.post("/login")
@@ -66,19 +67,19 @@ def login(request: Request, response: Response, form: OAuth2PasswordRequestForm 
     ip = request.client.host if request.client else "?"
     wait = loginguard.blocked_for(name, ip)
     if wait:
-        raise HTTPException(429, f"Çok fazla hatalı deneme. {max(1, round(wait / 60))} dakika sonra tekrar deneyin.",
+        raise HTTPException(429, tx("Çok fazla hatalı deneme. {0} dakika sonra tekrar deneyin.", max(1, round(wait / 60))),
                             headers={"Retry-After": str(wait)})
     u = db.scalar(select(User).where(User.username == name))
     if u is None:
         dummy_verify(form.password)
     if u is None or not verify_password(form.password, u.password_hash):
         loginguard.failed(name, ip)
-        raise HTTPException(401, "Kullanıcı adı veya şifre hatalı")
+        raise HTTPException(401, tx("Kullanıcı adı veya şifre hatalı"))
     # The password was right: say why the account cannot log in yet
     if u.pending:
-        raise HTTPException(403, "Hesabınız yönetici onayı bekliyor. Onaylandığında giriş yapabilirsiniz.")
+        raise HTTPException(403, tx("Hesabınız yönetici onayı bekliyor. Onaylandığında giriş yapabilirsiniz."))
     if not u.active:
-        raise HTTPException(403, "Hesabınız pasif. Yöneticinize başvurun.")
+        raise HTTPException(403, tx("Hesabınız pasif. Yöneticinize başvurun."))
     loginguard.succeeded(name, ip)
     token = create_token(u)
     set_session(response, request, token)
@@ -97,7 +98,7 @@ def adopt_session(request: Request, response: Response, bearer: str | None = Dep
     """One-time move of a token left in localStorage by a version before the session cookie."""
     token = session_token(request, bearer)
     if not bearer or token is None:
-        raise HTTPException(401, "Giriş yapılmadı")
+        raise HTTPException(401, tx("Giriş yapılmadı"))
     user_from_token(token, db)
     set_session(response, request, token)
     return {"ok": True}
@@ -141,7 +142,7 @@ def _notify_admins(user_id: int) -> None:
         body = (f"Yeni hesap isteği:\n\nKullanıcı adı: {u.username}\nAd soyad: {u.full_name or '-'}\n"
                 f"E-posta: {u.email or '-'}\n\nOnaylamak için {system.app_name(db)} > Yönetim > Kullanıcılar.")
         try:
-            mailer.send(cfg, to, f"{system.app_name(db)}: {u.username} hesap onayı bekliyor", body)
+            mailer.send(cfg, to, tx("{0}: {1} hesap onayı bekliyor", system.app_name(db), u.username), body)
         except RuntimeError as e:
             log.warning("sign-up notice not sent: %s", e)
 
@@ -151,18 +152,17 @@ def register(body: SignupIn, request: Request, background: BackgroundTasks,
              db: Session = Depends(get_db)) -> dict:
     """Self sign-up: the account waits (pending) until an admin approves it and sets the permissions."""
     if not signup_enabled(db):
-        raise HTTPException(403, "Hesap oluşturma kapalı. Hesabı yöneticiniz açabilir.")
+        raise HTTPException(403, tx("Hesap oluşturma kapalı. Hesabı yöneticiniz açabilir."))
     username = body.username.strip()
     if not USERNAME_RE.match(username):
-        raise HTTPException(400, "Kullanıcı adı 3-64 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi "
-                                 "kullanılabilir (boşluk yok)")
+        raise HTTPException(400, tx("Kullanıcı adı 3-64 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi kullanılabilir (boşluk yok)"))
     email = check_email(body.email)
     check_password_rules(body.password)
     ip = request.client.host if request.client else "?"
     if not loginguard.signup_allowed(ip):
-        raise HTTPException(429, "Bu cihazdan çok fazla hesap isteği gönderildi. Bir saat sonra tekrar deneyin.")
+        raise HTTPException(429, tx("Bu cihazdan çok fazla hesap isteği gönderildi. Bir saat sonra tekrar deneyin."))
     if db.scalar(select(User).where(func.lower(User.username) == username.lower())):
-        raise HTTPException(409, "Bu kullanıcı adı alınmış, başka bir ad seçin")
+        raise HTTPException(409, tx("Bu kullanıcı adı alınmış, başka bir ad seçin"))
     u = User(username=username, full_name=body.full_name.strip(), email=email, role=ROLE_VIEWER,
              password_hash=hash_password(body.password), active=False, pending=True)
     db.add(u)
@@ -170,7 +170,7 @@ def register(body: SignupIn, request: Request, background: BackgroundTasks,
     audit.record(db, u, "user", u.id, "username", None, username, action="signup")
     db.commit()
     background.add_task(_notify_admins, u.id)
-    return {"ok": True, "message": "Hesap isteğiniz yöneticiye gönderildi. Onaylandığında giriş yapabilirsiniz."}
+    return {"ok": True, "message": tx("Hesap isteğiniz yöneticiye gönderildi. Onaylandığında giriş yapabilirsiniz.")}
 
 
 @router.get("/me")
@@ -209,10 +209,10 @@ class PasswordChange(BaseModel):
 def change_password(body: PasswordChange, request: Request, response: Response, user: User = Depends(any_user),
                     db: Session = Depends(get_db)) -> dict:
     if not verify_password(body.old_password, user.password_hash):
-        raise HTTPException(400, "Mevcut şifre hatalı")
+        raise HTTPException(400, tx("Mevcut şifre hatalı"))
     check_password_rules(body.new_password)
     if body.new_password == body.old_password:
-        raise HTTPException(400, "Yeni şifre eskisiyle aynı olamaz")
+        raise HTTPException(400, tx("Yeni şifre eskisiyle aynı olamaz"))
     u = db.merge(user)
     u.password_hash = hash_password(body.new_password)
     u.token_version = (u.token_version or 0) + 1  # other sessions of this user end

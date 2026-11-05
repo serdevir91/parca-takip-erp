@@ -32,6 +32,7 @@ from typing import Any
 from sqlalchemy.engine import make_url
 
 from ..config import get_settings
+from app.core.i18n import tx
 
 log = logging.getLogger("erp.backup")
 
@@ -78,10 +79,10 @@ def list_backups(backup_dir: Path | None = None) -> list[BackupInfo]:
 def backup_path(name: str, backup_dir: Path | None = None) -> Path:
     """Resolve a backup by name; only plain `erp_*.tar` names are accepted (no paths)."""
     if not NAME_RE.match(name):
-        raise BackupError("Geçersiz yedek adı")
+        raise BackupError(tx("Geçersiz yedek adı"))
     p = Path(backup_dir or get_settings().backup_dir) / name
     if not p.is_file():
-        raise BackupError("Yedek bulunamadı")
+        raise BackupError(tx("Yedek bulunamadı"))
     return p
 
 
@@ -130,7 +131,7 @@ def _dump_db(database_url: str, workdir: Path) -> tuple[str, Path]:
     if backend == "sqlite":
         src = url.database
         if not src or src == ":memory:":
-            raise BackupError("Bellek içi SQLite veritabanı yedeklenemez")
+            raise BackupError(tx("Bellek içi SQLite veritabanı yedeklenemez"))
         dst = workdir / "db.sqlite3"
         # closing() and not the connection's own "with", which only commits: Windows cannot remove an open file
         with closing(sqlite3.connect(src)) as s, closing(sqlite3.connect(dst)) as t:
@@ -142,11 +143,11 @@ def _dump_db(database_url: str, workdir: Path) -> tuple[str, Path]:
         try:
             r = subprocess.run(cmd, env=_pg_env(url), capture_output=True, text=True, timeout=3600)
         except FileNotFoundError as e:
-            raise BackupError("pg_dump bulunamadı (postgresql-client kurulu değil)") from e
+            raise BackupError(tx("pg_dump bulunamadı (postgresql-client kurulu değil)")) from e
         if r.returncode != 0:
-            raise BackupError(f"Veritabanı dökümü alınamadı: {r.stderr.strip()[-500:]}")
+            raise BackupError(tx("Veritabanı dökümü alınamadı: {0}", r.stderr.strip()[-500:]))
         return "postgresql", dst
-    raise BackupError(f"Desteklenmeyen veritabanı: {backend}")
+    raise BackupError(tx("Desteklenmeyen veritabanı: {0}", backend))
 
 
 def _not_data(data_dir: Path, database_url: str, backup_dir: Path) -> set[str]:
@@ -176,14 +177,14 @@ def create_backup(database_url: str | None = None, data_dir: Path | None = None,
     backup_dir = Path(backup_dir or cfg.backup_dir)
     keep_days = cfg.backup_keep_days if keep_days is None else keep_days
     if not _lock.acquire(blocking=False):
-        raise BackupBusy("Yedekleme zaten çalışıyor")
+        raise BackupBusy(tx("Yedekleme zaten çalışıyor"))
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
         ts = now or datetime.now(timezone.utc)
         name = f"erp_{ts.strftime('%Y%m%d_%H%M%S')}.tar"
         final = backup_dir / name
         if final.exists():
-            raise BackupBusy("Aynı saniyede başka bir yedek alındı, tekrar deneyin")
+            raise BackupBusy(tx("Aynı saniyede başka bir yedek alındı, tekrar deneyin"))
         partial = backup_dir / (name + ".partial")
         with tempfile.TemporaryDirectory(prefix="erp_bk_", dir=backup_dir) as tmp:
             kind, dump = _dump_db(database_url, Path(tmp))
@@ -208,7 +209,7 @@ def create_backup(database_url: str | None = None, data_dir: Path | None = None,
         return BackupInfo(name, final, final.stat().st_size, _stamp_of(final))
     except OSError as e:  # a full disk, a locked file, a folder without write access
         log.exception("backup failed")
-        raise BackupError(f"Yedek dosyası yazılamadı: {e}") from e
+        raise BackupError(tx("Yedek dosyası yazılamadı: {0}", e)) from e
     finally:
         _lock.release()
 
@@ -217,7 +218,7 @@ def read_manifest(path: Path) -> dict[str, Any]:
     with tarfile.open(path, "r") as tar:
         f = tar.extractfile("manifest.json")
         if f is None:
-            raise BackupError("Yedekte manifest.json yok")
+            raise BackupError(tx("Yedekte manifest.json yok"))
         return json.loads(f.read().decode("utf-8"))
 
 
@@ -237,20 +238,20 @@ def restore_backup(path: Path, database_url: str | None = None, data_dir: Path |
             tar.extractall(t, filter="data")
         dump = (t / str(manifest["db_file"])).resolve()
         if Path(t).resolve() not in dump.parents:
-            raise ValueError("Yedek dosyası bozuk: veritabanı dosyası yolu geçersiz")
+            raise ValueError(tx("Yedek dosyası bozuk: veritabanı dosyası yolu geçersiz"))
         if manifest["db_kind"] == "sqlite":
             if url.get_backend_name() != "sqlite":
-                raise BackupError("SQLite yedeği PostgreSQL'e geri yüklenemez")
+                raise BackupError(tx("SQLite yedeği PostgreSQL'e geri yüklenemez"))
             with closing(sqlite3.connect(dump)) as s, closing(sqlite3.connect(url.database)) as d:
                 s.backup(d)
         else:
             if url.get_backend_name() != "postgresql":
-                raise BackupError("PostgreSQL yedeği bu veritabanına geri yüklenemez")
+                raise BackupError(tx("PostgreSQL yedeği bu veritabanına geri yüklenemez"))
             cmd = ["pg_restore", *_pg_args(url), "--clean", "--if-exists", "--no-owner",
                    "-d", url.database or "", str(dump)]
             r = subprocess.run(cmd, env=_pg_env(url), capture_output=True, text=True, timeout=3600)
             if r.returncode != 0:
-                raise BackupError(f"Veritabanı geri yüklenemedi: {r.stderr.strip()[-500:]}")
+                raise BackupError(tx("Veritabanı geri yüklenemedi: {0}", r.stderr.strip()[-500:]))
         src = t / "data"
         if src.is_dir():
             data_dir.mkdir(parents=True, exist_ok=True)

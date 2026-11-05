@@ -1,6 +1,7 @@
 /** Thin fetch wrapper: session cookie, JSON, Turkish error messages from FastAPI `detail`. */
 import { desktop, type DesktopFileRequest } from "./desktop";
 import { mobileApp } from "./mobile";
+import { LANG, localizeLabels, tx } from "./i18n";
 
 const LEGACY_TOKEN_KEY = "erp_token";
 /** The server refuses unsafe requests that ride on the cookie without it (backend/app/auth.py APP_HEADER). */
@@ -57,13 +58,13 @@ export async function request<T = unknown>(method: string, path: string, body?: 
   }
   const res = await fetch(`/api${path}`, { ...init, method, headers, body: payload }).catch((e) => {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
-    throw new ApiError(0, "Sunucuya ulaşılamadı");
+    throw new ApiError(0, tx("Sunucuya ulaşılamadı"));
   });
   if (res.status === 401 && !path.startsWith("/auth/login")) onUnauthorized();
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("application/json") ? await res.json() : await res.text();
-  if (!res.ok) throw new ApiError(res.status, detailText(data, `İstek başarısız (${res.status})`), data);
-  return data as T;
+  if (!res.ok) throw new ApiError(res.status, detailText(data, tx("İstek başarısız ({0})", res.status)), data);
+  return localizeLabels(data) as T;
 }
 
 export const api = {
@@ -90,9 +91,9 @@ export function upload<T = unknown>(path: string, form: FormData, onProgress?: (
       }
       if (xhr.status === 401) onUnauthorized();
       if (xhr.status >= 200 && xhr.status < 300) resolve(data as T);
-      else reject(new ApiError(xhr.status, detailText(data, `Yükleme başarısız (${xhr.status})`), data));
+      else reject(new ApiError(xhr.status, detailText(data, tx("Yükleme başarısız ({0})", xhr.status)), data));
     };
-    xhr.onerror = () => reject(new ApiError(0, "Sunucuya ulaşılamadı"));
+    xhr.onerror = () => reject(new ApiError(0, tx("Sunucuya ulaşılamadı")));
     xhr.send(form);
   });
 }
@@ -115,7 +116,7 @@ export async function download(path: string, fallbackName: string): Promise<void
     } catch {
       body = undefined;
     }
-    throw new ApiError(res.status, detailText(body, `İndirme başarısız (${res.status})`));
+    throw new ApiError(res.status, detailText(body, tx("İndirme başarısız ({0})", res.status)));
   }
   const cd = res.headers.get("content-disposition") || "";
   const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
@@ -131,14 +132,14 @@ export async function download(path: string, fallbackName: string): Promise<void
 /** Fetch a protected binary (PDF, thumbnail) as an object URL. */
 export async function blobUrl(path: string): Promise<string> {
   const res = await fetch(`/api${path}`);
-  if (!res.ok) throw new ApiError(res.status, `Dosya alınamadı (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, tx("Dosya alınamadı ({0})", res.status));
   return URL.createObjectURL(await res.blob());
 }
 
 /** Desktop app: the Python side fetches the file and saves it ("Farklı kaydet") or opens it. */
 export async function desktopFile(req: Omit<DesktopFileRequest, "token">): Promise<void> {
   const d = desktop();
-  if (!d) throw new ApiError(0, "Masaüstü uygulaması bulunamadı");
-  const r = await d.file_request({ ...req, token: await fileTicket(req.path) });
-  if (!r.ok && !r.cancelled) throw new ApiError(r.status ?? 0, r.error || "İndirme başarısız");
+  if (!d) throw new ApiError(0, tx("Masaüstü uygulaması bulunamadı"));
+  const r = await d.file_request({ ...req, lang: LANG, token: await fileTicket(req.path) });
+  if (!r.ok && !r.cancelled) throw new ApiError(r.status ?? 0, r.error || tx("İndirme başarısız"));
 }

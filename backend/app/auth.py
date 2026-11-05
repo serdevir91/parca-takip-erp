@@ -13,6 +13,7 @@ from .config import get_settings
 from .db import get_db
 from .models import ROLE_ADMIN, ROLE_DESIGNER, ROLE_PLANNER, User
 from .services.system import apply_runtime
+from app.core.i18n import tx
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -71,19 +72,19 @@ def _decode(token: str) -> tuple[int, int, str | None]:
         payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
         return int(payload["sub"]), int(payload.get("tv", 0)), payload.get("p")
     except (jwt.PyJWTError, KeyError, ValueError, TypeError):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum geçersiz veya süresi doldu")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, tx("Oturum geçersiz veya süresi doldu"))
 
 
 def user_from_token(token: str | None, db: Session) -> User:
     if not token:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Giriş yapılmadı")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, tx("Giriş yapılmadı"))
     apply_runtime(db)
     uid, tv, _ = _decode(token)
     user = db.get(User, uid)
     if user is None or not user.active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Kullanıcı bulunamadı veya pasif")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, tx("Kullanıcı bulunamadı veya pasif"))
     if tv != (user.token_version or 0):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Oturum sona erdi, tekrar giriş yapın")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, tx("Oturum sona erdi, tekrar giriş yapın"))
     return user
 
 
@@ -109,11 +110,11 @@ def session_token(request: Request, bearer: str | None = Depends(oauth2)) -> str
     if bearer:
         bound = _decode(bearer)[2]
         if bound is not None and bound != request.url.path:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Bu bilet başka bir dosya için")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, tx("Bu bilet başka bir dosya için"))
         return bearer
     token = request.cookies.get(COOKIE_HTTPS) or request.cookies.get(COOKIE_HTTP)
     if token and request.method not in SAFE_METHODS and request.headers.get(APP_HEADER) != APP_HEADER_VALUE:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "İstek reddedildi")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, tx("İstek reddedildi"))
     return token
 
 
@@ -124,6 +125,6 @@ def current_user(token: str | None = Depends(session_token), db: Session = Depen
 def require_roles(*roles: str):
     def dep(user: User = Depends(current_user)) -> User:
         if user.role not in roles:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Bu işlem için yetkiniz yok")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, tx("Bu işlem için yetkiniz yok"))
         return user
     return dep

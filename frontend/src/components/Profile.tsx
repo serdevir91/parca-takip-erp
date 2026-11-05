@@ -4,6 +4,7 @@ import { sys } from "../api/system";
 import { useAuth, type User } from "../api/auth";
 import { Field, Modal, roleLabel } from "../pages/admin/shared";
 import { errText, useToast } from "./Toast";
+import { tx } from "../api/i18n";
 
 
 /** Own profile: display name, e-mail and password. User name, role and permissions stay with the admin. */
@@ -20,9 +21,9 @@ export default function Profile({ onClose }: { onClose: () => void }) {
 
   const pwWanted = !!(oldPw || newPw || again);
   const pwProblem = !pwWanted ? ""
-    : !oldPw ? "Mevcut şifrenizi yazın."
-    : newPw.length < sys.password_min ? `Yeni şifre en az ${sys.password_min} karakter olmalı.`
-    : newPw !== again ? "Yeni şifreler aynı değil."
+    : !oldPw ? tx("Mevcut şifrenizi yazın.")
+    : newPw.length < sys.password_min ? tx("Yeni şifre en az {0} karakter olmalı.", sys.password_min)
+    : newPw !== again ? tx("Yeni şifreler aynı değil.")
     : "";
   const nameChanged = name.trim() !== (user?.full_name ?? "") || email.trim() !== (user?.email ?? "");
 
@@ -37,7 +38,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
         await api.post("/auth/password", { old_password: oldPw, new_password: newPw });
       }
       reloadUser();
-      toast(pwWanted ? "Profil ve şifre kaydedildi. Diğer cihazlarda yeniden giriş gerekir." : "Profil kaydedildi");
+      toast(pwWanted ? tx("Profil ve şifre kaydedildi. Diğer cihazlarda yeniden giriş gerekir.") : tx("Profil kaydedildi"));
       onClose();
     } catch (ex) {
       setErr(errText(ex));
@@ -47,32 +48,32 @@ export default function Profile({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Profilim" onClose={onClose}>
+    <Modal title={tx("Profilim")} onClose={onClose}>
       <form className="profile-form" onSubmit={save}>
         <div className="muted">
-          Kullanıcı adı: <b>{user?.username}</b> · Rol: {roleLabel(user?.role ?? "")}
+          {tx("Kullanıcı adı:")}{" "}<b>{user?.username}</b>{" "}{tx("· Rol: {0}", roleLabel(user?.role ?? ""))}
         </div>
-        <Field label="Ad soyad">
+        <Field label={tx("Ad soyad")}>
           <input value={name} maxLength={128} onChange={(e) => setName(e.target.value)} autoComplete="name" />
         </Field>
-        <Field label="E-posta" hint="Gönderdiğiniz e-postalara verilen yanıtlar bu adrese gelir.">
+        <Field label={tx("E-posta")} hint={tx("Gönderdiğiniz e-postalara verilen yanıtlar bu adrese gelir.")}>
           <input type="email" value={email} maxLength={200} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </Field>
-        <h4>Şifre değiştir</h4>
-        <Field label="Mevcut şifre">
+        <h4>{tx("Şifre değiştir")}</h4>
+        <Field label={tx("Mevcut şifre")}>
           <input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoComplete="current-password" />
         </Field>
-        <Field label="Yeni şifre" hint={`En az ${sys.password_min} karakter`}>
+        <Field label={tx("Yeni şifre")} hint={tx("En az {0} karakter", sys.password_min)}>
           <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" />
         </Field>
-        <Field label="Yeni şifre (tekrar)">
+        <Field label={tx("Yeni şifre (tekrar)")}>
           <input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" />
         </Field>
         {err && <div className="error">{err}</div>}
         <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={onClose}>Vazgeç</button>
+          <button type="button" className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
           <button className="btn primary" disabled={busy || (!nameChanged && !pwWanted)}>
-            {busy ? "Kaydediliyor…" : "Kaydet"}
+            {busy ? tx("Kaydediliyor…") : tx("Kaydet")}
           </button>
         </div>
       </form>

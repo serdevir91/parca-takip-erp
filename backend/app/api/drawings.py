@@ -18,6 +18,7 @@ from ..services import drawings as svc
 from ..services.state import ProjectView
 from ..permissions import can, require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 drawings_edit = require("drawings", "edit")
 
@@ -28,7 +29,7 @@ def file_user(token: str | None = Depends(session_token), db: Session = Depends(
     """Cookie or Bearer header only: tokens in URLs end up in logs and history and make links replayable."""
     user = user_from_token(token, db)
     if not can(user, "drawings", "view"):
-        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+        raise HTTPException(403, tx("Bu işlem için yetkiniz yok"))
     return user
 
 
@@ -49,28 +50,28 @@ class ZipIn(BaseModel):
 def _drawing_or_404(db: Session, did: int) -> Drawing:
     d = db.get(Drawing, did)
     if d is None:
-        raise HTTPException(404, "Resim bulunamadı")
+        raise HTTPException(404, tx("Resim bulunamadı"))
     return d
 
 
 def _version_or_404(db: Session, vid: int) -> DrawingVersion:
     v = db.get(DrawingVersion, vid)
     if v is None:
-        raise HTTPException(404, "Resim sürümü bulunamadı")
+        raise HTTPException(404, tx("Resim sürümü bulunamadı"))
     return v
 
 
 def _current(d: Drawing) -> DrawingVersion:
     v = next((x for x in d.versions if x.version_no == d.current_version), None)
     if v is None:
-        raise HTTPException(404, "Resmin dosyası yok")
+        raise HTTPException(404, tx("Resmin dosyası yok"))
     return v
 
 
 def _send(v: DrawingVersion) -> FileResponse:
     p = Path(v.storage_path)
     if not p.is_file():
-        raise HTTPException(404, "Dosya diskte bulunamadı")
+        raise HTTPException(404, tx("Dosya diskte bulunamadı"))
     d = v.drawing
     inline = d.ext in svc.INLINE_EXTS
     return FileResponse(p, media_type=svc.media_type(d.ext), filename=d.filename,
@@ -92,7 +93,7 @@ def upload(pid: int, files: list[UploadFile] = File(...), db: Session = Depends(
         ext = split_ext(name)[1]
         if ext not in svc.ZIP_EXTS and ext not in svc.DRAWING_EXTS:
             results.append({"filename": name, "status": "rejected",
-                            "error": f"Desteklenmeyen dosya türü: .{ext or '?'}"})
+                            "error": tx("Desteklenmeyen dosya türü: .{0}", ext or "?")})
             continue
         try:
             tmp, size, sha = svc.save_upload_sync(f)
@@ -138,13 +139,13 @@ def project_zip(pid: int, body: ZipIn, background: BackgroundTasks, db: Session 
                 user: User = Depends(file_user)) -> FileResponse:
     """Zip of the current drawings of selected parts (mode: pdf | pdf_dwg | all)."""
     if body.mode not in svc.ZIP_MODES:
-        raise HTTPException(400, "Geçersiz mod. Seçenekler: pdf, pdf_dwg, all")
+        raise HTTPException(400, tx("Geçersiz mod. Seçenekler: pdf, pdf_dwg, all"))
     project = project_or_404(db, pid)
     view = ProjectView.load(db, project)
     path, n = svc.build_zip(view, body.part_nos, body.main_group, body.mode)
     if n == 0:
         path.unlink(missing_ok=True)
-        raise HTTPException(404, "Seçime uyan resim yok")
+        raise HTTPException(404, tx("Seçime uyan resim yok"))
     background.add_task(path.unlink, missing_ok=True)
     return FileResponse(path, media_type="application/zip",
                         filename=f"{svc.safe_filename(project.name)}_resimler.zip")
@@ -170,7 +171,7 @@ def assign(did: int, body: AssignIn, db: Session = Depends(get_db),
     if body.part_no and body.part_no.strip():
         pno = svc.canonical_part(db, body.part_no)
         if pno is None:
-            raise HTTPException(400, f"Parça numarası bulunamadı: {body.part_no.strip()}")
+            raise HTTPException(400, tx("Parça numarası bulunamadı: {0}", body.part_no.strip()))
     old = d.part_no
     if old != pno:
         audit.record(db, user, "drawing", d.id, "part_no", old, pno)
@@ -199,7 +200,7 @@ def thumb(did: int, db: Session = Depends(get_db), user: User = Depends(file_use
     v = _current(d)
     p = svc.thumb_for(db, v)
     if p is None:
-        raise HTTPException(404, "Önizleme yok")
+        raise HTTPException(404, tx("Önizleme yok"))
     media = "image/png" if p.suffix.lower() == ".png" or d.ext == "pdf" else svc.media_type(d.ext)
     return FileResponse(p, media_type=media, headers={"Cache-Control": "private, max-age=3600"})
 

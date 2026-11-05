@@ -2,13 +2,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Modal } from "../pages/admin/shared";
 import { ApiError } from "./client";
+import { tx } from "./i18n";
 
 type Pending = { message: string; answer: (overwrite: boolean) => void };
 let ask: ((p: Pending) => void) | null = null;
 
 const conflictOf = (e: unknown): string | null => {
   const detail = e instanceof ApiError ? (e.body as { detail?: { conflict?: boolean; message?: string } } | undefined)?.detail : undefined;
-  return detail?.conflict ? detail.message ?? "Bu kaydı siz düzenlerken başka biri değiştirdi." : null;
+  return detail?.conflict ? detail.message ?? tx("Bu kaydı siz düzenlerken başka biri değiştirdi.") : null;
 };
 
 /**
@@ -23,7 +24,7 @@ export async function saveRev<T>(rev: number | undefined, send: (rev: number | u
     if (!message || !ask) throw e;
     const show = ask;
     const overwrite = await new Promise<boolean>((answer) => show({ message, answer }));
-    if (!overwrite) throw new ApiError(409, "Değişikliğiniz kaydedilmedi. Güncel hali görmek için formu kapatıp yeniden açın.");
+    if (!overwrite) throw new ApiError(409, tx("Değişikliğiniz kaydedilmedi. Güncel hali görmek için formu kapatıp yeniden açın."));
     return send(undefined);
   }
 }
@@ -43,13 +44,13 @@ export function ConflictHost() {
     if (!overwrite) void qc.invalidateQueries();
   };
   return (
-    <Modal title="Başkası değiştirdi" onClose={() => answer(false)}
+    <Modal title={tx("Başkası değiştirdi")} onClose={() => answer(false)}
       footer={<>
-        <button className="btn" onClick={() => answer(false)}>Onlarınki kalsın</button>
-        <button className="btn danger" onClick={() => answer(true)}>Yine de kaydet</button>
+        <button className="btn" onClick={() => answer(false)}>{tx("Onlarınki kalsın")}</button>
+        <button className="btn danger" onClick={() => answer(true)}>{tx("Yine de kaydet")}</button>
       </>}>
       <p>{pending.message}</p>
-      <p className="muted">“Yine de kaydet” sizin formunuzdaki değerleri onların değişikliğinin üzerine yazar.</p>
+      <p className="muted">{tx("“Yine de kaydet” sizin formunuzdaki değerleri onların değişikliğinin üzerine yazar.")}</p>
     </Modal>
   );
 }

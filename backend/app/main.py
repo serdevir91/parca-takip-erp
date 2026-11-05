@@ -18,6 +18,7 @@ from .config import get_settings
 from .db import SessionLocal, engine
 from .services import mailer, maintenance, sync, tls
 from .services.bootstrap import seed_defaults
+from app.core.i18n import set_lang, tx
 
 log = logging.getLogger("erp")
 
@@ -55,13 +56,13 @@ app = FastAPI(title="LAB ERP", version=get_settings().app_version, lifespan=life
 async def value_does_not_fit(_: Request, e: DataError) -> JSONResponse:
     """PostgreSQL refuses what SQLite stores: a text longer than its column, a number beyond its type."""
     log.warning("value refused by the database: %s", e.orig)
-    return JSONResponse({"detail": "Girilen değer çok uzun veya çok büyük"}, status_code=400)
+    return JSONResponse({"detail": tx("Girilen değer çok uzun veya çok büyük")}, status_code=400)
 
 
 @app.exception_handler(IntegrityError)
 async def record_in_conflict(_: Request, e: IntegrityError) -> JSONResponse:
     log.warning("integrity error: %s", e.orig)
-    return JSONResponse({"detail": "Bu kayıt zaten var veya başka kayıtlarla bağlantılı"}, status_code=409)
+    return JSONResponse({"detail": tx("Bu kayıt zaten var veya başka kayıtlarla bağlantılı")}, status_code=409)
 
 # The SPA: own scripts only (pdf.js needs wasm), inline styles (charts), blob: for previews and the
 # pdf.js worker; connect-src adds only the configured update feed. API responses (JSON and stored files)
@@ -87,7 +88,7 @@ async def restore_gate(request: Request, call_next):
     if not path.startswith("/api/") or path in ("/api/health", "/api/version"):
         return await call_next(request)
     if not maintenance.enter():
-        return JSONResponse({"detail": "Sistem yedekten geri yükleniyor, biraz sonra tekrar deneyin"}, 503,
+        return JSONResponse({"detail": tx("Sistem yedekten geri yükleniyor, biraz sonra tekrar deneyin")}, 503,
                             headers={"Retry-After": "30"})
     try:
         return await call_next(request)
@@ -118,6 +119,13 @@ async def live_sync(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def request_language(request: Request, call_next):
+    """Added last, so it runs first: every message below it uses the caller's language."""
+    set_lang(request.headers.get("x-lang") or request.cookies.get("erp_lang"))
+    return await call_next(request)
+
+
 @app.get("/api/sync", tags=["system"])
 def sync_rev() -> dict:
     """Write counter for live refresh on other computers (no login needed: it is just a number)."""
@@ -134,7 +142,7 @@ def tls_cert() -> Response:
     """The server's own certificate, for adding it to a browser or phone. Public by nature."""
     cert = tls.files()[0]
     if not cert.is_file():
-        raise HTTPException(404, "HTTPS açık değil")
+        raise HTTPException(404, tx("HTTPS açık değil"))
     return Response(cert.read_bytes(), media_type="application/x-x509-ca-cert",
                     headers={"Content-Disposition": 'attachment; filename="lab-erp.crt"'})
 
@@ -172,7 +180,7 @@ if _spa is not None:
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
         if path.startswith("api/") or path == "api":
-            raise HTTPException(404, "Not Found")
+            raise HTTPException(404, tx("Not Found"))
         f = (_spa_root / path).resolve()
         if path and f.is_file() and _spa_root in f.parents:
             return FileResponse(f)

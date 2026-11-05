@@ -16,6 +16,7 @@ from ..services.state import ProjectView
 from ..services.tracking import apply_changes, clean_changes, material_status_choices, read_upload_sync
 from ..permissions import require
 from .deps import admin, get_db, project_or_404
+from app.core.i18n import tx
 
 control_view, control_edit = require("control", "view"), require("control", "edit")
 
@@ -72,14 +73,14 @@ def preview(pid: int, file: UploadFile = File(...), db: Session = Depends(get_db
     Sync on purpose: openpyxl parsing and DB work run in the threadpool, not on the event loop."""
     view = ProjectView.load(db, project_or_404(db, pid))
     if view.version is None:
-        raise HTTPException(400, "Projede onaylı BOM yok")
+        raise HTTPException(400, tx("Projede onaylı BOM yok"))
     data = read_upload_sync(file)
     try:
         rows = t35core.read_t35(data)
     except Exception as e:  # noqa: BLE001 - openpyxl raises many types for bad files
-        raise HTTPException(400, f"Excel dosyası okunamadı: {e}") from e
+        raise HTTPException(400, tx("Excel dosyası okunamadı: {0}", e)) from e
     if not rows:
-        raise HTTPException(400, "Listede parça satırı bulunamadı")
+        raise HTTPException(400, tx("Listede parça satırı bulunamadı"))
     bom, parts = _bom_parts(view)
     pv = t35core.build_preview(rows, bom, t35_config(db), view.aliases)
     updates = []
@@ -113,7 +114,7 @@ def apply(pid: int, body: ApplyIn, db: Session = Depends(get_db), user: User = D
     for it in body.items:
         pno = view.aliases.get(it.part_no, it.part_no)
         if pno not in known:
-            errors.append({"part_no": it.part_no, "error": "Parça güncel BOM'da yok"})
+            errors.append({"part_no": it.part_no, "error": tx("Parça güncel BOM'da yok")})
             continue
         raw = {f: getattr(it, f) for f in APPLY_FIELDS if getattr(it, f) is not None}
         if not raw:
@@ -157,15 +158,15 @@ def put_config(body: ConfigIn, db: Session = Depends(get_db), user: User = Depen
     for i, r in enumerate(body.rules, 1):
         kws = [k.strip() for k in r.all if k and k.strip()]
         if r.field not in RULE_FIELDS:
-            raise HTTPException(400, f"Kural {i}: alan '{r.field}' geçersiz. Seçenekler: {', '.join(RULE_FIELDS)}")
+            raise HTTPException(400, tx("Kural {0}: alan '{1}' geçersiz. Seçenekler: {2}", i, r.field, ', '.join(RULE_FIELDS)))
         if not kws:
-            raise HTTPException(400, f"Kural {i}: en az bir anahtar kelime gerekli")
+            raise HTTPException(400, tx("Kural {0}: en az bir anahtar kelime gerekli", i))
         allowed = PROGRESS_CHOICES if r.field == "progress" else mats
         if r.value not in allowed:
-            raise HTTPException(400, f"Kural {i}: '{r.value}' geçersiz. Seçenekler: {', '.join(allowed)}")
+            raise HTTPException(400, tx("Kural {0}: '{1}' geçersiz. Seçenekler: {2}", i, r.value, ', '.join(allowed)))
         rules.append({"field": r.field, "all": kws, "value": r.value, "priority": r.priority, "active": r.active})
     if body.default_progress not in PROGRESS_CHOICES:
-        raise HTTPException(400, f"Varsayılan ilerleme geçersiz. Seçenekler: {', '.join(PROGRESS_CHOICES)}")
+        raise HTTPException(400, tx("Varsayılan ilerleme geçersiz. Seçenekler: {0}", ', '.join(PROGRESS_CHOICES)))
     old = get_setting(db, "t35")
     new = {"rules": rules, "default_progress": body.default_progress,
            "skip_note": [s.strip() for s in body.skip_note if s and s.strip()]}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..models import User, UserPref
 from .deps import any_user, get_db
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/me/prefs", tags=["prefs"])
 
@@ -32,7 +33,7 @@ def set_pref(body: PrefIn, key: str = Key, me: User = Depends(any_user), db: Ses
     else:
         count = db.scalar(select(func.count()).select_from(UserPref).where(UserPref.user_id == me.id)) or 0
         if count >= MAX_KEYS:
-            raise HTTPException(400, "Kayıtlı görünüm sınırına ulaşıldı")
+            raise HTTPException(400, tx("Kayıtlı görünüm sınırına ulaşıldı"))
         db.add(UserPref(user_id=me.id, key=key, value=body.value))
     db.commit()
     return {"ok": True}

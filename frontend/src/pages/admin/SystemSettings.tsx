@@ -6,6 +6,7 @@ import { OPTIONS_KEY } from "../../api/system";
 import BrandMark from "../../components/BrandMark";
 import { errText, useToast } from "../../components/Toast";
 import { Field, ListEditor, Loading } from "./shared";
+import { tx } from "../../api/i18n";
 
 type Values = Record<string, string | number | string[]>;
 type Sections = "company" | "commerce" | "production" | "security" | "files" | "modules";
@@ -33,7 +34,7 @@ function toLogo(file: File): Promise<string> {
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Resim okunamadı"));
+      reject(new Error(tx("Resim okunamadı")));
     };
     img.src = url;
   });
@@ -59,7 +60,7 @@ function Forms({ data }: { data: Data }) {
       qc.setQueryData(QK, d);
       void qc.invalidateQueries({ queryKey: OPTIONS_KEY });
       reloadUser();
-      toast("Ayar kaydedildi");
+      toast(tx("Ayar kaydedildi"));
     },
     onError: (e) => toast(errText(e), true),
   });
@@ -67,105 +68,105 @@ function Forms({ data }: { data: Data }) {
 
   return (
     <div className="grid adm-settings">
-      <Card {...card} section="company" title="Şirket ve görünüm"
-        note="Şirket bilgileri sipariş, teklif ve fatura formlarının üstüne yazılır. Uygulama adı menüde, giriş ekranında ve e-postalarda görünür.">
+      <Card {...card} section="company" title={tx("Şirket ve görünüm")}
+        note={tx("Şirket bilgileri sipariş, teklif ve fatura formlarının üstüne yazılır. Uygulama adı menüde, giriş ekranında ve e-postalarda görünür.")}>
         {(f, set) => (
           <>
-            <Text f={f} set={set} k="app_name" label="Uygulama adı" />
+            <Text f={f} set={set} k="app_name" label={tx("Uygulama adı")} />
             <Logo value={String(f.logo)} onChange={(v) => set("logo", v)} />
-            <Text f={f} set={set} k="name" label="Şirket adı" />
-            <Text f={f} set={set} k="address" label="Adres" />
+            <Text f={f} set={set} k="name" label={tx("Şirket adı")} />
+            <Text f={f} set={set} k="address" label={tx("Adres")} />
             <div className="adm-two">
-              <Text f={f} set={set} k="phone" label="Telefon" />
-              <Text f={f} set={set} k="email" label="E-posta" />
+              <Text f={f} set={set} k="phone" label={tx("Telefon")} />
+              <Text f={f} set={set} k="email" label={tx("E-posta")} />
             </div>
-            <Text f={f} set={set} k="web" label="Web adresi" />
+            <Text f={f} set={set} k="web" label={tx("Web adresi")} />
             <div className="adm-two">
-              <Text f={f} set={set} k="tax_office" label="Vergi dairesi" />
-              <Text f={f} set={set} k="tax_no" label="Vergi numarası" />
+              <Text f={f} set={set} k="tax_office" label={tx("Vergi dairesi")} />
+              <Text f={f} set={set} k="tax_no" label={tx("Vergi numarası")} />
             </div>
           </>
         )}
       </Card>
 
-      <Card {...card} section="commerce" title="Finans ve belgeler"
-        note="Yeni belgelerin varsayılanları. Toplamlar bu para birimine çevrilir: her belge kendi kurunu saklar, kurlar Fatura ve ödeme > Kurlar sekmesindedir. Para birimini değiştirirseniz eski kurlar ve belge kurları eski birime göre kalır.">
+      <Card {...card} section="commerce" title={tx("Finans ve belgeler")}
+        note={tx("Yeni belgelerin varsayılanları. Toplamlar bu para birimine çevrilir: her belge kendi kurunu saklar, kurlar Fatura ve ödeme > Kurlar sekmesindedir. Para birimini değiştirirseniz eski kurlar ve belge kurları eski birime göre kalır.")}>
         {(f, set) => (
           <>
             <div className="adm-two">
-              <Text f={f} set={set} k="currency" label="Para birimi" hint="TRY, EUR, USD gibi" />
-              <Num f={f} set={set} k="vat" label="KDV oranı (%)" />
+              <Text f={f} set={set} k="currency" label={tx("Para birimi")} hint={tx("TRY, EUR, USD gibi")} />
+              <Num f={f} set={set} k="vat" label={tx("KDV oranı (%)")} />
             </div>
             <div className="adm-two">
-              <Num f={f} set={set} k="payment_days" label="Fatura vadesi (gün)" />
-              <Num f={f} set={set} k="quote_days" label="Teklif geçerliliği (gün)" />
+              <Num f={f} set={set} k="payment_days" label={tx("Fatura vadesi (gün)")} />
+              <Num f={f} set={set} k="quote_days" label={tx("Teklif geçerliliği (gün)")} />
             </div>
             <div className="adm-two">
-              <Num f={f} set={set} k="over_receipt_pct" label="Fazla teslim payı (%)" hint="Mal kabulde sipariş miktarının en çok bu kadar üstü kabul edilir." />
+              <Num f={f} set={set} k="over_receipt_pct" label={tx("Fazla teslim payı (%)")} hint={tx("Mal kabulde sipariş miktarının en çok bu kadar üstü kabul edilir.")} />
             </div>
-            <Field label="Cari bakiye değerleme kuru"
-              hint="Bugünkü kur: açık bakiye günün kuruyla değerlenir. Belge kuru: her fatura ve ödeme kendi tarihindeki kurla kalır, kapanmış hesapta kur farkı görünür.">
+            <Field label={tx("Cari bakiye değerleme kuru")}
+              hint={tx("Bugünkü kur: açık bakiye günün kuruyla değerlenir. Belge kuru: her fatura ve ödeme kendi tarihindeki kurla kalır, kapanmış hesapta kur farkı görünür.")}>
               <select value={String(f.balance_basis ?? "today")} onChange={(e) => set("balance_basis", e.target.value)}>
-                <option value="today">Bugünkü kur</option>
-                <option value="doc">Belge tarihindeki kur</option>
+                <option value="today">{tx("Bugünkü kur")}</option>
+                <option value="doc">{tx("Belge tarihindeki kur")}</option>
               </select>
             </Field>
-            <Field label="Ödeme yöntemleri">
-              <ListEditor value={f.pay_methods as string[]} onChange={(v) => set("pay_methods", v)} placeholder="Ödeme yöntemi" />
+            <Field label={tx("Ödeme yöntemleri")}>
+              <ListEditor value={f.pay_methods as string[]} onChange={(v) => set("pay_methods", v)} placeholder={tx("Ödeme yöntemi")} />
             </Field>
             <div className="adm-two">
-              <Text f={f} set={set} k="no_po" label="Satın alma no öneki" />
-              <Text f={f} set={set} k="no_so" label="Satış no öneki" />
+              <Text f={f} set={set} k="no_po" label={tx("Satın alma no öneki")} />
+              <Text f={f} set={set} k="no_so" label={tx("Satış no öneki")} />
             </div>
             <div className="adm-two">
-              <Text f={f} set={set} k="no_invoice" label="Fatura no öneki" />
-              <Text f={f} set={set} k="no_wo" label="İş emri no öneki" />
+              <Text f={f} set={set} k="no_invoice" label={tx("Fatura no öneki")} />
+              <Text f={f} set={set} k="no_wo" label={tx("İş emri no öneki")} />
             </div>
-            <p className="muted" style={{ margin: 0 }}>Örnek numara: {String(f.no_po)}-{new Date().getFullYear()}-0001. Yeni önek 0001'den başlar.</p>
+            <p className="muted" style={{ margin: 0 }}>{tx("Örnek numara: {0}-{1}-0001. Yeni önek 0001'den başlar.", String(f.no_po), new Date().getFullYear())}</p>
           </>
         )}
       </Card>
 
-      <Card {...card} section="production" title="Üretim ve stok" note="Yeni kayıtlarda önerilen değerler; her kayıtta değiştirilebilir.">
+      <Card {...card} section="production" title={tx("Üretim ve stok")} note={tx("Yeni kayıtlarda önerilen değerler; her kayıtta değiştirilebilir.")}>
         {(f, set) => (
           <>
-            <Text f={f} set={set} k="unit" label="Varsayılan birim" />
-            <Num f={f} set={set} k="spare_pct" label="Bağlantı elemanı yedek oranı (%)" />
-            <Num f={f} set={set} k="work_hours" label="Günlük çalışma saati" />
-            <Num f={f} set={set} k="week_hours" label="Haftalık çalışma saati (üstü fazla mesai)" />
-            <Num f={f} set={set} k="break_minutes" label="Mola süresi (dk, 4 saatten uzun mesaide düşülür)" />
-            <Num f={f} set={set} k="annual_leave_days" label="Yıllık izin hakkı (gün, personel kartında değiştirilebilir)" />
+            <Text f={f} set={set} k="unit" label={tx("Varsayılan birim")} />
+            <Num f={f} set={set} k="spare_pct" label={tx("Bağlantı elemanı yedek oranı (%)")} />
+            <Num f={f} set={set} k="work_hours" label={tx("Günlük çalışma saati")} />
+            <Num f={f} set={set} k="week_hours" label={tx("Haftalık çalışma saati (üstü fazla mesai)")} />
+            <Num f={f} set={set} k="break_minutes" label={tx("Mola süresi (dk, 4 saatten uzun mesaide düşülür)")} />
+            <Num f={f} set={set} k="annual_leave_days" label={tx("Yıllık izin hakkı (gün, personel kartında değiştirilebilir)")} />
           </>
         )}
       </Card>
 
-      <Card {...card} section="security" title="Güvenlik" note="Şifre kuralı yalnızca yeni şifrelerde, oturum süresi sonraki girişlerde geçerli olur.">
+      <Card {...card} section="security" title={tx("Güvenlik")} note={tx("Şifre kuralı yalnızca yeni şifrelerde, oturum süresi sonraki girişlerde geçerli olur.")}>
         {(f, set) => (
           <>
-            <Num f={f} set={set} k="session_hours" label="Oturum süresi (saat)" />
-            <Num f={f} set={set} k="password_min" label="En kısa şifre (karakter)" />
+            <Num f={f} set={set} k="session_hours" label={tx("Oturum süresi (saat)")} />
+            <Num f={f} set={set} k="password_min" label={tx("En kısa şifre (karakter)")} />
             <div className="adm-two">
-              <Num f={f} set={set} k="login_attempts" label="Hatalı giriş sınırı" />
-              <Num f={f} set={set} k="lock_minutes" label="Kilit süresi (dakika)" />
+              <Num f={f} set={set} k="login_attempts" label={tx("Hatalı giriş sınırı")} />
+              <Num f={f} set={set} k="lock_minutes" label={tx("Kilit süresi (dakika)")} />
             </div>
           </>
         )}
       </Card>
 
-      <Card {...card} section="files" title="Dosya ve yedek">
+      <Card {...card} section="files" title={tx("Dosya ve yedek")}>
         {(f, set) => (
           <>
-            <Num f={f} set={set} k="upload_mb" label="En büyük dosya (MB)" hint="Docker kurulumunda web sunucusu 2048 MB üstünü geçirmez." />
-            <Num f={f} set={set} k="keep_days" label="Yedek saklama (gün)" />
-            <Field label="Günlük yedek saati">
+            <Num f={f} set={set} k="upload_mb" label={tx("En büyük dosya (MB)")} hint={tx("Docker kurulumunda web sunucusu 2048 MB üstünü geçirmez.")} />
+            <Num f={f} set={set} k="keep_days" label={tx("Yedek saklama (gün)")} />
+            <Field label={tx("Günlük yedek saati")}>
               <input type="time" value={String(f.backup_time)} onChange={(e) => set("backup_time", e.target.value)} style={{ width: 140 }} />
             </Field>
           </>
         )}
       </Card>
 
-      <Card {...card} section="modules" title="Modüller"
-        note="Kapatılan modül herkesten, yöneticiler dahil, gizlenir ve kullanılamaz. Veriler silinmez; açınca geri gelir.">
+      <Card {...card} section="modules" title={tx("Modüller")}
+        note={tx("Kapatılan modül herkesten, yöneticiler dahil, gizlenir ve kullanılamaz. Veriler silinmez; açınca geri gelir.")}>
         {(f, set) => {
           const off = f.off as string[];
           return (
@@ -201,43 +202,42 @@ function TeminCard({ types }: { types: TeminType[] }) {
       setList(d.temin_types);
       void qc.invalidateQueries({ queryKey: ["partChoices"] });
       void qc.invalidateQueries({ queryKey: ["parts"] });
-      toast("Temin şekilleri kaydedildi");
+      toast(tx("Temin şekilleri kaydedildi"));
     },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <section className="card adm-temin">
-      <h3>Temin şekilleri</h3>
-      <p className="muted">Davranış, parçanın hangi durumlardan geçeceğini belirler. Teknik resim işaretliyse resmi olmayan parça uyarı verir.
-        Sipariş önerisi kapalıysa ihtiyaç listesi bu parça için iş emri ya da satın alma önermez.</p>
+      <h3>{tx("Temin şekilleri")}</h3>
+      <p className="muted">{tx("Davranış, parçanın hangi durumlardan geçeceğini belirler. Teknik resim işaretliyse resmi olmayan parça uyarı verir. Sipariş önerisi kapalıysa ihtiyaç listesi bu parça için iş emri ya da satın alma önermez.")}</p>
       <table className="simple">
-        <thead><tr><th>Ad</th><th>Davranış</th><th>Teknik resim</th><th>Sipariş önerisi</th><th /></tr></thead>
+        <thead><tr><th>{tx("Ad")}</th><th>{tx("Davranış")}</th><th>{tx("Teknik resim")}</th><th>{tx("Sipariş önerisi")}</th><th /></tr></thead>
         <tbody>
           {list.map((t, i) => {
             const fixed = FIXED_TEMINS.includes(t.name);
             return (
               <tr key={i}>
-                <td><input value={t.name} disabled={fixed} maxLength={64} aria-label="Temin şekli adı" onChange={(e) => set(i, { name: e.target.value })} /></td>
+                <td><input value={t.name} disabled={fixed} maxLength={64} aria-label={tx("Temin şekli adı")} onChange={(e) => set(i, { name: e.target.value })} /></td>
                 <td>
-                  <select value={t.kind} disabled={fixed} aria-label="Davranış" onChange={(e) => set(i, { kind: e.target.value })}>
-                    {t.kind === "" && <option value="">Yok</option>}
-                    <option value="İmalat">İmalat: Üretilmedi, Üretildi</option>
-                    <option value="Hazır Alım">Hazır Alım: Sipariş Verilmedi, Verildi, Teslim Edildi</option>
+                  <select value={t.kind} disabled={fixed} aria-label={tx("Davranış")} onChange={(e) => set(i, { kind: e.target.value })}>
+                    {t.kind === "" && <option value="">{tx("Yok")}</option>}
+                    <option value="İmalat">{tx("İmalat: Üretilmedi, Üretildi")}</option>
+                    <option value="Hazır Alım">{tx("Hazır Alım: Sipariş Verilmedi, Verildi, Teslim Edildi")}</option>
                   </select>
                 </td>
-                <td><input type="checkbox" checked={t.drawing} aria-label="Teknik resim gerekir" onChange={(e) => set(i, { drawing: e.target.checked })} /></td>
-                <td><input type="checkbox" checked={t.order} aria-label="Sipariş önerisi" onChange={(e) => set(i, { order: e.target.checked })} /></td>
-                <td>{!fixed && <button className="btn small" onClick={() => setList((s) => s.filter((_, j) => j !== i))}>Sil</button>}</td>
+                <td><input type="checkbox" checked={t.drawing} aria-label={tx("Teknik resim gerekir")} onChange={(e) => set(i, { drawing: e.target.checked })} /></td>
+                <td><input type="checkbox" checked={t.order} aria-label={tx("Sipariş önerisi")} onChange={(e) => set(i, { order: e.target.checked })} /></td>
+                <td>{!fixed && <button className="btn small" onClick={() => setList((s) => s.filter((_, j) => j !== i))}>{tx("Sil")}</button>}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn small" onClick={() => setList((s) => [...s, { name: "", kind: "Hazır Alım", drawing: false, order: true }])}>+ Temin şekli ekle</button>
-        <button className="btn small primary" disabled={save.isPending} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn small" onClick={() => setList((s) => [...s, { name: "", kind: "Hazır Alım", drawing: false, order: true }])}>{tx("+ Temin şekli ekle")}</button>
+        <button className="btn small primary" disabled={save.isPending} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </div>
-      <p className="muted">Silinen bir türü kullanan parçalar eski adını korur, durumu "Temin seçilmedi" olur.</p>
+      <p className="muted">{tx("Silinen bir türü kullanan parçalar eski adını korur, durumu \"Temin seçilmedi\" olur.")}</p>
     </section>
   );
 }
@@ -258,9 +258,9 @@ function Card({ section, title, note, data, pending, onSave, children }: {
       {note && <p className="muted">{note}</p>}
       <div className="grid" style={{ gap: 10 }}>{children(f, (k, v) => setF((p) => ({ ...p, [k]: v })))}</div>
       <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn primary" disabled={!dirty || pending} onClick={() => onSave({ ...data, [section]: f })}>Kaydet</button>
-        <button className="btn" disabled={!dirty || pending} onClick={() => setF(saved)}>Geri al</button>
-        {dirty && <span className="warn">Kaydedilmemiş değişiklik var</span>}
+        <button className="btn primary" disabled={!dirty || pending} onClick={() => onSave({ ...data, [section]: f })}>{tx("Kaydet")}</button>
+        <button className="btn" disabled={!dirty || pending} onClick={() => setF(saved)}>{tx("Geri al")}</button>
+        {dirty && <span className="warn">{tx("Kaydedilmemiş değişiklik var")}</span>}
       </div>
     </div>
   );
@@ -291,11 +291,11 @@ function Logo({ value, onChange }: { value: string; onChange: (v: string) => voi
     }
   };
   return (
-    <Field label="Logo" hint="Kare bir resim seçin. Masaüstü ve Android simgeleri değişmez.">
+    <Field label={tx("Logo")} hint={tx("Kare bir resim seçin. Masaüstü ve Android simgeleri değişmez.")}>
       <div className="row">
         <span className="brand-logo"><BrandMark logo={value} /></span>
         <input type="file" accept="image/*" onChange={pick} />
-        {value && <button className="btn small" type="button" onClick={() => onChange("")}>Kaldır</button>}
+        {value && <button className="btn small" type="button" onClick={() => onChange("")}>{tx("Kaldır")}</button>}
       </div>
     </Field>
   );

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { errText, useToast } from "../../components/Toast";
 import { Field, ListEditor, Loading, fmtNum } from "./shared";
+import { tx } from "../../api/i18n";
 
 type T35Rule = { field: string; all: string[]; value: string; priority: number; active?: boolean };
 type T35Cfg = {
@@ -13,7 +14,7 @@ type T35Cfg = {
 type Draft = { key: number; field: string; kw: string; value: string; priority: number; active: boolean };
 
 const QK = ["t35config"];
-const FIELD_TR: Record<string, string> = { progress: "İlerleme", material_status: "Malzeme durumu" };
+const FIELD_TR: Record<string, string> = { progress: tx("İlerleme"), material_status: tx("Malzeme durumu") };
 let seq = 0;
 
 const toDrafts = (rules: T35Rule[]): Draft[] =>
@@ -49,7 +50,7 @@ function T35Form({ data }: { data: T35Cfg }) {
     mutationFn: () => api.put<T35Cfg>("/t35/config", { rules: toRules(rules), default_progress: defProg, skip_note: skip }),
     onSuccess: (d) => {
       qc.setQueryData(QK, d);
-      toast("Durum listesi kuralları kaydedildi");
+      toast(tx("Durum listesi kuralları kaydedildi"));
     },
     onError: (e) => toast(errText(e), true),
   });
@@ -77,23 +78,20 @@ function T35Form({ data }: { data: T35Cfg }) {
   return (
     <div className="grid" style={{ gap: 12 }}>
       <div className="card">
-        <h3>Bu ayarlar ne işe yarar?</h3>
+        <h3>{tx("Bu ayarlar ne işe yarar?")}</h3>
         <p className="muted" style={{ marginBottom: 0 }}>
-          Parçalar ekranındaki <b>Durum listesi içe aktar</b> işlemi, firmanızın elinde tuttuğu Excel durum listesini okur. Listedeki serbest
-          açıklama metni buradaki kurallarla ilerleme, malzeme durumu ve üreticiye çevrilir; metnin kendisi Durum Notu alanına yazılır.
-          Böyle bir liste kullanmıyorsanız bu sekmeyi değiştirmeniz gerekmez.
+          {tx("Parçalar ekranındaki")}{" "}<b>{tx("Durum listesi içe aktar")}</b>{" "}{tx("işlemi, firmanızın elinde tuttuğu Excel durum listesini okur. Listedeki serbest açıklama metni buradaki kurallarla ilerleme, malzeme durumu ve üreticiye çevrilir; metnin kendisi Durum Notu alanına yazılır. Böyle bir liste kullanmıyorsanız bu sekmeyi değiştirmeniz gerekmez.")}
         </p>
       </div>
       <div className="card">
-        <h3>Anahtar kelime kuralları</h3>
+        <h3>{tx("Anahtar kelime kuralları")}</h3>
         <p className="muted">
-          Durum listesindeki açıklama metni bir kuralın <b>tüm</b> anahtar kelimelerini içeriyorsa (büyük/küçük harf ve Türkçe karakter farkı gözetilmez)
-          ilgili alan kuralın değerine ayarlanır. Her alan için düşük öncelikli kural önce denenir, ilk eşleşen kazanır.
+          {tx("Durum listesindeki açıklama metni bir kuralın")}{" "}<b>{tx("tüm")}</b>{" "}{tx("anahtar kelimelerini içeriyorsa (büyük/küçük harf ve Türkçe karakter farkı gözetilmez) ilgili alan kuralın değerine ayarlanır. Her alan için düşük öncelikli kural önce denenir, ilk eşleşen kazanır.")}
         </p>
         <div className="adm-scroll">
           <table className="simple">
             <thead>
-              <tr><th>Öncelik</th><th>Alan</th><th>Anahtar kelimeler (virgülle)</th><th>Değer</th><th>Aktif</th><th></th></tr>
+              <tr><th>{tx("Öncelik")}</th><th>{tx("Alan")}</th><th>{tx("Anahtar kelimeler (virgülle)")}</th><th>{tx("Değer")}</th><th>{tx("Aktif")}</th><th></th></tr>
             </thead>
             <tbody>
               {rules.map((r, i) => {
@@ -107,58 +105,58 @@ function T35Form({ data }: { data: T35Cfg }) {
                       </select>
                     </td>
                     <td>
-                      <input style={{ width: "100%", minWidth: 240 }} value={r.kw} placeholder="örn. lazer, kesim"
+                      <input style={{ width: "100%", minWidth: 240 }} value={r.kw} placeholder={tx("örn. lazer, kesim")}
                         onChange={(e) => upd(r.key, { kw: e.target.value })} />
-                      {!kwList(r.kw).length && <div className="error adm-small">En az bir anahtar kelime gerekli</div>}
+                      {!kwList(r.kw).length && <div className="error adm-small">{tx("En az bir anahtar kelime gerekli")}</div>}
                     </td>
                     <td>
                       <select value={r.value} onChange={(e) => upd(r.key, { value: e.target.value })}>
-                        {!opts.includes(r.value) && <option value={r.value}>{r.value || "—"} (geçersiz)</option>}
-                        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                        {!opts.includes(r.value) && <option value={r.value}>{r.value || "—"}{" "}{tx("(geçersiz)")}</option>}
+                        {opts.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
                       </select>
                     </td>
                     <td><input type="checkbox" checked={r.active} onChange={(e) => upd(r.key, { active: e.target.checked })} /></td>
                     <td>
-                      <button className="btn small danger" title={`${fmtNum(i + 1)}. kuralı kaldır`}
-                        onClick={() => setRules((rs) => rs.filter((x) => x.key !== r.key))}>Sil</button>
+                      <button className="btn small danger" title={tx("{0}. kuralı kaldır", fmtNum(i + 1))}
+                        onClick={() => setRules((rs) => rs.filter((x) => x.key !== r.key))}>{tx("Sil")}</button>
                     </td>
                   </tr>
                 );
               })}
-              {!rules.length && <tr><td colSpan={6} className="muted">Kural yok.</td></tr>}
+              {!rules.length && <tr><td colSpan={6} className="muted">{tx("Kural yok.")}</td></tr>}
             </tbody>
           </table>
         </div>
         <div className="row" style={{ marginTop: 8 }}>
-          <button className="btn small" onClick={add}>+ Kural ekle</button>
-          <button className="btn small" onClick={() => setRules((rs) => [...rs].sort((a, b) => a.priority - b.priority))}>Önceliğe göre sırala</button>
-          <span className="muted">{fmtNum(rules.length)} kural</span>
+          <button className="btn small" onClick={add}>{tx("+ Kural ekle")}</button>
+          <button className="btn small" onClick={() => setRules((rs) => [...rs].sort((a, b) => a.priority - b.priority))}>{tx("Önceliğe göre sırala")}</button>
+          <span className="muted">{tx("{0} kural", fmtNum(rules.length))}</span>
         </div>
       </div>
 
       <div className="card">
-        <h3>Genel</h3>
+        <h3>{tx("Genel")}</h3>
         <div className="adm-form">
-          <Field label="Varsayılan ilerleme" hint="Hiçbir ilerleme kuralı eşleşmezse kullanılır.">
+          <Field label={tx("Varsayılan ilerleme")} hint={tx("Hiçbir ilerleme kuralı eşleşmezse kullanılır.")}>
             <select value={defProg} onChange={(e) => setDefProg(e.target.value)} style={{ maxWidth: 320 }}>
-              {!data.progress_choices.includes(defProg) && <option value={defProg}>{defProg}</option>}
-              {data.progress_choices.map((o) => <option key={o} value={o}>{o}</option>)}
+              {!data.progress_choices.includes(defProg) && <option value={defProg}>{tx(defProg)}</option>}
+              {data.progress_choices.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
             </select>
           </Field>
           <div>
-            <b>Yok sayılan not metinleri</b>
-            <p className="muted" style={{ margin: "4px 0 8px" }}>Bu metinlerle birebir aynı olan durum notları takip listesine yazılmaz.</p>
-            <ListEditor value={skip} onChange={setSkip} placeholder="Not metni" />
+            <b>{tx("Yok sayılan not metinleri")}</b>
+            <p className="muted" style={{ margin: "4px 0 8px" }}>{tx("Bu metinlerle birebir aynı olan durum notları takip listesine yazılmaz.")}</p>
+            <ListEditor value={skip} onChange={setSkip} placeholder={tx("Not metni")} />
           </div>
           {data.mark_note && (
-            <div className="muted">İşaretli satırlar için eklenen not: <b>{data.mark_note}</b></div>
+            <div className="muted">{tx("İşaretli satırlar için eklenen not:")}{" "}<b>{data.mark_note}</b></div>
           )}
           <div>
-            <b>Tanınan üretici firmalar</b>
-            <span className="muted"> (Firmalar sekmesindeki üretici firmalardan gelir)</span>
+            <b>{tx("Tanınan üretici firmalar")}</b>
+            <span className="muted">{" "}{tx("(Firmalar sekmesindeki üretici firmalardan gelir)")}</span>
             <div className="row" style={{ gap: 4, marginTop: 6 }}>
               {data.manufacturers.map((m) => <span key={m} className="badge">{m}</span>)}
-              {!data.manufacturers.length && <span className="muted">Üretici firma tanımlı değil.</span>}
+              {!data.manufacturers.length && <span className="muted">{tx("Üretici firma tanımlı değil.")}</span>}
             </div>
           </div>
         </div>
@@ -166,11 +164,11 @@ function T35Form({ data }: { data: T35Cfg }) {
 
       <div className="row adm-sticky">
         <button className="btn primary" disabled={!dirty || badRow >= 0 || save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Kaydediliyor…" : "Kaydet"}
+          {save.isPending ? tx("Kaydediliyor…") : tx("Kaydet")}
         </button>
-        <button className="btn" disabled={!dirty || save.isPending} onClick={reset}>Geri al</button>
-        {badRow >= 0 && <span className="error">{fmtNum(badRow + 1)}. kuralda eksik veya geçersiz alan var</span>}
-        {dirty && badRow < 0 && <span className="warn">Kaydedilmemiş değişiklik var</span>}
+        <button className="btn" disabled={!dirty || save.isPending} onClick={reset}>{tx("Geri al")}</button>
+        {badRow >= 0 && <span className="error">{tx("{0}. kuralda eksik veya geçersiz alan var", fmtNum(badRow + 1))}</span>}
+        {dirty && badRow < 0 && <span className="warn">{tx("Kaydedilmemiş değişiklik var")}</span>}
       </div>
     </div>
   );

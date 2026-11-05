@@ -197,6 +197,415 @@
   </div>
 </div>
 <script>
+  const I18N = {
+    en: {
+      "LAB ERP açılıyor…": "LAB ERP is starting…",
+      "Açılış uzun sürüyor. Sunucu kapalı olabilir.": "Startup is taking a long time. The server may be offline.",
+      "Bağlantı ayarlarını aç": "Open connection settings",
+      "Bu bilgisayar nasıl çalışsın?": "How should this computer run?",
+      "Bu bilgisayar sunucu": "This computer is the server",
+      "Veriler bu bilgisayarda tutulur. Ağdaki diğer bilgisayarlar buna bağlanır.": "Data is stored on this computer. Other computers on the network connect to it.",
+      "Ağdaki sunucuya bağlan": "Connect to a server on the network",
+      "Veriler başka bir bilgisayarda. Bu bilgisayar ona bağlanır, her şey anında eşitlenir.": "Data is on another computer. This computer connects to it and everything syncs instantly.",
+      "Sunucuma kur": "Install on my server",
+      "Linux sunucunuza (Ubuntu, Debian, Rocky…) SSH ile otomatik kurulur, sonra bu bilgisayar ona bağlanır.": "Automatically installs to your Linux server (Ubuntu, Debian, Rocky…) via SSH, then this computer connects to it.",
+      "Veri klasörü": "Data folder",
+      "Gözat…": "Browse…",
+      "Veritabanı, teknik resimler ve günlük yedekler bu klasörde tutulur.": "Database, technical drawings, and daily backups are kept in this folder.",
+      "Port": "Port",
+      "Diğer bilgisayarlar http://BU-BİLGİSAYARIN-ADRESİ:port ile bağlanır.": "Other computers connect with http://THIS-COMPUTER-ADDRESS:port.",
+      "Yönetici (admin) şifresi": "Administrator (admin) password",
+      "Yeni veritabanı oluşturulacak. Kullanıcı adı:": "A new database will be created. Username:",
+      "Sunucu adresi": "Server address",
+      "Sunucu adresini yazın": "Enter server address",
+      "örnek: 192.168.1.20:8000": "e.g. 192.168.1.20:8000",
+      "Dene": "Test",
+      "Ağda sunucu ara": "Scan network for servers",
+      "Sunucuda": "On the server",
+      "Bu bilgisayarda": "On this computer",
+      "Kurulumdan sonra": "After installation",
+      "örnek: 192.168.1.50 veya erp.firma.com": "e.g. 192.168.1.50 or erp.company.com",
+      "SSH portu": "SSH port",
+      "SSH kullanıcı adı": "SSH username",
+      "LAB ERP portu": "LAB ERP port",
+      "SSH şifresi": "SSH password",
+      "Kullanıcı root değilse aynı şifre sudo için kullanılır. Şifre kaydedilmez.": "If user is not root, same password is used for sudo. Password is not saved.",
+      "Yeni kurulumda zorunlu (en az 8 karakter). Kurulu sunucuyu güncellerken boş bırakılırsa şifre değişmez; veriler korunur.": "Required for new installation (min 8 characters). When updating an existing server, leave blank to keep password; data is preserved.",
+      "Sunucunun güvenlik duvarında (ufw / firewalld) bu portu aç": "Open this port in the server's firewall (ufw / firewalld)",
+      "SSH anahtarıyla giriş": "Log in with SSH key",
+      "Özel anahtar dosyası (isteğe bağlı)": "Private key file (optional)",
+      "örnek: C:\\Users\\ad\\.ssh\\id_ed25519": "e.g. C:\\Users\\user\\.ssh\\id_ed25519",
+      "Anahtar seçilirse şifre alanı anahtarın parolası ve sudo şifresi olarak kullanılır.": "If key is selected, password field is used for key passphrase and sudo password.",
+      "Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir). Kurulum birkaç dakika sürer.\n        Uygulama": "The server must have internet access (Python packages are downloaded). Installation takes a few minutes.\n        Application is installed in",
+      ", veriler": ", data in",
+      "klasörüne kurulur;": ";",
+      "hizmeti açılışta kendiliğinden başlar.": "service starts automatically on boot.",
+      "Bağlantıyı dene": "Test connection",
+      "Hiçbir şey kurulmaz; sunucuya girilip hazır mı diye bakılır.": "Nothing is installed; it only logs in to check if the server is ready.",
+      "Başlat": "Start",
+      "Kur ve bağlan": "Install and connect",
+      "Kopyala": "Copy",
+      "Kopyalandı": "Copied",
+      "Sunucuya bağlanılıyor…": "Connecting to server…",
+      "Bağlantı başarılı.": "Connection successful.",
+      "LAB ERP zaten kurulu, bu işlem güncelleme olur.": "LAB ERP is already installed; this will be an update.",
+      "Sunucu kuruluma hazır görünüyor.": "The server appears ready for installation.",
+      "Sunucu kuruldu: {0}. Bağlanılıyor…": "Server installed: {0}. Connecting…",
+      "Sunucu kuruldu ancak bu bilgisayardan {0} adresine ulaşılamıyor. Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında {1} TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin.": "Server installed, but {0} cannot be reached from this computer. If the server is in the cloud, open TCP port {1} in the provider's security group / firewall, then try this address with Connect to a server on the network.",
+      "Masaüstü sürüm": "Desktop version",
+      "Bağlantı başarılı: {0}": "Connection successful: {0}",
+      "Aranıyor…": "Searching…",
+      "{0} sunucu bulundu:": "{0} servers found:",
+      "Sunucu bulunamadı. Adresi elle yazın.": "No server found. Enter the address manually.",
+      "Bilgiler değişti, yeniden deneyin.": "Information changed, please test again.",
+      "MB boş disk": "MB free disk",
+      "Bu sunucuda systemd yok, kurulum yapılamaz.": "systemd is missing on this server; cannot install.",
+      "Boş disk 1 GB'ın altında, kurulum yarıda kalabilir.": "Free disk is under 1 GB, installation may fail.",
+      "Linux sunucu": "Linux server",
+      "Linux sunucu hazır olsun": "Prepare Linux server",
+      "Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir.": "Ubuntu, Debian, Rocky, Alma, RHEL, or Fedora; VM, cloud server, or your own PC. Requires systemd, at least 1 GB free disk recommended.",
+      "SSH hizmeti {0} portunda açık olsun": "Ensure SSH service is open on port {0}",
+      "SSH bağlantısı kuruldu.": "SSH connection established.",
+      "Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):": "Open once on the server console with this command (Ubuntu and Debian):",
+      "Bağlantı reddedildi: SSH çalışmıyor ya da başka portta.": "Connection refused: SSH is not running or on another port.",
+      "Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor.": "No response: wrong address, server offline, or firewall blocking SSH.",
+      "Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd": "On Rocky, Alma, RHEL, and Fedora: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd",
+      "root ile giriş izni olsun": "Allow root login",
+      "root ile girildi.": "Logged in as root.",
+      "Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın.": "Root password is disabled in Ubuntu. Enter your sudo-enabled user above instead.",
+      "Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin.": "Login rejected. If root login is disabled on the server, try another user.",
+      "{0} kullanıcısının sudo yetkisi olsun": "Ensure user {0} has sudo privileges",
+      "sudo yetkisi doğrulandı.": "sudo privileges verified.",
+      "Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):": "If not privileged, run this command as root (use wheel instead of sudo on RHEL family):",
+      "Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış.": "This user could not run sudo or the sudo password was incorrect.",
+      "Kullanıcı adı veya şifre kabul edilmedi.": "Username or password not accepted.",
+      "Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP {0} ve TCP {1} girişini siz açın; bunu kurulum yapamaz.": "For cloud servers, open inbound TCP {0} and TCP {1} in the provider panel (security group, firewall); installer cannot do this.",
+      "Sunucuda ufw veya firewalld yok, ek ayar gerekmez.": "Server has neither ufw nor firewalld; no extra configuration needed.",
+      "Sunucunun güvenlik duvarında ({0}) port kurulum sırasında açılır.": "Port will be opened in server firewall ({0}) during installation.",
+      "Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:": "Automatic port opening disabled. Open manually on server before installing:",
+      "LAB ERP portu {0} erişilebilir olsun": "Ensure LAB ERP port {0} is accessible",
+      "{0} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.": "Port {0} is in use by another program on the server. Select another port above.",
+      "İnternete açıkken dikkat": "Caution when exposed to the internet",
+      "LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın.": "LAB ERP uses unencrypted HTTP; passwords and data travel in plain text. Instead of opening the port publicly, use a VPN (WireGuard, Tailscale) or HTTPS reverse proxy.",
+      "Sunucu internete çıkabilsin": "Server must have internet access",
+      "İnternet erişimi var.": "Internet access confirmed.",
+      "Kurulum sırasında Python paketleri indirilir.": "Python packages will be downloaded during installation.",
+      "Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin.": "Server could not reach pypi.org. Check network, DNS, or proxy settings.",
+      "Adresi sunucuda bu komutla öğrenebilirsiniz:": "You can find the address on the server using this command:",
+      "{0} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.": "{0} is a local network address: this computer must be on the same network as the server.",
+      "{0} internet adresi olarak görünüyor.": "{0} appears to be an internet address.",
+      "Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın.": "This name could not be resolved. Check spelling or use an IP address.",
+      "SSH anahtarı sunucuda tanımlı olsun": "SSH key must be installed on the server",
+      "Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.": "Copy the public key once from this computer to the server.",
+      "Şifre alanına sudo şifresini yazın.": "Enter sudo password in the password field.",
+      "Anahtar kabul edilmedi.": "Key was not accepted.",
+      "SSH şifresini yazın": "Enter SSH password",
+      "{0} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.": "Password for user {0} on the server. Not saved, only used during installation. Select below if using a key.",
+      "Şifre kabul edilmedi.": "Password was not accepted.",
+      "Yönetici şifresi": "Administrator password",
+      "LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez.": "LAB ERP is already installed on this server: this will be an update, data will be preserved. If left blank, password will not change.",
+      "Yönetici (admin) şifresi belirleyin": "Set administrator (admin) password",
+      "LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu.": "For first login to LAB ERP. Required for new installations.",
+      "En az 8 karakter olmalı.": "Must be at least 8 characters.",
+      "Bağlantıyı deneyin": "Test connection",
+      "Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi.": "Connected to server, details recorded in On the server tab.",
+      "Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz.": "Use the button below to connect and check if the server is ready. Nothing is installed.",
+      "Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır.": "Takes a few minutes, do not close the window. When finished, this computer will connect to the server automatically.",
+      "Diğer bilgisayarlar": "Other computers",
+      'LAB ERP\'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:': 'Install LAB ERP, select "Connect to a server on the network" and enter this address; also opens in browser without installing:',
+      "Telefonlar": "Mobile devices",
+      "Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı.": "Install the Android app and enter the same address. Phone must be on a network that can reach the server.",
+      "İlk giriş": "First login",
+      "Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin.": "Username admin, password from setup. Add more users later from the Administration screen.",
+      "Sunucu kendiliğinden çalışır": "Server runs automatically",
+      "laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:": "laberp service starts whenever the server boots; this computer does not need to stay on. To check status and logs on the server:",
+      "Veriler ve güncelleme": "Data and updates",
+      "Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur.": "Database, files, and backups are in /var/lib/laberp. To update, run Install on my server again with the new LAB ERP version; data is preserved."
+    },
+    es: {
+      "LAB ERP açılıyor…": "LAB ERP se está iniciando…",
+      "Açılış uzun sürüyor. Sunucu kapalı olabilir.": "El inicio está tardando mucho. El servidor podría estar apagado.",
+      "Bağlantı ayarlarını aç": "Abrir ajustes de conexión",
+      "Bu bilgisayar nasıl çalışsın?": "¿Cómo debe funcionar este ordenador?",
+      "Bu bilgisayar sunucu": "Este ordenador es el servidor",
+      "Veriler bu bilgisayarda tutulur. Ağdaki diğer bilgisayarlar buna bağlanır.": "Los datos se guardan en este ordenador. Los demás ordenadores de la red se conectan a él.",
+      "Ağdaki sunucuya bağlan": "Conectarse a un servidor en la red",
+      "Veriler başka bir bilgisayarda. Bu bilgisayar ona bağlanır, her şey anında eşitlenir.": "Los datos están en otro ordenador. Este ordenador se conecta a él y todo se sincroniza al instante.",
+      "Sunucuma kur": "Instalar en mi servidor",
+      "Linux sunucunuza (Ubuntu, Debian, Rocky…) SSH ile otomatik kurulur, sonra bu bilgisayar ona bağlanır.": "Se instala automáticamente en su servidor Linux (Ubuntu, Debian, Rocky…) a través de SSH, luego este ordenador se conecta a él.",
+      "Veri klasörü": "Carpeta de datos",
+      "Gözat…": "Examinar…",
+      "Veritabanı, teknik resimler ve günlük yedekler bu klasörde tutulur.": "La base de datos, los planos técnicos y las copias de seguridad diarias se guardan en esta carpeta.",
+      "Port": "Puerto",
+      "Diğer bilgisayarlar http://BU-BİLGİSAYARIN-ADRESİ:port ile bağlanır.": "Los demás ordenadores se conectan con http://DIRECCION-DE-ESTE-ORDENADOR:puerto.",
+      "Yönetici (admin) şifresi": "Contraseña de administrador (admin)",
+      "Yeni veritabanı oluşturulacak. Kullanıcı adı:": "Se creará una nueva base de datos. Nombre de usuario:",
+      "Sunucu adresi": "Dirección del servidor",
+      "Sunucu adresini yazın": "Introduzca la dirección del servidor",
+      "örnek: 192.168.1.20:8000": "ej. 192.168.1.20:8000",
+      "Dene": "Probar",
+      "Ağda sunucu ara": "Buscar servidor en la red",
+      "Sunucuda": "En el servidor",
+      "Bu bilgisayarda": "En este ordenador",
+      "Kurulumdan sonra": "Después de la instalación",
+      "örnek: 192.168.1.50 veya erp.firma.com": "ej. 192.168.1.50 o erp.empresa.com",
+      "SSH portu": "Puerto SSH",
+      "SSH kullanıcı adı": "Usuario SSH",
+      "LAB ERP portu": "Puerto de LAB ERP",
+      "SSH şifresi": "Contraseña SSH",
+      "Kullanıcı root değilse aynı şifre sudo için kullanılır. Şifre kaydedilmez.": "Si el usuario no es root, se utiliza la misma contraseña para sudo. La contraseña no se guarda.",
+      "Yeni kurulumda zorunlu (en az 8 karakter). Kurulu sunucuyu güncellerken boş bırakılırsa şifre değişmez; veriler korunur.": "Obligatorio en nueva instalación (mínimo 8 caracteres). Al actualizar un servidor instalado, si se deja en blanco la contraseña no cambia; los datos se conservan.",
+      "Sunucunun güvenlik duvarında (ufw / firewalld) bu portu aç": "Abrir este puerto en el cortafuegos del servidor (ufw / firewalld)",
+      "SSH anahtarıyla giriş": "Iniciar sesión con clave SSH",
+      "Özel anahtar dosyası (isteğe bağlı)": "Archivo de clave privada (opcional)",
+      "örnek: C:\\Users\\ad\\.ssh\\id_ed25519": "ej. C:\\Users\\usuario\\.ssh\\id_ed25519",
+      "Anahtar seçilirse şifre alanı anahtarın parolası ve sudo şifresi olarak kullanılır.": "Si se selecciona una clave, el campo de contraseña se usa para la frase de paso de la clave y sudo.",
+      "Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir). Kurulum birkaç dakika sürer.\n        Uygulama": "El servidor debe tener acceso a internet (se descargan paquetes de Python). La instalación tarda unos minutos.\n        La aplicación se instala en",
+      ", veriler": ", datos en",
+      "klasörüne kurulur;": ";",
+      "hizmeti açılışta kendiliğinden başlar.": "el servicio se inicia automáticamente al arrancar.",
+      "Bağlantıyı dene": "Probar conexión",
+      "Hiçbir şey kurulmaz; sunucuya girilip hazır mı diye bakılır.": "No se instala nada; solo se accede al servidor para comprobar si está listo.",
+      "Başlat": "Iniciar",
+      "Kur ve bağlan": "Instalar y conectar",
+      "Kopyala": "Copiar",
+      "Kopyalandı": "Copiado",
+      "Sunucuya bağlanılıyor…": "Conectando al servidor…",
+      "Bağlantı başarılı.": "Conexión exitosa.",
+      "LAB ERP zaten kurulu, bu işlem güncelleme olur.": "LAB ERP ya está instalado; esta operación será una actualización.",
+      "Sunucu kuruluma hazır görünüyor.": "El servidor parece listo para la instalación.",
+      "Sunucu kuruldu: {0}. Bağlanılıyor…": "Servidor instalado: {0}. Conectando…",
+      "Sunucu kuruldu ancak bu bilgisayardan {0} adresine ulaşılamıyor. Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında {1} TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin.": "Servidor instalado, pero no se puede acceder a {0} desde este ordenador. Si el servidor está en la nube, abra el puerto TCP {1} en el grupo de seguridad / cortafuegos del proveedor, luego pruebe esta dirección con Conectarse a un servidor en la red.",
+      "Masaüstü sürüm": "Versión de escritorio",
+      "Bağlantı başarılı: {0}": "Conexión exitosa: {0}",
+      "Aranıyor…": "Buscando…",
+      "{0} sunucu bulundu:": "{0} servidores encontrados:",
+      "Sunucu bulunamadı. Adresi elle yazın.": "No se encontró ningún servidor. Introduzca la dirección manualmente.",
+      "Bilgiler değişti, yeniden deneyin.": "Los datos han cambiado, vuelva a probar.",
+      "MB boş disk": "MB de disco libre",
+      "Bu sunucuda systemd yok, kurulum yapılamaz.": "systemd no está disponible en este servidor; no se puede instalar.",
+      "Boş disk 1 GB'ın altında, kurulum yarıda kalabilir.": "El espacio libre es inferior a 1 GB, la instalación podría fallar.",
+      "Linux sunucu": "Servidor Linux",
+      "Linux sunucu hazır olsun": "Preparar el servidor Linux",
+      "Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir.": "Ubuntu, Debian, Rocky, Alma, RHEL o Fedora; máquina virtual, servidor en la nube o su propio PC. Requiere systemd, se recomienda al menos 1 GB de disco libre.",
+      "SSH hizmeti {0} portunda açık olsun": "Asegúrese de que el servicio SSH esté abierto en el puerto {0}",
+      "SSH bağlantısı kuruldu.": "Conexión SSH establecida.",
+      "Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):": "Abra una vez en el servidor con este comando (Ubuntu y Debian):",
+      "Bağlantı reddedildi: SSH çalışmıyor ya da başka portta.": "Conexión rechazada: SSH no se está ejecutando o está en otro puerto.",
+      "Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor.": "Sin respuesta: dirección incorrecta, servidor apagado o el cortafuegos bloquea SSH.",
+      "Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd": "En Rocky, Alma, RHEL y Fedora: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd",
+      "root ile giriş izni olsun": "Permitir acceso con root",
+      "root ile girildi.": "Accedido como root.",
+      "Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın.": "La contraseña de root está deshabilitada en Ubuntu. Introduzca arriba su usuario con sudo.",
+      "Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin.": "Acceso rechazado. Si el acceso como root está deshabilitado en el servidor, pruebe con otro usuario.",
+      "{0} kullanıcısının sudo yetkisi olsun": "Asegúrese de que el usuario {0} tenga permisos sudo",
+      "sudo yetkisi doğrulandı.": "Permisos sudo confirmados.",
+      "Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):": "Si no tiene permisos, ejecute este comando como root (use wheel en lugar de sudo en la familia RHEL):",
+      "Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış.": "Este usuario no pudo ejecutar sudo o la contraseña de sudo es incorrecta.",
+      "Kullanıcı adı veya şifre kabul edilmedi.": "Nombre de usuario o contraseña no aceptados.",
+      "Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP {0} ve TCP {1} girişini siz açın; bunu kurulum yapamaz.": "Si es un servidor en la nube, abra los puertos TCP {0} y TCP {1} en el panel del proveedor (grupo de seguridad, cortafuegos); el instalador no puede hacer esto.",
+      "Sunucuda ufw veya firewalld yok, ek ayar gerekmez.": "El servidor no tiene ufw ni firewalld; no se requiere configuración adicional.",
+      "Sunucunun güvenlik duvarında ({0}) port kurulum sırasında açılır.": "El puerto se abrirá en el cortafuegos ({0}) durante la instalación.",
+      "Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:": "Apertura automática desactivada. Ábralo manualmente en el servidor antes de instalar:",
+      "LAB ERP portu {0} erişilebilir olsun": "Asegúrese de que el puerto {0} de LAB ERP sea accesible",
+      "{0} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.": "Otro programa está usando el puerto {0} en el servidor. Seleccione otro puerto arriba.",
+      "İnternete açıkken dikkat": "Precaución con la exposición a internet",
+      "LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın.": "LAB ERP funciona con HTTP sin cifrar; las contraseñas y datos viajan en texto claro. En lugar de abrir el puerto a todos, use una VPN (WireGuard, Tailscale) o un proxy inverso HTTPS.",
+      "Sunucu internete çıkabilsin": "El servidor debe tener acceso a internet",
+      "İnternet erişimi var.": "Acceso a internet disponible.",
+      "Kurulum sırasında Python paketleri indirilir.": "Se descargarán paquetes de Python durante la instalación.",
+      "Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin.": "El servidor no pudo acceder a pypi.org. Compruebe la red, DNS o configuración de proxy.",
+      "Adresi sunucuda bu komutla öğrenebilirsiniz:": "Puede averiguar la dirección en el servidor con este comando:",
+      "{0} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.": "{0} es una dirección de red local: este ordenador debe estar en la misma red que el servidor.",
+      "{0} internet adresi olarak görünüyor.": "{0} parece ser una dirección de internet.",
+      "Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın.": "No se pudo resolver esta dirección. Compruebe la ortografía o introduzca una dirección IP.",
+      "SSH anahtarı sunucuda tanımlı olsun": "La clave SSH debe estar configurada en el servidor",
+      "Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.": "Copie la clave pública una vez desde este ordenador al servidor.",
+      "Şifre alanına sudo şifresini yazın.": "Escriba la contraseña de sudo en el campo de contraseña.",
+      "Anahtar kabul edilmedi.": "La clave no fue aceptada.",
+      "SSH şifresini yazın": "Introduzca la contraseña SSH",
+      "{0} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.": "Contraseña del usuario {0} en el servidor. No se guarda, solo se usa durante la instalación. Si entra con clave, selecciónela abajo.",
+      "Şifre kabul edilmedi.": "La contraseña no fue aceptada.",
+      "Yönetici şifresi": "Contraseña de administrador",
+      "LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez.": "LAB ERP ya está instalado en este servidor: esta operación será una actualización, los datos se conservarán. Si se deja en blanco, la contraseña no cambiará.",
+      "Yönetici (admin) şifresi belirleyin": "Establezca la contraseña de administrador (admin)",
+      "LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu.": "Para el primer inicio de sesión en LAB ERP. Obligatorio en nueva instalación.",
+      "En az 8 karakter olmalı.": "Debe tener al menos 8 caracteres.",
+      "Bağlantıyı deneyin": "Pruebe la conexión",
+      "Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi.": "Se accedió al servidor, los datos se registraron en la pestaña En el servidor.",
+      "Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz.": "Use el botón debajo del formulario para comprobar si el servidor está listo. No se instala nada.",
+      "Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır.": "Tarda unos minutos, no cierre la ventana. Al finalizar, este ordenador se conectará al servidor automáticamente.",
+      "Diğer bilgisayarlar": "Otros ordenadores",
+      'LAB ERP\'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:': 'Instale LAB ERP, seleccione "Conectarse a un servidor en la red" e introduzca esta dirección; también se abre desde el navegador sin instalar:',
+      "Telefonlar": "Móviles",
+      "Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı.": "Instale la aplicación Android e introduzca la misma dirección. El teléfono debe estar en una red que pueda alcanzar al servidor.",
+      "İlk giriş": "Primer inicio de sesión",
+      "Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin.": "Nombre de usuario admin, contraseña la que indicó en la instalación. Añada usuarios más tarde desde la pantalla de Administración.",
+      "Sunucu kendiliğinden çalışır": "El servidor se ejecuta automáticamente",
+      "laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:": "El servicio laberp se inicia cada vez que arranca el servidor; este ordenador no necesita estar encendido. Para comprobar su estado y registros en el servidor:",
+      "Veriler ve güncelleme": "Datos y actualización",
+      "Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur.": "La base de datos, los archivos y las copias de seguridad están en la carpeta /var/lib/laberp. Para actualizar, ejecute Instalar en mi servidor con la nueva versión de LAB ERP; los datos se conservan."
+    },
+    de: {
+      "LAB ERP açılıyor…": "LAB ERP wird gestartet…",
+      "Açılış uzun sürüyor. Sunucu kapalı olabilir.": "Der Start dauert ungewöhnlich lange. Der Server ist möglicherweise offline.",
+      "Bağlantı ayarlarını aç": "Verbindungseinstellungen öffnen",
+      "Bu bilgisayar nasıl çalışsın?": "Wie soll dieser Computer arbeiten?",
+      "Bu bilgisayar sunucu": "Dieser Computer ist der Server",
+      "Veriler bu bilgisayarda tutulur. Ağdaki diğer bilgisayarlar buna bağlanır.": "Daten werden auf diesem Computer gespeichert. Andere Computer im Netzwerk verbinden sich mit ihm.",
+      "Ağdaki sunucuya bağlan": "Mit einem Server im Netzwerk verbinden",
+      "Veriler başka bir bilgisayarda. Bu bilgisayar ona bağlanır, her şey anında eşitlenir.": "Daten liegen auf einem anderen Computer. Dieser Computer verbindet sich damit und alles wird sofort synchronisiert.",
+      "Sunucuma kur": "Auf meinem Server installieren",
+      "Linux sunucunuza (Ubuntu, Debian, Rocky…) SSH ile otomatik kurulur, sonra bu bilgisayar ona bağlanır.": "Wird automatisch per SSH auf Ihrem Linux-Server (Ubuntu, Debian, Rocky…) installiert, anschließend verbindet sich dieser Computer damit.",
+      "Veri klasörü": "Datenordner",
+      "Gözat…": "Durchsuchen…",
+      "Veritabanı, teknik resimler ve günlük yedekler bu klasörde tutulur.": "Datenbank, technische Zeichnungen und tägliche Sicherungen werden in diesem Ordner gespeichert.",
+      "Port": "Port",
+      "Diğer bilgisayarlar http://BU-BİLGİSAYARIN-ADRESİ:port ile bağlanır.": "Andere Computer verbinden sich über http://DIESE-COMPUTERADRESSE:port.",
+      "Yönetici (admin) şifresi": "Administrator (admin)-Passwort",
+      "Yeni veritabanı oluşturulacak. Kullanıcı adı:": "Eine neue Datenbank wird erstellt. Benutzername:",
+      "Sunucu adresi": "Serveradresse",
+      "Sunucu adresini yazın": "Serveradresse eingeben",
+      "örnek: 192.168.1.20:8000": "z.B. 192.168.1.20:8000",
+      "Dene": "Testen",
+      "Ağda sunucu ara": "Im Netzwerk nach Servern suchen",
+      "Sunucuda": "Auf dem Server",
+      "Bu bilgisayarda": "Auf diesem Computer",
+      "Kurulumdan sonra": "Nach der Installation",
+      "örnek: 192.168.1.50 veya erp.firma.com": "z.B. 192.168.1.50 oder erp.firma.de",
+      "SSH portu": "SSH-Port",
+      "SSH kullanıcı adı": "SSH-Benutzername",
+      "LAB ERP portu": "LAB ERP-Port",
+      "SSH şifresi": "SSH-Passwort",
+      "Kullanıcı root değilse aynı şifre sudo için kullanılır. Şifre kaydedilmez.": "Wenn der Benutzer nicht root ist, wird dasselbe Passwort für sudo verwendet. Passwort wird nicht gespeichert.",
+      "Yeni kurulumda zorunlu (en az 8 karakter). Kurulu sunucuyu güncellerken boş bırakılırsa şifre değişmez; veriler korunur.": "Erforderlich bei Neuinstallation (mind. 8 Zeichen). Bei Aktualisierung eines bestehenden Servers leer lassen, um das Passwort beizubehalten; Daten bleiben erhalten.",
+      "Sunucunun güvenlik duvarında (ufw / firewalld) bu portu aç": "Diesen Port in der Firewall des Servers öffnen (ufw / firewalld)",
+      "SSH anahtarıyla giriş": "Mit SSH-Schlüssel anmelden",
+      "Özel anahtar dosyası (isteğe bağlı)": "Private Schlüsseldatei (optional)",
+      "örnek: C:\\Users\\ad\\.ssh\\id_ed25519": "z.B. C:\\Users\\benutzer\\.ssh\\id_ed25519",
+      "Anahtar seçilirse şifre alanı anahtarın parolası ve sudo şifresi olarak kullanılır.": "Wenn ein Schlüssel ausgewählt ist, wird das Passwortfeld für die Schlüsselpassphrase und sudo verwendet.",
+      "Sunucunun internete çıkabilmesi gerekir (Python paketleri indirilir). Kurulum birkaç dakika sürer.\n        Uygulama": "Der Server benötigt Internetzugang (Python-Pakete werden heruntergeladen). Die Installation dauert einige Minuten.\n        Die Anwendung wird in",
+      ", veriler": ", Daten in",
+      "klasörüne kurulur;": ";",
+      "hizmeti açılışta kendiliğinden başlar.": "Dienst startet automatisch beim Booten.",
+      "Bağlantıyı dene": "Verbindung testen",
+      "Hiçbir şey kurulmaz; sunucuya girilip hazır mı diye bakılır.": "Es wird nichts installiert; es wird nur geprüft, ob der Server bereit ist.",
+      "Başlat": "Starten",
+      "Kur ve bağlan": "Installieren und verbinden",
+      "Kopyala": "Kopieren",
+      "Kopyalandı": "Kopiert",
+      "Sunucuya bağlanılıyor…": "Verbindung zum Server wird hergestellt…",
+      "Bağlantı başarılı.": "Verbindung erfolgreich.",
+      "LAB ERP zaten kurulu, bu işlem güncelleme olur.": "LAB ERP ist bereits installiert; dies wird eine Aktualisierung sein.",
+      "Sunucu kuruluma hazır görünüyor.": "Der Server scheint für die Installation bereit zu sein.",
+      "Sunucu kuruldu: {0}. Bağlanılıyor…": "Server installiert: {0}. Verbindung wird hergestellt…",
+      "Sunucu kuruldu ancak bu bilgisayardan {0} adresine ulaşılamıyor. Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında {1} TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin.": "Server installiert, aber {0} kann von diesem Computer nicht erreicht werden. Wenn der Server in der Cloud liegt, öffnen Sie TCP-Port {1} in der Sicherheitsgruppe / Firewall des Anbieters und versuchen Sie diese Adresse dann mit Mit einem Server im Netzwerk verbinden.",
+      "Masaüstü sürüm": "Desktop-Version",
+      "Bağlantı başarılı: {0}": "Verbindung erfolgreich: {0}",
+      "Aranıyor…": "Wird gesucht…",
+      "{0} sunucu bulundu:": "{0} Server gefunden:",
+      "Sunucu bulunamadı. Adresi elle yazın.": "Kein Server gefunden. Geben Sie die Adresse manuell ein.",
+      "Bilgiler değişti, yeniden deneyin.": "Angaben geändert, bitte erneut testen.",
+      "MB boş disk": "MB freier Speicher",
+      "Bu sunucuda systemd yok, kurulum yapılamaz.": "Auf diesem Server ist kein systemd vorhanden; Installation nicht möglich.",
+      "Boş disk 1 GB'ın altında, kurulum yarıda kalabilir.": "Freier Speicherplatz liegt unter 1 GB, die Installation könnte abbrechen.",
+      "Linux sunucu": "Linux-Server",
+      "Linux sunucu hazır olsun": "Linux-Server vorbereiten",
+      "Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir.": "Ubuntu, Debian, Rocky, Alma, RHEL oder Fedora; VM, Cloud-Server oder Ihr eigener PC. systemd erforderlich, mind. 1 GB freier Speicher empfohlen.",
+      "SSH hizmeti {0} portunda açık olsun": "SSH-Dienst auf Port {0} aktivieren",
+      "SSH bağlantısı kuruldu.": "SSH-Verbindung hergestellt.",
+      "Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):": "Einmalig auf der Serverkonsole mit diesem Befehl aktivieren (Ubuntu und Debian):",
+      "Bağlantı reddedildi: SSH çalışmıyor ya da başka portta.": "Verbindung abgelehnt: SSH läuft nicht oder auf einem anderen Port.",
+      "Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor.": "Keine Antwort: falsche Adresse, Server ausgeschaltet oder Firewall blockiert SSH.",
+      "Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd": "Auf Rocky, Alma, RHEL und Fedora: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd",
+      "root ile giriş izni olsun": "Root-Anmeldung erlauben",
+      "root ile girildi.": "Als root angemeldet.",
+      "Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın.": "In Ubuntu ist das Root-Passwort deaktiviert. Tragen Sie oben Ihren Benutzer mit sudo-Rechten ein.",
+      "Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin.": "Anmeldung abgelehnt. Wenn Root-Login deaktiviert ist, versuchen Sie einen anderen Benutzer.",
+      "{0} kullanıcısının sudo yetkisi olsun": "Benutzer {0} muss sudo-Berechtigung haben",
+      "sudo yetkisi doğrulandı.": "sudo-Berechtigung bestätigt.",
+      "Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):": "Falls keine Berechtigung besteht, als root folgenden Befehl ausführen (in RHEL-Familie wheel statt sudo):",
+      "Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış.": "Dieser Benutzer konnte sudo nicht ausführen oder das sudo-Passwort war falsch.",
+      "Kullanıcı adı veya şifre kabul edilmedi.": "Benutzername oder Passwort nicht akzeptiert.",
+      "Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP {0} ve TCP {1} girişini siz açın; bunu kurulum yapamaz.": "Bei einem Cloud-Server öffnen Sie TCP {0} und TCP {1} im Provider-Panel (Sicherheitsgruppe, Firewall); der Installer kann dies nicht.",
+      "Sunucuda ufw veya firewalld yok, ek ayar gerekmez.": "Server hat weder ufw noch firewalld; keine zusätzliche Einstellung nötig.",
+      "Sunucunun güvenlik duvarında ({0}) port kurulum sırasında açılır.": "Port wird während der Installation in der Firewall ({0}) geöffnet.",
+      "Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:": "Automatische Portöffnung deaktiviert. Vor der Installation manuell öffnen:",
+      "LAB ERP portu {0} erişilebilir olsun": "LAB ERP-Port {0} muss erreichbar sein",
+      "{0} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.": "Port {0} wird von einem anderen Programm auf dem Server verwendet. Oben anderen Port wählen.",
+      "İnternete açıkken dikkat": "Vorsicht bei öffentlicher Erreichbarkeit",
+      "LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın.": "LAB ERP arbeitet mit unverschlüsseltem HTTP; Passwörter und Daten werden unverschlüsselt übertragen. Nutzen Sie statt offener Ports ein VPN (WireGuard, Tailscale) oder einen HTTPS-Reverse-Proxy.",
+      "Sunucu internete çıkabilsin": "Server muss Internetzugang haben",
+      "İnternet erişimi var.": "Internetzugang bestätigt.",
+      "Kurulum sırasında Python paketleri indirilir.": "Während der Installation werden Python-Pakete heruntergeladen.",
+      "Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin.": "Server konnte pypi.org nicht erreichen. Prüfen Sie Netzwerk-, DNS- oder Proxy-Einstellungen.",
+      "Adresi sunucuda bu komutla öğrenebilirsiniz:": "Die Adresse können Sie auf dem Server mit folgendem Befehl ermitteln:",
+      "{0} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.": "{0} ist eine lokale Netzwerkadresse: dieser Computer muss im selben Netzwerk wie der Server sein.",
+      "{0} internet adresi olarak görünüyor.": "{0} scheint eine Internetadresse zu sein.",
+      "Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın.": "Dieser Name konnte nicht aufgelöst werden. Schreibweise prüfen oder IP-Adresse eingeben.",
+      "SSH anahtarı sunucuda tanımlı olsun": "SSH-Schlüssel muss auf dem Server hinterlegt sein",
+      "Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.": "Kopieren Sie den öffentlichen Schlüssel einmalig von diesem Computer auf den Server.",
+      "Şifre alanına sudo şifresini yazın.": "Tragen Sie im Passwortfeld das sudo-Passwort ein.",
+      "Anahtar kabul edilmedi.": "Schlüssel wurde nicht akzeptiert.",
+      "SSH şifresini yazın": "SSH-Passwort eingeben",
+      "{0} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.": "Passwort des Benutzers {0} auf dem Server. Wird nicht gespeichert, nur während der Installation verwendet. Bei Schlüsselanmeldung unten auswählen.",
+      "Şifre kabul edilmedi.": "Passwort wurde nicht akzeptiert.",
+      "Yönetici şifresi": "Administrator-Passwort",
+      "LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez.": "LAB ERP ist auf diesem Server bereits installiert: Dies wird eine Aktualisierung sein, Daten bleiben erhalten. Wenn leer, bleibt das Passwort unverändert.",
+      "Yönetici (admin) şifresi belirleyin": "Administrator (admin)-Passwort festlegen",
+      "LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu.": "Für die Erstanmeldung bei LAB ERP. Bei Neuinstallation erforderlich.",
+      "En az 8 karakter olmalı.": "Muss mindestens 8 Zeichen lang sein.",
+      "Bağlantıyı deneyin": "Verbindung testen",
+      "Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi.": "Mit Server verbunden, Informationen in den Reiter Auf dem Server übernommen.",
+      "Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz.": "Prüfen Sie mit der Schaltfläche unten, ob der Server bereit ist. Es wird nichts installiert.",
+      "Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır.": "Dauert einige Minuten, Fenster nicht schließen. Nach Abschluss verbindet sich dieser Computer automatisch mit dem Server.",
+      "Diğer bilgisayarlar": "Andere Computer",
+      'LAB ERP\'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:': 'Installieren Sie LAB ERP, wählen Sie „Mit einem Server im Netzwerk verbinden“ und geben Sie diese Adresse ein; lässt sich auch ohne Installation im Browser öffnen:',
+      "Telefonlar": "Mobilgeräte",
+      "Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı.": "Installieren Sie die Android-App und geben Sie dieselbe Adresse ein. Das Telefon muss sich in einem Netzwerk befinden, das den Server erreichen kann.",
+      "İlk giriş": "Erstanmeldung",
+      "Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin.": "Benutzername admin, Passwort wie bei der Installation angegeben. Weitere Benutzer später in der Verwaltung anlegen.",
+      "Sunucu kendiliğinden çalışır": "Server läuft automatisch",
+      "laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:": "Der laberp-Dienst startet bei jedem Serverstart; dieser Computer muss nicht eingeschaltet bleiben. Um Status und Protokolle auf dem Server einzusehen:",
+      "Veriler ve güncelleme": "Daten und Aktualisierung",
+      "Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur.": "Datenbank, Dateien und Sicherungen befinden sich im Ordner /var/lib/laberp. Führen Sie zur Aktualisierung Auf meinem Server installieren mit der neuen LAB ERP-Version erneut aus; Daten bleiben erhalten."
+    }
+  };
+  const LANG = (navigator.language || "tr").slice(0, 2);
+  function st(text) {
+    if (!text) return text;
+    const cat = I18N[LANG];
+    return (cat && cat[text]) || text;
+  }
+  function translateDom(root) {
+    if (LANG === "tr") return;
+    const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textNodes.push(node);
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        for (const attr of ["placeholder", "title", "aria-label"]) {
+          const val = node.getAttribute(attr);
+          if (val && I18N[LANG] && I18N[LANG][val]) {
+            node.setAttribute(attr, I18N[LANG][val]);
+          }
+        }
+      }
+    }
+    for (const tn of textNodes) {
+      const orig = tn.nodeValue;
+      const trimmed = orig.trim();
+      if (trimmed && I18N[LANG] && I18N[LANG][trimmed]) {
+        const leading = orig.match(/^\s*/)[0];
+        const trailing = orig.match(/\s*$/)[0];
+        tn.nodeValue = leading + I18N[LANG][trimmed] + trailing;
+      }
+    }
+  }
+  translateDom();
+
   const $ = (id) => document.getElementById(id);
   let mode = "server";
   const show = (text, kind) => { const m = $("msg"); m.textContent = text || ""; m.className = "msg" + (text ? " " + kind : ""); };
@@ -206,7 +615,7 @@
     $("server").hidden = m !== "server";
     $("client").hidden = m !== "client";
     $("remote").hidden = m !== "remote";
-    $("go").textContent = m === "remote" ? "Kur ve bağlan" : "Başlat";
+    $("go").textContent = m === "remote" ? st("Kur ve bağlan") : st("Başlat");
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -232,57 +641,57 @@
     const root = f.user === "root";
     const server = [];
     server.push(ok
-      ? { state: c.systemd ? "done" : "bad", title: "Linux sunucu", text: [c.os, c.arch, c.free_mb != null ? c.free_mb + " MB boş disk" : ""].filter(Boolean).join(" · "),
-          note: !c.systemd ? "Bu sunucuda systemd yok, kurulum yapılamaz." : c.free_mb != null && c.free_mb < 1024 ? "Boş disk 1 GB'ın altında, kurulum yarıda kalabilir." : "" }
-      : { title: "Linux sunucu hazır olsun", text: "Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir." });
-    server.push({ state: ok ? "done" : p === "refused" || p === "timeout" ? "bad" : "", title: `SSH hizmeti ${f.sshPort} portunda açık olsun`,
-      text: ok ? "SSH bağlantısı kuruldu." : "Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):",
+      ? { state: c.systemd ? "done" : "bad", title: st("Linux sunucu"), text: [c.os, c.arch, c.free_mb != null ? c.free_mb + " " + st("MB boş disk") : ""].filter(Boolean).join(" · "),
+          note: !c.systemd ? st("Bu sunucuda systemd yok, kurulum yapılamaz.") : c.free_mb != null && c.free_mb < 1024 ? st("Boş disk 1 GB'ın altında, kurulum yarıda kalabilir.") : "" }
+      : { title: st("Linux sunucu hazır olsun"), text: st("Ubuntu, Debian, Rocky, Alma, RHEL veya Fedora; sanal makine, bulut sunucu ya da kendi bilgisayarınız olabilir. systemd gerekir, en az 1 GB boş disk önerilir.") });
+    server.push({ state: ok ? "done" : p === "refused" || p === "timeout" ? "bad" : "", title: st("SSH hizmeti {0} portunda açık olsun").replace("{0}", f.sshPort),
+      text: ok ? st("SSH bağlantısı kuruldu.") : st("Sunucunun başında bir kez şu komutla açın (Ubuntu ve Debian):"),
       cmds: ok ? [] : ["sudo apt install -y openssh-server && sudo systemctl enable --now ssh"],
-      note: p === "refused" ? "Bağlantı reddedildi: SSH çalışmıyor ya da başka portta." : p === "timeout" ? "Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor." : "",
-      more: ok ? "" : "Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd" });
+      note: p === "refused" ? st("Bağlantı reddedildi: SSH çalışmıyor ya da başka portta.") : p === "timeout" ? st("Yanıt yok: adres yanlış, sunucu kapalı veya güvenlik duvarı SSH'ı engelliyor.") : "",
+      more: ok ? "" : st("Rocky, Alma, RHEL ve Fedora'da: sudo dnf install -y openssh-server && sudo systemctl enable --now sshd") });
     server.push(root
-      ? { state: ok ? "done" : p === "auth" ? "bad" : "", title: "root ile giriş izni olsun", text: ok ? "root ile girildi." : "Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın.",
-          note: p === "auth" ? "Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin." : "" }
-      : { state: ok ? (c.root || c.sudo ? "done" : "bad") : p === "auth" ? "bad" : "", title: `${f.user} kullanıcısının sudo yetkisi olsun`,
-          text: ok && (c.root || c.sudo) ? "sudo yetkisi doğrulandı." : "Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):",
+      ? { state: ok ? "done" : p === "auth" ? "bad" : "", title: st("root ile giriş izni olsun"), text: ok ? st("root ile girildi.") : st("Ubuntu'da root şifresi kapalıdır. O zaman yukarıya sudo yetkili kullanıcınızı yazın."),
+          note: p === "auth" ? st("Giriş reddedildi. Sunucuda root girişi kapalıysa başka kullanıcı deneyin.") : "" }
+      : { state: ok ? (c.root || c.sudo ? "done" : "bad") : p === "auth" ? "bad" : "", title: st("{0} kullanıcısının sudo yetkisi olsun").replace("{0}", f.user),
+          text: ok && (c.root || c.sudo) ? st("sudo yetkisi doğrulandı.") : st("Yetkisi yoksa root ile şu komutu çalıştırın (RHEL ailesinde sudo yerine wheel):"),
           cmds: ok && (c.root || c.sudo) ? [] : [`usermod -aG sudo ${f.user}`],
-          note: ok && !c.sudo ? "Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış." : p === "auth" ? "Kullanıcı adı veya şifre kabul edilmedi." : "" });
-    const cloud = kind === "public" ? `Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP ${f.sshPort} ve TCP ${f.port} girişini siz açın; bunu kurulum yapamaz.` : "";
-    const fwAuto = f.fw ? (ok && !c.firewall ? "Sunucuda ufw veya firewalld yok, ek ayar gerekmez." : `Sunucunun güvenlik duvarında (${ok && c.firewall ? c.firewall : "ufw / firewalld"}) port kurulum sırasında açılır.`) : "Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:";
-    server.push({ state: ok && c.port_busy && !c.installed ? "bad" : kind === "public" ? "warn" : ok ? "done" : "", title: `LAB ERP portu ${f.port} erişilebilir olsun`,
+          note: ok && !c.sudo ? st("Bu kullanıcı sudo çalıştıramadı ya da sudo şifresi yanlış.") : p === "auth" ? st("Kullanıcı adı veya şifre kabul edilmedi.") : "" });
+    const cloud = kind === "public" ? st("Bulut sunucuysa sağlayıcının panelinde (güvenlik grubu, firewall) TCP {0} ve TCP {1} girişini siz açın; bunu kurulum yapamaz.").replace("{0}", f.sshPort).replace("{1}", f.port) : "";
+    const fwAuto = f.fw ? (ok && !c.firewall ? st("Sunucuda ufw veya firewalld yok, ek ayar gerekmez.") : st("Sunucunun güvenlik duvarında ({0}) port kurulum sırasında açılır.").replace("{0}", (ok && c.firewall ? c.firewall : "ufw / firewalld"))) : st("Otomatik açma kapalı. Kurulumdan önce sunucuda kendiniz açın:");
+    server.push({ state: ok && c.port_busy && !c.installed ? "bad" : kind === "public" ? "warn" : ok ? "done" : "", title: st("LAB ERP portu {0} erişilebilir olsun").replace("{0}", f.port),
       text: [fwAuto, cloud].filter(Boolean).join(" "),
       cmds: f.fw ? [] : (ok && c.firewall === "firewalld" ? [`sudo firewall-cmd --permanent --add-port=${f.port}/tcp && sudo firewall-cmd --reload`] : [`sudo ufw allow ${f.port}/tcp`]),
-      note: ok && c.port_busy && !c.installed ? `${f.port} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.` : "" });
-    if (kind === "public") server.push({ state: "warn", title: "İnternete açıkken dikkat", text: "LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın." });
-    server.push({ state: ok ? (c.internet ? "done" : "bad") : "", title: "Sunucu internete çıkabilsin", text: ok && c.internet ? "İnternet erişimi var." : "Kurulum sırasında Python paketleri indirilir.",
-      note: ok && !c.internet ? "Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin." : "" });
+      note: ok && c.port_busy && !c.installed ? st("{0} portunu sunucuda başka bir program kullanıyor. Yukarıdan başka port seçin.").replace("{0}", f.port) : "" });
+    if (kind === "public") server.push({ state: "warn", title: st("İnternete açıkken dikkat"), text: st("LAB ERP şifreli olmayan HTTP ile çalışır; şifreler ve veriler internette açık gider. Portu herkese açmak yerine VPN (WireGuard, Tailscale) veya HTTPS ters vekil kullanın.") });
+    server.push({ state: ok ? (c.internet ? "done" : "bad") : "", title: st("Sunucu internete çıkabilsin"), text: ok && c.internet ? st("İnternet erişimi var.") : st("Kurulum sırasında Python paketleri indirilir."),
+      note: ok && !c.internet ? st("Sunucu pypi.org adresine ulaşamadı. Ağ, DNS veya proxy ayarını kontrol edin.") : "" });
 
     const here = [];
-    here.push({ state: p === "dns" ? "bad" : f.host ? "done" : "", title: "Sunucu adresini yazın",
-      text: !f.host ? "Adresi sunucuda bu komutla öğrenebilirsiniz:" : kind === "local" ? `${f.host} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.` : `${f.host} internet adresi olarak görünüyor.`,
-      cmds: f.host ? [] : ["hostname -I"], note: p === "dns" ? "Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın." : "" });
+    here.push({ state: p === "dns" ? "bad" : f.host ? "done" : "", title: st("Sunucu adresini yazın"),
+      text: !f.host ? st("Adresi sunucuda bu komutla öğrenebilirsiniz:") : kind === "local" ? st("{0} yerel ağ adresi: bu bilgisayar sunucuyla aynı ağda olmalı.").replace("{0}", f.host) : st("{0} internet adresi olarak görünüyor.").replace("{0}", f.host),
+      cmds: f.host ? [] : ["hostname -I"], note: p === "dns" ? st("Bu ad çözülemedi. Yazımı kontrol edin ya da IP adresi yazın.") : "" });
     here.push(f.key
-      ? { state: p === "auth" ? "bad" : "done", title: "SSH anahtarı sunucuda tanımlı olsun", text: `Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.${root ? "" : " Şifre alanına sudo şifresini yazın."}`,
-          cmds: [`ssh-copy-id -i "${f.key}.pub"${sshArg} ${f.user}@${f.host || "SUNUCU"}`], note: p === "auth" ? "Anahtar kabul edilmedi." : "" }
-      : { state: p === "auth" ? "bad" : f.pass ? "done" : "", title: "SSH şifresini yazın", text: `${f.user} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.`,
-          note: p === "auth" ? "Şifre kabul edilmedi." : "" });
+      ? { state: p === "auth" ? "bad" : "done", title: st("SSH anahtarı sunucuda tanımlı olsun"), text: st("Açık anahtarı sunucuya bir kez bu bilgisayardan kopyalayın.") + (root ? "" : " " + st("Şifre alanına sudo şifresini yazın.")),
+          cmds: [`ssh-copy-id -i "${f.key}.pub"${sshArg} ${f.user}@${f.host || "SUNUCU"}`], note: p === "auth" ? st("Anahtar kabul edilmedi.") : "" }
+      : { state: p === "auth" ? "bad" : f.pass ? "done" : "", title: st("SSH şifresini yazın"), text: st("{0} kullanıcısının sunucudaki şifresi. Kaydedilmez, sadece kurulum sırasında kullanılır. Anahtarla girecekseniz alttan seçin.").replace("{0}", f.user),
+          note: p === "auth" ? st("Şifre kabul edilmedi.") : "" });
     here.push(ok && c.installed
-      ? { state: "done", title: "Yönetici şifresi", text: "LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez." }
-      : { state: f.admin.length >= 8 ? "done" : f.admin ? "bad" : "", title: "Yönetici (admin) şifresi belirleyin", text: "LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu.", note: f.admin && f.admin.length < 8 ? "En az 8 karakter olmalı." : "" });
-    here.push({ state: ok ? "done" : c ? "bad" : "", title: "Bağlantıyı deneyin", text: ok ? "Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi." : "Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz.", note: c && !ok ? c.error : "" });
-    here.push({ title: "Kur ve bağlan", text: "Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır." });
+      ? { state: "done", title: st("Yönetici şifresi"), text: st("LAB ERP bu sunucuda zaten kurulu: bu işlem güncelleme olur, veriler korunur. Boş bırakırsanız şifre değişmez.") }
+      : { state: f.admin.length >= 8 ? "done" : f.admin ? "bad" : "", title: st("Yönetici (admin) şifresi belirleyin"), text: st("LAB ERP'ye ilk giriş için. Yeni kurulumda zorunlu."), note: f.admin && f.admin.length < 8 ? st("En az 8 karakter olmalı.") : "" });
+    here.push({ state: ok ? "done" : c ? "bad" : "", title: st("Bağlantıyı deneyin"), text: ok ? st("Sunucuya girildi, bilgiler Sunucuda sekmesine işlendi.") : st("Formun altındaki düğmeyle sunucuya girip hazır mı diye bakın. Hiçbir şey kurulmaz."), note: c && !ok ? c.error : "" });
+    here.push({ title: st("Kur ve bağlan"), text: st("Birkaç dakika sürer, pencereyi kapatmayın. Bitince bu bilgisayar sunucuya kendiliğinden bağlanır.") });
 
     const after = [
-      { title: "Diğer bilgisayarlar", text: `LAB ERP'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:`, cmds: [url] },
-      { title: "Telefonlar", text: "Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı." },
-      { title: "İlk giriş", text: "Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin." },
-      { title: "Sunucu kendiliğinden çalışır", text: "laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:", cmds: ["sudo systemctl status laberp", "sudo journalctl -u laberp -n 50"] },
-      { title: "Veriler ve güncelleme", text: "Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur." },
+      { title: st("Diğer bilgisayarlar"), text: st('LAB ERP\'yi kurup "Ağdaki sunucuya bağlan" seçin ve şu adresi yazın; kurmadan tarayıcıdan da açılır:'), cmds: [url] },
+      { title: st("Telefonlar"), text: st("Android uygulamasını kurup aynı adresi girin. Telefon sunucuya ulaşabilen bir ağda olmalı.") },
+      { title: st("İlk giriş"), text: st("Kullanıcı adı admin, şifre kurulumda yazdığınız şifre. Kullanıcıları sonra Yönetim ekranından ekleyin.") },
+      { title: st("Sunucu kendiliğinden çalışır"), text: st("laberp hizmeti sunucu her açıldığında başlar; bu bilgisayarın açık olması gerekmez. Durumuna ve kayıtlarına sunucuda bakmak için:"), cmds: ["sudo systemctl status laberp", "sudo journalctl -u laberp -n 50"] },
+      { title: st("Veriler ve güncelleme"), text: st("Veritabanı, dosyalar ve yedekler /var/lib/laberp klasöründedir. Güncellemek için yeni LAB ERP sürümüyle Sunucuma kur işlemini tekrar çalıştırın; veriler korunur.") },
     ];
     return { server, here, after };
   }
   function copyText(text, btn) {
-    const done = () => { btn.textContent = "Kopyalandı"; setTimeout(() => { btn.textContent = "Kopyala"; }, 1200); };
+    const done = () => { btn.textContent = st("Kopyalandı"); setTimeout(() => { btn.textContent = st("Kopyala"); }, 1200); };
     const t = document.createElement("textarea");
     t.value = text; document.body.appendChild(t); t.select();
     try { document.execCommand("copy"); done(); } finally { t.remove(); }
@@ -320,7 +729,7 @@
         const code = document.createElement("code");
         code.textContent = cmd;
         const btn = document.createElement("button");
-        btn.type = "button"; btn.className = "btn"; btn.textContent = "Kopyala";
+        btn.type = "button"; btn.className = "btn"; btn.textContent = st("Kopyala");
         btn.onclick = () => copyText(cmd, btn);
         row.append(code, btn);
         body.appendChild(row);
@@ -338,11 +747,11 @@
   });
   async function remoteCheck() {
     $("r_check").disabled = true;
-    $("r_checkmsg").textContent = "Sunucuya bağlanılıyor…";
+    $("r_checkmsg").textContent = st("Sunucuya bağlanılıyor…");
     const r = await window.pywebview.api.remote_check(remoteForm()).catch((e) => ({ ok: false, error: String(e), problem: "other" }));
     $("r_check").disabled = false;
     check = r;
-    $("r_checkmsg").textContent = r.ok ? "Bağlantı başarılı. " + (r.installed ? "LAB ERP zaten kurulu, bu işlem güncelleme olur." : "Sunucu kuruluma hazır görünüyor.") : r.error;
+    $("r_checkmsg").textContent = r.ok ? st("Bağlantı başarılı.") + " " + (r.installed ? st("LAB ERP zaten kurulu, bu işlem güncelleme olur.") : st("Sunucu kuruluma hazır görünüyor.")) : r.error;
     guideTab = r.ok || r.problem === "refused" || r.problem === "timeout" ? "server" : "here";
     renderGuide();
   }
@@ -352,24 +761,23 @@
     if (!r.ok) return r;
     $("r_step").hidden = false; $("r_log").hidden = false;
     document.querySelectorAll(".mode").forEach((b) => b.disabled = true);
-    let st;
+    let rst;
     for (;;) {
-      st = await api.remote_status();
-      $("r_steptext").textContent = st.step || "";
+      rst = await api.remote_status();
+      $("r_steptext").textContent = rst.step || "";
       const log = $("r_log"), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
-      log.textContent = st.lines.join("\n");
+      log.textContent = rst.lines.join("\n");
       if (atEnd) log.scrollTop = log.scrollHeight;
-      if (st.done) break;
+      if (rst.done) break;
       await sleep(700);
     }
     $("r_step").hidden = true;
     document.querySelectorAll(".mode").forEach((b) => b.disabled = false);
-    if (!st.ok) return { ok: false, error: st.error };
-    show("Sunucu kuruldu: " + st.url + ". Bağlanılıyor…", "ok");
-    $("server_url").value = st.url;
-    const c = await api.apply_settings({ mode: "client", server_url: st.url });
-    if (!c.ok) return { ok: false, error: "Sunucu kuruldu ancak bu bilgisayardan " + st.url + " adresine ulaşılamıyor. " +
-      "Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında " + $("r_port").value + " TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin." };
+    if (!rst.ok) return { ok: false, error: rst.error };
+    show(st("Sunucu kuruldu: {0}. Bağlanılıyor…").replace("{0}", rst.url), "ok");
+    $("server_url").value = rst.url;
+    const c = await api.apply_settings({ mode: "client", server_url: rst.url });
+    if (!c.ok) return { ok: false, error: st("Sunucu kuruldu ancak bu bilgisayardan {0} adresine ulaşılamıyor. Sunucu bulutta ise sağlayıcının güvenlik grubunda / güvenlik duvarında {1} TCP portunu açın, sonra Ağdaki sunucuya bağlan ile bu adresi deneyin.").replace("{0}", rst.url).replace("{1}", $("r_port").value) };
     return c;
   }
   async function refreshDb() {
@@ -377,7 +785,7 @@
   }
   async function init() {
     const s = await window.pywebview.api.get_state();
-    $("ver").textContent = "Masaüstü sürüm " + s.version;
+    $("ver").textContent = st("Masaüstü sürüm") + " " + s.version;
     $("data_dir").value = s.data_dir;
     $("port").value = s.port;
     $("server_url").value = s.server_url;
@@ -392,14 +800,14 @@
     };
     $("test").onclick = async () => {
       const r = await window.pywebview.api.test_server($("server_url").value);
-      show(r.ok ? "Bağlantı başarılı: " + r.url : r.error, r.ok ? "ok" : "error");
+      show(r.ok ? st("Bağlantı başarılı: {0}").replace("{0}", r.url) : r.error, r.ok ? "ok" : "error");
       if (r.ok) $("server_url").value = r.url;
     };
     $("scan").onclick = async () => {
-      $("scan").disabled = true; $("scanmsg").textContent = "Aranıyor…"; $("found").innerHTML = "";
+      $("scan").disabled = true; $("scanmsg").textContent = st("Aranıyor…"); $("found").innerHTML = "";
       const list = await window.pywebview.api.discover();
       $("scan").disabled = false;
-      $("scanmsg").textContent = list.length ? list.length + " sunucu bulundu:" : "Sunucu bulunamadı. Adresi elle yazın.";
+      $("scanmsg").textContent = list.length ? st("{0} sunucu bulundu:").replace("{0}", list.length) : st("Sunucu bulunamadı. Adresi elle yazın.");
       for (const s of list) {
         const b = document.createElement("button");
         b.className = "btn"; b.type = "button"; b.textContent = s.name + " · " + s.url;
@@ -412,7 +820,7 @@
       if (f) { $("r_key").value = f; dropCheck(); }
     };
     const dropCheck = () => {
-      if (check) $("r_checkmsg").textContent = "Bilgiler değişti, yeniden deneyin.";
+      if (check) $("r_checkmsg").textContent = st("Bilgiler değişti, yeniden deneyin.");
       check = null;
       renderGuide();
     };

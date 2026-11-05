@@ -18,6 +18,7 @@ from ..models import Photo, StockItem, User
 from ..permissions import can
 from ..services import audit, uploads
 from .deps import get_db
+from app.core.i18n import tx
 
 router = APIRouter(tags=["photos"])
 
@@ -29,24 +30,24 @@ MAX_THUMB_MB = 2
 def _check(user: User, entity: str, level: str = "view") -> None:
     module = ENTITY_MODULES.get(entity)
     if module is None:
-        raise HTTPException(400, "Bilinmeyen kayıt türü")
+        raise HTTPException(400, tx("Bilinmeyen kayıt türü"))
     if not can(user, module, level):
-        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+        raise HTTPException(403, tx("Bu işlem için yetkiniz yok"))
 
 
 def _key(db: Session, entity: str, key: str) -> str:
     key = key.strip()
     if not key:
-        raise HTTPException(400, "Kayıt anahtarı boş")
+        raise HTTPException(400, tx("Kayıt anahtarı boş"))
     if entity == "stock" and (not key.isdigit() or db.get(StockItem, int(key)) is None):
-        raise HTTPException(404, "Stok kartı bulunamadı")
+        raise HTTPException(404, tx("Stok kartı bulunamadı"))
     return key
 
 
 def _photo_or_404(db: Session, photo_id: int) -> Photo:
     p = db.get(Photo, photo_id)
     if p is None:
-        raise HTTPException(404, "Fotoğraf bulunamadı")
+        raise HTTPException(404, tx("Fotoğraf bulunamadı"))
     return p
 
 
@@ -82,7 +83,7 @@ async def upload_photo(entity: str = Form(...), key: str = Form(...), file: Uplo
     key = _key(db, entity, key)
     name = uploads.safe_name(file.filename, "foto.jpg")
     if not uploads.is_image(name, file.content_type):
-        raise HTTPException(400, f"{name}: yalnızca resim dosyası yüklenebilir (JPG, PNG, WEBP, HEIC…)")
+        raise HTTPException(400, tx("{0}: yalnızca resim dosyası yüklenebilir (JPG, PNG, WEBP, HEIC…)", name))
     folder = get_settings().photo_dir
     try:
         path, size = await uploads.store(file, folder, MAX_PHOTO_MB)
@@ -134,7 +135,7 @@ def _file_user(token: str | None = Depends(session_token), db: Session = Depends
 
 def _send(p: Photo, path: str | None, thumb: bool) -> FileResponse:
     if not path or not Path(path).is_file():
-        raise HTTPException(404, "Dosya bulunamadı")
+        raise HTTPException(404, tx("Dosya bulunamadı"))
     media, inline = ("image/jpeg", True) if thumb and path == p.thumb_path else uploads.media_for(p.filename)
     return FileResponse(path, media_type=media, filename=None if thumb else p.filename,
                         content_disposition_type="inline" if inline else "attachment", headers={"Cache-Control": "private, max-age=86400"})

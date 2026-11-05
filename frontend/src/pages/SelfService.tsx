@@ -5,6 +5,7 @@ import { errText, useToast } from "../components/Toast";
 import { Field, Loading, Modal } from "./admin/shared";
 import { fmtDay, numOrNull, today } from "./erp/common";
 import { Stat } from "./erp/commerce";
+import { LOCALE, tx } from "../api/i18n";
 
 export type LeaveKind = "annual" | "sick" | "excuse" | "unpaid";
 export type ReqStatus = "pending" | "approved" | "rejected" | "cancelled";
@@ -32,11 +33,11 @@ type DayResp = {
 };
 type Options = { work_orders: { id: number; no: string; description: string }[]; projects: { id: number; name: string }[] };
 
-export const LEAVE_KINDS: [LeaveKind, string][] = [["annual", "Yıllık izin"], ["sick", "Rapor"], ["excuse", "Mazeret"], ["unpaid", "Ücretsiz izin"]];
-export const fmtH = (h: number) => `${h.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} sa`;
-const fmtD = (d: number) => `${d.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} gün`;
+export const LEAVE_KINDS: [LeaveKind, string][] = [["annual", tx("Yıllık izin")], ["sick", tx("Rapor")], ["excuse", tx("Mazeret")], ["unpaid", tx("Ücretsiz izin")]];
+export const fmtH = (h: number) => tx("{0} sa", h.toLocaleString(LOCALE, { maximumFractionDigits: 2 }));
+const fmtD = (d: number) => tx("{0} gün", d.toLocaleString(LOCALE, { maximumFractionDigits: 1 }));
 export const dayRange = (a: string, b: string) => (a === b ? fmtDay(a) : `${fmtDay(a)} – ${fmtDay(b)}`);
-export const fixTimes = (f: Fix) => `${f.start} – ${f.end ? `${f.end}${f.next_day ? " (+1)" : ""}` : "çıkış yok"}`;
+export const fixTimes = (f: Fix) => `${f.start} – ${f.end ? `${f.end}${f.next_day ? " (+1)" : ""}` : tx("çıkış yok")}`;
 
 /** Everything that hangs on shifts, leave or hours; each screen's keys start with one of these. */
 export function useAttRefresh() {
@@ -61,7 +62,7 @@ export function MyLeaves() {
   const q = useQuery({ queryKey: ["attendance-me", "leave", year], queryFn: () => api.get<MyLeaveResp>(`/leave/me?year=${year}`) });
   const cancel = useMutation({
     mutationFn: (id: number) => api.post(`/leave/me/${id}/cancel`, {}),
-    onSuccess: () => { toast("Talep iptal edildi"); refresh(); },
+    onSuccess: () => { toast(tx("Talep iptal edildi")); refresh(); },
     onError: (e) => { refresh(); toast(errText(e), true); },
   });
   const d = q.data;
@@ -70,17 +71,17 @@ export function MyLeaves() {
     <>
       <Loading error={q.error} loading={q.isLoading} />
       <div className="row" style={{ margin: "10px 0", flexWrap: "wrap" }}>
-        <select aria-label="Yıl" value={year} onChange={(e) => setYear(Number(e.target.value))}>
+        <select aria-label={tx("Yıl")} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {[now - 1, now, now + 1].map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
-        <button className="btn primary" onClick={() => setAsking(true)}>İzin talebi</button>
+        <button className="btn primary" onClick={() => setAsking(true)}>{tx("İzin talebi")}</button>
       </div>
       {b && (
         <div className="grid stats">
-          <Stat label="Yıllık izin hakkı" value={fmtD(b.entitled)} />
-          <Stat label="Kullanılan" value={fmtD(b.used)} />
-          <Stat label="Bekleyen" value={fmtD(b.pending)} />
-          <Stat label="Kalan" value={fmtD(b.remaining)} tone={b.remaining < 0 ? "warn" : undefined} />
+          <Stat label={tx("Yıllık izin hakkı")} value={fmtD(b.entitled)} />
+          <Stat label={tx("Kullanılan")} value={fmtD(b.used)} />
+          <Stat label={tx("Bekleyen")} value={fmtD(b.pending)} />
+          <Stat label={tx("Kalan")} value={fmtD(b.remaining)} tone={b.remaining < 0 ? "warn" : undefined} />
         </div>
       )}
       <div className="card">
@@ -90,17 +91,17 @@ export function MyLeaves() {
               <div className="ucard-main">
                 <b>{r.kind_label} · {fmtD(r.days)}</b>
                 <span className="muted">{dayRange(r.start_date, r.end_date)}{r.note ? ` · ${r.note}` : ""}</span>
-                {r.decision_note && <span className="muted">Yönetici notu: {r.decision_note}</span>}
+                {r.decision_note && <span className="muted">{tx("Yönetici notu: {0}", r.decision_note)}</span>}
               </div>
               <div className="ucard-meta"><StatusBadge status={r.status} label={r.status_label} /></div>
               {r.status === "pending" && (
                 <div className="ucard-actions">
-                  <button className="btn small" disabled={cancel.isPending} onClick={() => confirm("Talep iptal edilsin mi?") && cancel.mutate(r.id)}>İptal et</button>
+                  <button className="btn small" disabled={cancel.isPending} onClick={() => confirm(tx("Talep iptal edilsin mi?")) && cancel.mutate(r.id)}>{tx("İptal et")}</button>
                 </div>
               )}
             </div>
           ))}
-          {d && !d.rows.length && <div className="muted empty">Henüz izin kaydınız yok.</div>}
+          {d && !d.rows.length && <div className="muted empty">{tx("Henüz izin kaydınız yok.")}</div>}
         </div>
       </div>
       {asking && <LeaveAsk onClose={() => setAsking(false)} />}
@@ -117,28 +118,28 @@ function LeaveAsk({ onClose }: { onClose: () => void }) {
   const [note, setNote] = useState("");
   const save = useMutation({
     mutationFn: () => api.post<Leave>("/leave/me", { kind, start_date: start, end_date: end, note }),
-    onSuccess: (r) => { toast(`Talebiniz iletildi: ${fmtD(r.days)}`); refresh(); onClose(); },
+    onSuccess: (r) => { toast(tx("Talebiniz iletildi: {0}", fmtD(r.days))); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title="İzin talebi" onClose={onClose} footer={
+    <Modal title={tx("İzin talebi")} onClose={onClose} footer={
       <>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || !start || !end} onClick={() => save.mutate()}>Gönder</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || !start || !end} onClick={() => save.mutate()}>{tx("Gönder")}</button>
       </>
     }>
       <div className="adm-form">
-        <Field label="Tür">
+        <Field label={tx("Tür")}>
           <select value={kind} onChange={(e) => setKind(e.target.value as LeaveKind)}>
-            {LEAVE_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            {LEAVE_KINDS.map(([k, label]) => <option key={k} value={k}>{tx(label)}</option>)}
           </select>
         </Field>
         <div className="adm-form two">
-          <Field label="Başlangıç"><input type="date" value={start} onChange={(e) => { setStart(e.target.value); if (e.target.value > end) setEnd(e.target.value); }} /></Field>
-          <Field label="Bitiş"><input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label={tx("Başlangıç")}><input type="date" value={start} onChange={(e) => { setStart(e.target.value); if (e.target.value > end) setEnd(e.target.value); }} /></Field>
+          <Field label={tx("Bitiş")}><input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
-        <Field label="Not"><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
-        <p className="muted">Pazartesi ile cuma arasındaki günler sayılır, resmi tatiller sayılmaz. Yalnızca yıllık izin bakiyeden düşer.</p>
+        <Field label={tx("Not")}><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
+        <p className="muted">{tx("Pazartesi ile cuma arasındaki günler sayılır, resmi tatiller sayılmaz. Yalnızca yıllık izin bakiyeden düşer.")}</p>
       </div>
     </Modal>
   );
@@ -152,14 +153,14 @@ export function MyFixes() {
   const q = useQuery({ queryKey: ["attendance-me", "fixes"], queryFn: () => api.get<MyFixResp>("/attendance/requests/me") });
   const cancel = useMutation({
     mutationFn: (id: number) => api.post(`/attendance/requests/${id}/cancel`, {}),
-    onSuccess: () => { toast("Talep iptal edildi"); refresh(); },
+    onSuccess: () => { toast(tx("Talep iptal edildi")); refresh(); },
     onError: (e) => { refresh(); toast(errText(e), true); },
   });
   return (
     <>
       <Loading error={q.error} loading={q.isLoading} />
       <div className="row" style={{ margin: "10px 0" }}>
-        <button className="btn primary" onClick={() => setAsking(true)}>Düzeltme talebi</button>
+        <button className="btn primary" onClick={() => setAsking(true)}>{tx("Düzeltme talebi")}</button>
       </div>
       <div className="card">
         <div className="ulist">
@@ -167,19 +168,19 @@ export function MyFixes() {
             <div key={r.id} className="ucard">
               <div className="ucard-main">
                 <b>{fmtDay(r.work_date)} · {fixTimes(r)}</b>
-                <span className="muted">{r.current ? `Kayıtlı: ${r.current}` : "Yeni mesai"}</span>
+                <span className="muted">{r.current ? tx("Kayıtlı: {0}", r.current) : tx("Yeni mesai")}</span>
                 <span className="muted">{r.reason}</span>
-                {r.decision_note && <span className="muted">Yönetici notu: {r.decision_note}</span>}
+                {r.decision_note && <span className="muted">{tx("Yönetici notu: {0}", r.decision_note)}</span>}
               </div>
               <div className="ucard-meta"><StatusBadge status={r.status} label={r.status_label} /></div>
               {r.status === "pending" && (
                 <div className="ucard-actions">
-                  <button className="btn small" disabled={cancel.isPending} onClick={() => confirm("Talep iptal edilsin mi?") && cancel.mutate(r.id)}>İptal et</button>
+                  <button className="btn small" disabled={cancel.isPending} onClick={() => confirm(tx("Talep iptal edilsin mi?")) && cancel.mutate(r.id)}>{tx("İptal et")}</button>
                 </div>
               )}
             </div>
           ))}
-          {q.data && !q.data.rows.length && <div className="muted empty">Düzeltme talebiniz yok.</div>}
+          {q.data && !q.data.rows.length && <div className="muted empty">{tx("Düzeltme talebiniz yok.")}</div>}
         </div>
       </div>
       {asking && <FixAsk onClose={() => setAsking(false)} />}
@@ -208,30 +209,30 @@ function FixAsk({ onClose }: { onClose: () => void }) {
   };
   const save = useMutation({
     mutationFn: () => api.post("/attendance/requests", { attendance_id: shift || null, work_date: day, clock_in: start, clock_out: end || null, reason }),
-    onSuccess: () => { toast("Talebiniz iletildi"); refresh(); onClose(); },
+    onSuccess: () => { toast(tx("Talebiniz iletildi")); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title="Mesai düzeltme talebi" onClose={onClose} footer={
+    <Modal title={tx("Mesai düzeltme talebi")} onClose={onClose} footer={
       <>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || !day || !start || !reason.trim() || (!shift && !end)} onClick={() => save.mutate()}>Gönder</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || !day || !start || !reason.trim() || (!shift && !end)} onClick={() => save.mutate()}>{tx("Gönder")}</button>
       </>
     }>
       <div className="adm-form">
         <div className="adm-form two">
-          <Field label="Tarih"><input type="date" value={day} max={today()} onChange={(e) => { setDay(e.target.value); setShift(""); }} /></Field>
-          <Field label="Mesai">
+          <Field label={tx("Tarih")}><input type="date" value={day} max={today()} onChange={(e) => { setDay(e.target.value); setShift(""); }} /></Field>
+          <Field label={tx("Mesai")}>
             <select value={shift} onChange={(e) => pick(numOrNull(e.target.value) ?? "")}>
-              <option value="">Kayıt yok, yeni mesai</option>
-              {shifts.map((s) => <option key={s.id} value={s.id}>{s.start} – {s.end ?? "çıkış yok"}</option>)}
+              <option value="">{tx("Kayıt yok, yeni mesai")}</option>
+              {shifts.map((s) => <option key={s.id} value={s.id}>{s.start} – {s.end ?? tx("çıkış yok")}</option>)}
             </select>
           </Field>
-          <Field label="Giriş"><input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Çıkış"><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label={tx("Giriş")}><input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
+          <Field label={tx("Çıkış")}><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
-        <Field label="Gerekçe"><input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} /></Field>
-        <p className="muted">Çıkış girişten küçükse gece vardiyası sayılır. Yöneticiniz onaylayınca kayda işlenir.</p>
+        <Field label={tx("Gerekçe")}><input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} /></Field>
+        <p className="muted">{tx("Çıkış girişten küçükse gece vardiyası sayılır. Yöneticiniz onaylayınca kayda işlenir.")}</p>
       </div>
     </Modal>
   );
@@ -246,28 +247,28 @@ export function MyHours() {
   const q = useQuery({ queryKey: ["attendance-me", "time", day], enabled: !!day, queryFn: () => api.get<DayResp>(`/hr/me/time?day=${day}`) });
   const del = useMutation({
     mutationFn: (id: number) => api.del(`/hr/me/time/${id}`),
-    onSuccess: () => { toast("Kayıt silindi"); setEdit(null); refresh(); },
+    onSuccess: () => { toast(tx("Kayıt silindi")); setEdit(null); refresh(); },
     onError: (e) => { refresh(); toast(errText(e), true); },
   });
   const d = q.data;
   return (
     <>
       <div className="row" style={{ margin: "10px 0" }}>
-        <label className="row">Gün <input type="date" value={day} max={today()} onChange={(e) => { if (e.target.value) { setDay(e.target.value); setEdit(null); } }} /></label>
+        <label className="row">{tx("Gün")}{" "}<input type="date" value={day} max={today()} onChange={(e) => { if (e.target.value) { setDay(e.target.value); setEdit(null); } }} /></label>
       </div>
       <Loading error={q.error} loading={q.isLoading} />
-      {d && !d.employee && <div className="card empty">Hesabınıza bağlı bir personel kartı yok.</div>}
+      {d && !d.employee && <div className="card empty">{tx("Hesabınıza bağlı bir personel kartı yok.")}</div>}
       {d?.employee && (
         <>
           <div className="grid stats">
-            <Stat label="Mesai (net)" value={d.attended == null ? "Kayıt yok" : fmtH(d.attended)} sub={d.open ? "Mesai sürüyor, şu ana kadar" : undefined} />
-            <Stat label="Dağıtılan" value={fmtH(d.allocated)} />
-            <Stat label="Kalan" value={fmtH(d.remaining)} sub={d.attended == null ? "Mesai kaydı yoksa üst sınır 24 saat" : undefined} />
+            <Stat label={tx("Mesai (net)")} value={d.attended == null ? "Kayıt yok" : fmtH(d.attended)} sub={d.open ? tx("Mesai sürüyor, şu ana kadar") : undefined} />
+            <Stat label={tx("Dağıtılan")} value={fmtH(d.allocated)} />
+            <Stat label={tx("Kalan")} value={fmtH(d.remaining)} sub={d.attended == null ? tx("Mesai kaydı yoksa üst sınır 24 saat") : undefined} />
           </div>
-          {d.forgot && <div className="card error">Bu günde çıkışınız unutulmuş; önce mesai düzeltme talebi açın.</div>}
+          {d.forgot && <div className="card error">{tx("Bu günde çıkışınız unutulmuş; önce mesai düzeltme talebi açın.")}</div>}
           {d.editable
             ? <HoursForm key={edit?.id ?? "new"} day={day} entry={edit} left={d.remaining} onDone={() => setEdit(null)} />
-            : <div className="card muted">{d.edit_days} günden eski kayıtları yalnızca yöneticiniz değiştirebilir.</div>}
+            : <div className="card muted">{tx("{0} günden eski kayıtları yalnızca yöneticiniz değiştirebilir.", d.edit_days)}</div>}
           <div className="card">
             <div className="ulist">
               {d.rows.map((t) => (
@@ -279,13 +280,13 @@ export function MyHours() {
                   <div className="ucard-meta"><b>{fmtH(t.hours)}</b></div>
                   {d.editable && (
                     <div className="ucard-actions">
-                      <button className="btn small" onClick={() => setEdit(t)}>Düzenle</button>
-                      <button className="btn small" disabled={del.isPending} onClick={() => confirm("Kayıt silinsin mi?") && del.mutate(t.id)}>Sil</button>
+                      <button className="btn small" onClick={() => setEdit(t)}>{tx("Düzenle")}</button>
+                      <button className="btn small" disabled={del.isPending} onClick={() => confirm(tx("Kayıt silinsin mi?")) && del.mutate(t.id)}>{tx("Sil")}</button>
                     </div>
                   )}
                 </div>
               ))}
-              {!d.rows.length && <div className="muted empty">Bu güne saat yazılmamış.</div>}
+              {!d.rows.length && <div className="muted empty">{tx("Bu güne saat yazılmamış.")}</div>}
             </div>
           </div>
         </>
@@ -308,33 +309,33 @@ function HoursForm({ day, entry, left, onDone }: { day: string; entry: Entry | n
       const body = { work_date: day, hours: numOrNull(hours), note, work_order_id: target[0] === "w" ? id : null, project_id: target[0] === "p" ? id : null };
       return entry ? api.put(`/hr/me/time/${entry.id}`, body) : api.post("/hr/me/time", body);
     },
-    onSuccess: () => { toast("Saat kaydedildi"); refresh(); setTarget(""); setHours(""); setNote(""); onDone(); },
+    onSuccess: () => { toast(tx("Saat kaydedildi")); refresh(); setTarget(""); setHours(""); setNote(""); onDone(); },
     onError: (e) => toast(errText(e), true),
   });
   const h = numOrNull(hours) ?? 0;
   const known = !current || opts.data?.work_orders.some((w) => `w${w.id}` === current) || opts.data?.projects.some((p) => `p${p.id}` === current);
   return (
     <div className="card">
-      <b>{entry ? "Kaydı düzenle" : "Saat yaz"}</b>
+      <b>{entry ? tx("Kaydı düzenle") : tx("Saat yaz")}</b>
       <div className="adm-form two" style={{ marginTop: 8 }}>
-        <Field label="İş emri veya proje">
+        <Field label={tx("İş emri veya proje")}>
           <select value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">Seçin</option>
+            <option value="">{tx("Seçin")}</option>
             {!known && <option value={current}>{entry?.work_order_no ?? entry?.project_name}</option>}
-            <optgroup label="Açık iş emirleri">
+            <optgroup label={tx("Açık iş emirleri")}>
               {opts.data?.work_orders.map((w) => <option key={w.id} value={`w${w.id}`}>{w.no}{w.description ? ` · ${w.description}` : ""}</option>)}
             </optgroup>
-            <optgroup label="Projeler">
+            <optgroup label={tx("Projeler")}>
               {opts.data?.projects.map((p) => <option key={p.id} value={`p${p.id}`}>{p.name}</option>)}
             </optgroup>
           </select>
         </Field>
-        <Field label="Saat"><input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} /></Field>
+        <Field label={tx("Saat")}><input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} /></Field>
       </div>
-      <Field label="Not"><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
+      <Field label={tx("Not")}><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
       <div className="row" style={{ marginTop: 8 }}>
-        <button className="btn primary" disabled={!target || h <= 0 || h > 24 || save.isPending} onClick={() => save.mutate()}>{entry ? "Kaydet" : "Ekle"}</button>
-        {entry && <button className="btn" onClick={onDone}>Vazgeç</button>}
+        <button className="btn primary" disabled={!target || h <= 0 || h > 24 || save.isPending} onClick={() => save.mutate()}>{entry ? tx("Kaydet") : tx("Ekle")}</button>
+        {entry && <button className="btn" onClick={onDone}>{tx("Vazgeç")}</button>}
       </div>
     </div>
   );

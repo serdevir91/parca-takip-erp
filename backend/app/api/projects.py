@@ -16,6 +16,7 @@ from ..services import audit, conflict
 from ..services import backup as backup_svc
 from ..permissions import can, require
 from .deps import admin, any_user, get_db, project_or_404
+from app.core.i18n import tx
 
 projects_view, projects_edit = require("projects", "view"), require("projects", "edit")
 # Screens that pick a project without showing it: these see only ids and names
@@ -87,14 +88,14 @@ def list_projects(include_archived: bool = False, db: Session = Depends(get_db),
 def create_project(body: ProjectIn, db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Proje adı boş olamaz")
+        raise HTTPException(400, tx("Proje adı boş olamaz"))
     if _name_taken(db, name):
-        raise HTTPException(400, f"Bu isimde bir proje zaten var: {name}")
+        raise HTTPException(400, tx("Bu isimde bir proje zaten var: {0}", name))
     p = Project(name=name, root_part_no=body.root_part_no.strip(), description=body.description)
     if body.template_id is not None:
         template = db.get(ProjectTemplate, body.template_id)
         if template is None:
-            raise HTTPException(404, "Şablon bulunamadı")
+            raise HTTPException(404, tx("Şablon bulunamadı"))
         p.bom_draft = {"tree": template.payload, "rev": 1, "by": user.username, "at": utcnow().isoformat()}
     db.add(p)
     db.flush()
@@ -108,7 +109,7 @@ def get_project(pid: int, db: Session = Depends(get_db), me: User = Depends(any_
     if not can(me, "projects"):
         if any(can(me, m) for m in PICKER_MODULES):
             return _brief(project_or_404(db, pid))
-        raise HTTPException(403, "Bu proje için yetkiniz yok")
+        raise HTTPException(403, tx("Bu proje için yetkiniz yok"))
     return project_out(db, project_or_404(db, pid))
 
 
@@ -121,9 +122,9 @@ def update_project(pid: int, body: ProjectPatch, db: Session = Depends(get_db),
     if "name" in changes:
         changes["name"] = changes["name"].strip()
         if not changes["name"]:
-            raise HTTPException(400, "Proje adı boş olamaz")
+            raise HTTPException(400, tx("Proje adı boş olamaz"))
         if _name_taken(db, changes["name"], p.id):
-            raise HTTPException(400, f"Bu isimde bir proje zaten var: {changes['name']}")
+            raise HTTPException(400, tx("Bu isimde bir proje zaten var: {0}", changes['name']))
     if "root_part_no" in changes:
         changes["root_part_no"] = changes["root_part_no"].strip()
     audit.record_changes(db, user, p, changes, "project", p.id, p.id)
@@ -182,7 +183,7 @@ def purge_project(pid: int, body: PurgeIn | None = None, db: Session = Depends(g
         try:
             backup_name = backup_svc.create_backup().name
         except backup_svc.BackupError as e:
-            raise HTTPException(424, f"Yedek alınamadı, proje silinmedi: {e}") from e
+            raise HTTPException(424, tx("Yedek alınamadı, proje silinmedi: {0}", e)) from e
     audit.record(db, user, "project", p.id, "deleted", p.name, "yedeksiz" if skip else None, action="delete")
     p.current_version_id = None
     db.flush()

@@ -7,6 +7,7 @@ import { Page, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
 import { statusStyle } from "../theme/theme";
+import { LOCALE, tx } from "../api/i18n";
 
 // Backend: backend/app/api/control.py
 const OPEN = "Açık";
@@ -38,15 +39,15 @@ type ControlResp = {
   counts: { total: number; open: number; resolved: number; error: number };
 };
 
-const SEV_LABEL: Record<string, string> = { error: "Hata", warning: "Uyarı", info: "Bilgi" };
+const SEV_LABEL: Record<string, string> = { error: tx("Hata"), warning: tx("Uyarı"), info: tx("Bilgi") };
 const SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 const SEV_COLOR: Record<string, string> = { error: "FFC7CE", warning: "FFEB9C", info: "DDEBF7" };
 const RESOLVED_COLOR = "C6EFCE";
 
 type StatusFilter = "open" | "resolved" | "all";
 
-const fmt = (n: number) => n.toLocaleString("tr-TR");
-const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "");
+const fmt = (n: number) => n.toLocaleString(LOCALE);
+const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" }) : "");
 
 type ResolveTarget = { issue: Issue; action: "resolve" | "unresolve" };
 
@@ -72,7 +73,7 @@ export default function Control() {
 
   const { mutate: delIssue } = useMutation({
     mutationFn: (id: number) => api.del(`/projects/${pid}/control/issues/${id}`),
-    onSuccess: () => { toast("Konu silindi"); invalidate(); },
+    onSuccess: () => { toast(tx("Konu silindi")); invalidate(); },
     onError: (e) => toast(errText(e), true),
   });
 
@@ -114,36 +115,36 @@ export default function Control() {
 
   const columns = useMemo<GridColumn<Issue>[]>(() => [
     {
-      id: "severity", header: "Önem", size: 80,
+      id: "severity", header: tx("Önem"), size: 80,
       accessorFn: (r) => SEV_LABEL[r.severity] ?? r.severity,
       cellStyle: (r) => statusStyle(r.status === RESOLVED ? RESOLVED_COLOR : SEV_COLOR[r.severity]),
     },
-    { id: "kind", header: "Tür", size: 230, accessorKey: "kind" },
+    { id: "kind", header: tx("Tür"), size: 230, accessorKey: "kind" },
     {
-      id: "part_no", header: "Parça No", size: 200, accessorKey: "part_no",
+      id: "part_no", header: tx("Parça No"), size: 200, accessorKey: "part_no",
       cell: ({ row }) => {
         const pno = row.original.part_no;
         if (!pno) return <span className="muted">-</span>;
         const first = pno.split(" / ")[0];
-        return <Link to={`/p/${pid}/parts?q=${encodeURIComponent(first)}`} title="Parça listesinde göster" onClick={(e) => e.stopPropagation()}>{pno}</Link>;
+        return <Link to={`/p/${pid}/parts?q=${encodeURIComponent(first)}`} title={tx("Parça listesinde göster")} onClick={(e) => e.stopPropagation()}>{pno}</Link>;
       },
     },
     {
-      id: "message", header: "Açıklama", size: 380, accessorKey: "message",
-      cell: ({ row }) => <span title={row.original.message}>{row.original.message}</span>,
+      id: "message", header: tx("Açıklama"), size: 380, accessorKey: "message",
+      cell: ({ row }) => <span title={tx(row.original.message)}>{tx(row.original.message)}</span>,
     },
-    { id: "levels", header: "Seviye", size: 90, accessorFn: (r) => (r.levels ?? []).join(", ") },
+    { id: "levels", header: tx("Seviye"), size: 90, accessorFn: (r) => (r.levels ?? []).join(", ") },
     {
-      id: "status", header: "Durum", size: 90, accessorKey: "status",
+      id: "status", header: tx("Durum"), size: 90, accessorKey: "status",
       cellStyle: (r) => (r.status === RESOLVED ? statusStyle(RESOLVED_COLOR) : undefined),
     },
     {
-      id: "note", header: "Not", size: 220, accessorKey: "note",
+      id: "note", header: tx("Not"), size: 220, accessorKey: "note",
       cell: ({ row }) => <span title={row.original.note}>{row.original.note}</span>,
     },
-    { id: "resolved_by", header: "Çözen", size: 110, accessorKey: "resolved_by" },
-    { id: "resolved_at", header: "Çözüm Tarihi", size: 130, accessorFn: (r) => fmtDate(r.resolved_at) },
-    { id: "source", header: "Kaynak", size: 100, accessorFn: (r) => (r.manual ? `Manuel (${r.created_by || "-"})` : "Otomatik") },
+    { id: "resolved_by", header: tx("Çözen"), size: 110, accessorKey: "resolved_by" },
+    { id: "resolved_at", header: tx("Çözüm Tarihi"), size: 130, accessorFn: (r) => fmtDate(r.resolved_at) },
+    { id: "source", header: tx("Kaynak"), size: 100, accessorFn: (r) => (r.manual ? tx("Manuel ({0})", r.created_by || "-") : tx("Otomatik")) },
     {
       id: "_act", header: "", size: canEdit ? 150 : 1, noFilter: true, enableSorting: false,
       cell: ({ row }) => {
@@ -152,13 +153,13 @@ export default function Control() {
         return (
           <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
             {i.status === OPEN
-              ? <button className="btn small primary" onClick={(e) => { e.stopPropagation(); setTarget({ issue: i, action: "resolve" }); }}>Çözüldü</button>
-              : <button className="btn small" onClick={(e) => { e.stopPropagation(); setTarget({ issue: i, action: "unresolve" }); }}>Yeniden aç</button>}
+              ? <button className="btn small primary" onClick={(e) => { e.stopPropagation(); setTarget({ issue: i, action: "resolve" }); }}>{tx("Çözüldü")}</button>
+              : <button className="btn small" onClick={(e) => { e.stopPropagation(); setTarget({ issue: i, action: "unresolve" }); }}>{tx("Yeniden aç")}</button>}
             {i.manual && i.id != null && (
-              <button className="btn small danger" title="Konuyu sil" onClick={(e) => {
+              <button className="btn small danger" title={tx("Konuyu sil")} onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(`"${i.message}" konusu silinsin mi?`)) delIssue(i.id!);
-              }}>Sil</button>
+                if (confirm(tx("\"{0}\" konusu silinsin mi?", i.message))) delIssue(i.id!);
+              }}>{tx("Sil")}</button>
             )}
           </div>
         );
@@ -169,27 +170,27 @@ export default function Control() {
   const toolbar = (
     <div className="row">
       <div className="tabs ctl-tabs">
-        <button className={status === "open" ? "active" : ""} onClick={() => setStatus("open")}>Açık ({fmt(counts.open)})</button>
-        <button className={status === "resolved" ? "active" : ""} onClick={() => setStatus("resolved")}>Çözüldü ({fmt(counts.resolved)})</button>
-        <button className={status === "all" ? "active" : ""} onClick={() => setStatus("all")}>Hepsi ({fmt(counts.total)})</button>
+        <button className={status === "open" ? "active" : ""} onClick={() => setStatus("open")}>{tx("Açık ({0})", fmt(counts.open))}</button>
+        <button className={status === "resolved" ? "active" : ""} onClick={() => setStatus("resolved")}>{tx("Çözüldü ({0})", fmt(counts.resolved))}</button>
+        <button className={status === "all" ? "active" : ""} onClick={() => setStatus("all")}>{tx("Hepsi ({0})", fmt(counts.total))}</button>
       </div>
-      <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tür">
-        <option value="">Tüm türler</option>
-        {groups.map((g) => <option key={g.kind} value={g.kind}>{g.kind} ({fmt(g.total)})</option>)}
+      <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label={tx("Tür")}>
+        <option value="">{tx("Tüm türler")}</option>
+        {groups.map((g) => <option key={g.kind} value={g.kind}>{tx(g.kind)} ({fmt(g.total)})</option>)}
       </select>
-      <select value={severity} onChange={(e) => setSeverity(e.target.value)} aria-label="Önem">
-        <option value="">Tüm önem dereceleri</option>
-        <option value="error">Hata</option>
-        <option value="warning">Uyarı</option>
-        <option value="info">Bilgi</option>
+      <select value={severity} onChange={(e) => setSeverity(e.target.value)} aria-label={tx("Önem")}>
+        <option value="">{tx("Tüm önem dereceleri")}</option>
+        <option value="error">{tx("Hata")}</option>
+        <option value="warning">{tx("Uyarı")}</option>
+        <option value="info">{tx("Bilgi")}</option>
       </select>
-      {canEdit && <button className="btn small primary" onClick={() => setShowNew(true)}>+ Yeni konu</button>}
-      <button className="btn small" onClick={() => q.refetch()} disabled={q.isFetching}>{q.isFetching ? "Yenileniyor…" : "Yenile"}</button>
+      {canEdit && <button className="btn small primary" onClick={() => setShowNew(true)}>{tx("+ Yeni konu")}</button>}
+      <button className="btn small" onClick={() => q.refetch()} disabled={q.isFetching}>{q.isFetching ? tx("Yenileniyor…") : tx("Yenile")}</button>
     </div>
   );
 
-  if (q.isLoading) return <Page><div className="muted">Kontroller hesaplanıyor…</div></Page>;
-  if (q.isError) return <Page><div className="error">{errText(q.error)}</div><button className="btn" onClick={() => q.refetch()}>Tekrar dene</button></Page>;
+  if (q.isLoading) return <Page><div className="muted">{tx("Kontroller hesaplanıyor…")}</div></Page>;
+  if (q.isError) return <Page><div className="error">{errText(q.error)}</div><button className="btn" onClick={() => q.refetch()}>{tx("Tekrar dene")}</button></Page>;
 
   const stale = q.data?.stale ?? [];
 
@@ -197,24 +198,24 @@ export default function Control() {
     <Page full>
       <div className="ctl-head">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>Kontrol Listesi</h2>
+          <h2 style={{ margin: 0 }}>{tx("Kontrol Listesi")}</h2>
           <div className="row">
-            <span className="badge err">{fmt(counts.error)} hata</span>
-            <span className="badge warn">{fmt(counts.warning)} uyarı</span>
-            <span className="badge">{fmt(counts.info)} bilgi</span>
-            <span className="muted">açık · {fmt(counts.resolved)} çözüldü</span>
+            <span className="badge err">{tx("{0} hata", fmt(counts.error))}</span>
+            <span className="badge warn">{tx("{0} uyarı", fmt(counts.warning))}</span>
+            <span className="badge">{tx("{0} bilgi", fmt(counts.info))}</span>
+            <span className="muted">{tx("açık · {0} çözüldü", fmt(counts.resolved))}</span>
           </div>
         </div>
         {groups.length === 0 ? (
-          <div className="ok" style={{ marginTop: 8 }}>Sorun bulunamadı. Tüm kontroller temiz.</div>
+          <div className="ok" style={{ marginTop: 8 }}>{tx("Sorun bulunamadı. Tüm kontroller temiz.")}</div>
         ) : (
           <div className="ctl-groups">
             {groups.map((g) => (
               <button key={g.kind} className={"ctl-group" + (kind === g.kind ? " active" : "")}
                 style={statusStyle(g.open ? SEV_COLOR[g.sev] : RESOLVED_COLOR)}
-                title={`${SEV_LABEL[g.sev] ?? g.sev} · ${fmt(g.open)} açık / ${fmt(g.total)} toplam`}
+                title={tx("{0} · {1} açık / {2} toplam", SEV_LABEL[g.sev] ?? g.sev, fmt(g.open), fmt(g.total))}
                 onClick={() => setKind(kind === g.kind ? "" : g.kind)}>
-                <span className="ctl-kind">{g.kind}</span>
+                <span className="ctl-kind">{tx(g.kind)}</span>
                 <b>{fmt(g.open)}</b><span className="muted"> / {fmt(g.total)}</span>
               </button>
             ))}
@@ -223,32 +224,32 @@ export default function Control() {
         {stale.length > 0 && (
           <div style={{ marginTop: 6 }}>
             <button className="btn small" onClick={() => setShowStale((v) => !v)}>
-              {showStale ? "▾" : "▸"} Artık tespit edilmeyen kayıtlar ({fmt(stale.length)})
+              {showStale ? "▾" : "▸"}{" "}{tx("Artık tespit edilmeyen kayıtlar ({0})", fmt(stale.length))}
             </button>
             {showStale && (
               <div className="ctl-stale">
                 <table className="simple">
-                  <thead><tr><th>Tür</th><th>Parça No</th><th>Açıklama</th><th>Durum</th><th>Not</th><th>Çözen</th></tr></thead>
+                  <thead><tr><th>{tx("Tür")}</th><th>{tx("Parça No")}</th><th>{tx("Açıklama")}</th><th>{tx("Durum")}</th><th>{tx("Not")}</th><th>{tx("Çözen")}</th></tr></thead>
                   <tbody>
                     {stale.slice(0, 300).map((s) => (
-                      <tr key={s.key}><td>{s.kind}</td><td>{s.part_no}</td><td>{s.message}</td><td>{s.status}</td><td>{s.note}</td><td>{s.resolved_by}</td></tr>
+                      <tr key={s.key}><td>{tx(s.kind)}</td><td>{s.part_no}</td><td>{tx(s.message)}</td><td>{tx(s.status)}</td><td>{s.note}</td><td>{s.resolved_by}</td></tr>
                     ))}
                   </tbody>
                 </table>
-                {stale.length > 300 && <div className="muted">İlk 300 kayıt gösteriliyor.</div>}
+                {stale.length > 300 && <div className="muted">{tx("İlk 300 kayıt gösteriliyor.")}</div>}
               </div>
             )}
           </div>
         )}
       </div>
       <DataGrid<Issue>
-        exportName="Kontrol listesi"
+        stateKey="Kontrol listesi" exportName={tx("Kontrol listesi")}
         data={rows}
         columns={columns}
         getRowId={(r) => r.key}
         toolbar={toolbar}
         rowStyle={(r) => (r.status === RESOLVED ? { opacity: 0.75 } : undefined)}
-        emptyText={status === "open" ? "Açık konu yok." : "Kayıt yok."}
+        emptyText={status === "open" ? tx("Açık konu yok.") : tx("Kayıt yok.")}
       />
       {target && <ResolveModal pid={pid} target={target} onClose={() => setTarget(null)} />}
       {showNew && <NewIssueModal pid={pid} onClose={() => setShowNew(false)} />}
@@ -264,7 +265,7 @@ function ResolveModal({ pid, target, onClose }: { pid: number; target: ResolveTa
   const m = useMutation({
     mutationFn: () => api.post<Issue>(`/projects/${pid}/control/${action}`, { key: issue.key, note: note.trim() }),
     onSuccess: () => {
-      toast(action === "resolve" ? "Çözüldü olarak işaretlendi" : "Konu yeniden açıldı");
+      toast(action === "resolve" ? tx("Çözüldü olarak işaretlendi") : tx("Konu yeniden açıldı"));
       qc.invalidateQueries({ queryKey: ["control", pid] });
       onClose();
     },
@@ -273,16 +274,16 @@ function ResolveModal({ pid, target, onClose }: { pid: number; target: ResolveTa
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>{action === "resolve" ? "Çözüldü olarak işaretle" : "Konuyu yeniden aç"}</h3>
+        <h3 style={{ marginTop: 0 }}>{action === "resolve" ? tx("Çözüldü olarak işaretle") : tx("Konuyu yeniden aç")}</h3>
         <div className="muted" style={{ marginBottom: 4 }}>{issue.kind}{issue.part_no ? ` · ${issue.part_no}` : ""}</div>
-        <div style={{ marginBottom: 10 }}>{issue.message}</div>
-        <label className="muted" htmlFor="ctl-note">Not {action === "unresolve" ? "(boş bırakılırsa mevcut not korunur)" : "(isteğe bağlı)"}</label>
+        <div style={{ marginBottom: 10 }}>{tx(issue.message)}</div>
+        <label className="muted" htmlFor="ctl-note">{tx("Not")}{" "}{action === "unresolve" ? tx("(boş bırakılırsa mevcut not korunur)") : tx("(isteğe bağlı)")}</label>
         <textarea id="ctl-note" rows={4} style={{ width: "100%" }} value={note} autoFocus
-          onChange={(e) => setNote(e.target.value)} placeholder="Ör. Tasarımcı ile kontrol edildi, BOM doğru." />
+          onChange={(e) => setNote(e.target.value)} placeholder={tx("Ör. Tasarımcı ile kontrol edildi, BOM doğru.")} />
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
-          <button className="btn" onClick={onClose}>Vazgeç</button>
+          <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
           <button className="btn primary" disabled={m.isPending} onClick={() => m.mutate()}>
-            {m.isPending ? "Kaydediliyor…" : action === "resolve" ? "Çözüldü" : "Yeniden aç"}
+            {m.isPending ? tx("Kaydediliyor…") : action === "resolve" ? tx("Çözüldü") : tx("Yeniden aç")}
           </button>
         </div>
       </div>
@@ -299,7 +300,7 @@ function NewIssueModal({ pid, onClose }: { pid: number; onClose: () => void }) {
   const m = useMutation({
     mutationFn: () => api.post<Issue>(`/projects/${pid}/control/issues`, { message: message.trim(), part_no: partNo.trim(), severity: sev }),
     onSuccess: () => {
-      toast("Konu eklendi");
+      toast(tx("Konu eklendi"));
       qc.invalidateQueries({ queryKey: ["control", pid] });
       onClose();
     },
@@ -308,22 +309,22 @@ function NewIssueModal({ pid, onClose }: { pid: number; onClose: () => void }) {
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Yeni konu</h3>
+        <h3 style={{ marginTop: 0 }}>{tx("Yeni konu")}</h3>
         <div className="grid" style={{ gap: 8 }}>
-          <label>Parça No (isteğe bağlı)<br /><input style={{ width: "100%" }} value={partNo} onChange={(e) => setPartNo(e.target.value)} /></label>
-          <label>Önem<br />
+          <label>{tx("Parça No (isteğe bağlı)")}<br /><input style={{ width: "100%" }} value={partNo} onChange={(e) => setPartNo(e.target.value)} /></label>
+          <label>{tx("Önem")}<br />
             <select value={sev} onChange={(e) => setSev(e.target.value as Severity)}>
-              <option value="error">Hata</option>
-              <option value="warning">Uyarı</option>
-              <option value="info">Bilgi</option>
+              <option value="error">{tx("Hata")}</option>
+              <option value="warning">{tx("Uyarı")}</option>
+              <option value="info">{tx("Bilgi")}</option>
             </select>
           </label>
-          <label>Açıklama<br /><textarea rows={4} style={{ width: "100%" }} value={message} autoFocus onChange={(e) => setMessage(e.target.value)} /></label>
+          <label>{tx("Açıklama")}<br /><textarea rows={4} style={{ width: "100%" }} value={message} autoFocus onChange={(e) => setMessage(e.target.value)} /></label>
         </div>
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
-          <button className="btn" onClick={onClose}>Vazgeç</button>
+          <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
           <button className="btn primary" disabled={!message.trim() || m.isPending} onClick={() => m.mutate()}>
-            {m.isPending ? "Kaydediliyor…" : "Ekle"}
+            {m.isPending ? tx("Kaydediliyor…") : tx("Ekle")}
           </button>
         </div>
       </div>

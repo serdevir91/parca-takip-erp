@@ -13,6 +13,7 @@ from ..models import Holiday, User
 from ..services import audit
 from ..services import holidays as svc
 from .deps import admin, any_user, get_db
+from app.core.i18n import tx
 
 router = APIRouter(tags=["holidays"])
 
@@ -36,7 +37,7 @@ class FixedIn(BaseModel):
 def _holiday_or_404(db: Session, holiday_id: int) -> Holiday:
     h = db.get(Holiday, holiday_id)
     if h is None:
-        raise HTTPException(404, "Tatil bulunamadı")
+        raise HTTPException(404, tx("Tatil bulunamadı"))
     return h
 
 
@@ -53,7 +54,7 @@ def list_holidays(year: int | None = None, _: User = Depends(any_user),
 def add_holiday(body: HolidayIn, me: User = Depends(admin), db: Session = Depends(get_db)) -> dict[str, Any]:
     made = svc.add_range(db, me, body.day, body.until, body.name.strip(), body.half_day)
     if not made:
-        raise HTTPException(409, "Bu günler listede zaten var")
+        raise HTTPException(409, tx("Bu günler listede zaten var"))
     db.commit()
     return {"added": len(made)}
 

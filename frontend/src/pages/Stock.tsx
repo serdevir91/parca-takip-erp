@@ -13,6 +13,7 @@ import { errText, useToast } from "../components/Toast";
 import { Field, Loading, Modal, fmtDate } from "./admin/shared";
 import FastenerStock from "./erp/FastenerStock";
 import { FirmSelect, ITEM_KINDS, ProjectSelect, fmtMoney, fmtQty, numOrNull, useFirms, type ReorderRow, type StockItem, type StockMove } from "./erp/common";
+import { tx } from "../api/i18n";
 
 type ListResp = { rows: StockItem[]; total_value: number; low_count: number };
 
@@ -28,10 +29,10 @@ export default function Stock() {
     <Page full>
       <div className="toolbar">
         <div className="tabs" role="tablist" style={{ margin: 0 }}>
-          <button role="tab" aria-selected={tab === "items"} className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>Stok kartları</button>
-          <button role="tab" aria-selected={tab === "fasteners"} className={tab === "fasteners" ? "active" : ""} onClick={() => setTab("fasteners")}>Bağlantı elemanları</button>
-          <button role="tab" aria-selected={tab === "moves"} className={tab === "moves" ? "active" : ""} onClick={() => setTab("moves")}>Son hareketler</button>
-          {can("purchasing") && <button role="tab" aria-selected={tab === "reorder"} className={tab === "reorder" ? "active" : ""} onClick={() => setTab("reorder")}>Sipariş önerileri</button>}
+          <button role="tab" aria-selected={tab === "items"} className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>{tx("Stok kartları")}</button>
+          <button role="tab" aria-selected={tab === "fasteners"} className={tab === "fasteners" ? "active" : ""} onClick={() => setTab("fasteners")}>{tx("Bağlantı elemanları")}</button>
+          <button role="tab" aria-selected={tab === "moves"} className={tab === "moves" ? "active" : ""} onClick={() => setTab("moves")}>{tx("Son hareketler")}</button>
+          {can("purchasing") && <button role="tab" aria-selected={tab === "reorder"} className={tab === "reorder" ? "active" : ""} onClick={() => setTab("reorder")}>{tx("Sipariş önerileri")}</button>}
         </div>
       </div>
       {tab === "items" ? <Items /> : tab === "fasteners" ? <FastenerStock /> : tab === "moves" ? <MovesTab /> : <Reorder />}
@@ -59,31 +60,31 @@ function Items() {
   const list = useQuery({ queryKey: ["stock", low], queryFn: () => api.get<ListResp>(`/stock${low ? "?low=true" : ""}`) });
   const del = useMutation({
     mutationFn: (i: StockItem) => api.del(`/stock/${i.id}`),
-    onSuccess: () => { toast("Stok kartı silindi"); refresh(); },
+    onSuccess: () => { toast(tx("Stok kartı silindi")); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
 
   const columns = useMemo<GridColumn<StockItem>[]>(() => [
-    { accessorKey: "code", header: "Kod", size: 190, cellStyle: () => ({ fontFamily: "var(--mono, monospace)" }) },
-    { accessorKey: "name", header: "Ad", size: 220 },
-    { accessorKey: "kind_label", header: "Tür", size: 120 },
-    { accessorKey: "unit", header: "Birim", size: 60 },
-    { accessorKey: "qty", header: "Miktar", size: 90, cellStyle: (r) => ({ ...num, fontWeight: 600, ...(r.low ? { color: "var(--danger)" } : {}) }), cell: (c) => fmtQty(c.row.original.qty) },
-    { accessorKey: "min_qty", header: "Min. stok", size: 80, cellStyle: () => num, cell: (c) => fmtQty(c.row.original.min_qty || null) },
-    { accessorKey: "unit_cost", header: "Ort. maliyet", size: 100, cellStyle: () => num, cell: (c) => fmtMoney(c.row.original.unit_cost) },
-    { accessorKey: "value", header: "Değer", size: 110, cellStyle: () => num, cell: (c) => fmtMoney(c.row.original.value) },
-    { accessorKey: "location", header: "Konum", size: 110 },
-    { accessorKey: "note", header: "Not", size: 160 },
+    { accessorKey: "code", header: tx("Kod"), size: 190, cellStyle: () => ({ fontFamily: "var(--mono, monospace)" }) },
+    { accessorKey: "name", header: tx("Ad"), size: 220 },
+    { accessorKey: "kind_label", header: tx("Tür"), size: 120 },
+    { accessorKey: "unit", header: tx("Birim"), size: 60 },
+    { accessorKey: "qty", header: tx("Miktar"), size: 90, cellStyle: (r) => ({ ...num, fontWeight: 600, ...(r.low ? { color: "var(--danger)" } : {}) }), cell: (c) => fmtQty(c.row.original.qty) },
+    { accessorKey: "min_qty", header: tx("Min. stok"), size: 80, cellStyle: () => num, cell: (c) => fmtQty(c.row.original.min_qty || null) },
+    { accessorKey: "unit_cost", header: tx("Ort. maliyet"), size: 100, cellStyle: () => num, cell: (c) => fmtMoney(c.row.original.unit_cost) },
+    { accessorKey: "value", header: tx("Değer"), size: 110, cellStyle: () => num, cell: (c) => fmtMoney(c.row.original.value) },
+    { accessorKey: "location", header: tx("Konum"), size: 110 },
+    { accessorKey: "note", header: tx("Not"), size: 160 },
     {
       id: "actions", header: "", size: canEdit ? 250 : 100, noFilter: true, enableSorting: false,
       cell: (c) => {
         const i = c.row.original;
         return (
           <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-            {canEdit && <button className="btn small primary" onClick={() => setMoving(i)}>Hareket</button>}
-            <button className="btn small" onClick={() => setLedger(i)}>Hareketler</button>
-            {canEdit && <button className="btn small" onClick={() => setEditing(i)}>Düzenle</button>}
-            {canEdit && <button className="btn small danger" disabled={del.isPending} onClick={() => confirm(`${i.code} stok kartı silinsin mi?`) && del.mutate(i)}>Sil</button>}
+            {canEdit && <button className="btn small primary" onClick={() => setMoving(i)}>{tx("Hareket")}</button>}
+            <button className="btn small" onClick={() => setLedger(i)}>{tx("Hareketler")}</button>
+            {canEdit && <button className="btn small" onClick={() => setEditing(i)}>{tx("Düzenle")}</button>}
+            {canEdit && <button className="btn small danger" disabled={del.isPending} onClick={() => confirm(tx("{0} stok kartı silinsin mi?", i.code)) && del.mutate(i)}>{tx("Sil")}</button>}
           </div>
         );
       },
@@ -95,17 +96,17 @@ function Items() {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       <Loading error={list.error} loading={list.isLoading} />
       <DataGrid<StockItem>
-        exportName="Stok kartları"
+        stateKey="Stok kartları" exportName={tx("Stok kartları")}
         data={d?.rows ?? []} columns={columns} getRowId={(r) => String(r.id)} rowStyle={lowStyle}
         selectable selection={selection} onSelectionChange={setSelection}
         selectionActions={<button className="btn small" onClick={() => setLabels((d?.rows ?? []).filter((r) => selection[String(r.id)])
-          .map((r) => ({ payload: `STK:${r.code}`, title: r.code, sub: [r.name, r.location].filter(Boolean).join(" · ") })))}>QR etiket</button>}
-        emptyText={low ? "Kritik seviyenin altında stok yok." : "Stok kartı yok. Satın alma mal kabulü ve üretim girişleri kartları kendiliğinden açar."}
+          .map((r) => ({ payload: `STK:${r.code}`, title: r.code, sub: [r.name, r.location].filter(Boolean).join(" · ") })))}>{tx("QR etiket")}</button>}
+        emptyText={low ? tx("Kritik seviyenin altında stok yok.") : tx("Stok kartı yok. Satın alma mal kabulü ve üretim girişleri kartları kendiliğinden açar.")}
         toolbar={<>
-          {canEdit && <button className="btn small primary" onClick={() => setEditing("new")}>+ Yeni stok kartı</button>}
-          <span className="muted">{fmtQty(d?.rows.length ?? 0)} kart · stok değeri <b>{fmtMoney(d?.total_value ?? 0)}</b></span>
+          {canEdit && <button className="btn small primary" onClick={() => setEditing("new")}>{tx("+ Yeni stok kartı")}</button>}
+          <span className="muted">{tx("{0} kart · stok değeri", fmtQty(d?.rows.length ?? 0))}{" "}<b>{fmtMoney(d?.total_value ?? 0)}</b></span>
           <button className={`chip${low ? " on" : ""}`} aria-pressed={low} onClick={() => setLow((v) => !v)}>
-            Kritik stok <span className="muted">{fmtQty(d?.low_count ?? 0)}</span>
+            {tx("Kritik stok")}{" "}<span className="muted">{fmtQty(d?.low_count ?? 0)}</span>
           </button>
         </>}
       />
@@ -143,41 +144,41 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
       return item ? saveRev(item.rev, (rev) => api.put<StockItem>(`/stock/${item.id}`, { ...changed, rev }))
         : api.post<StockItem>("/stock", { ...body, code: code.trim(), qty: numOrNull(opening) ?? 0 });
     },
-    onSuccess: () => { toast(item ? "Stok kartı güncellendi" : "Stok kartı açıldı"); refresh(); onClose(); },
+    onSuccess: () => { toast(item ? tx("Stok kartı güncellendi") : tx("Stok kartı açıldı")); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title={item ? `Stok kartı: ${item.code}` : "Yeni stok kartı"} onClose={onClose}
+    <Modal title={item ? tx("Stok kartı: {0}", item.code) : tx("Yeni stok kartı")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || (!item && !code.trim())} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || (!item && !code.trim())} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
       <div className="adm-form two">
-        <Field label="Kod" hint="Parça no veya bağlantı elemanı anahtarı (tür|standart|ölçü).">
+        <Field label={tx("Kod")} hint={tx("Parça no veya bağlantı elemanı anahtarı (tür|standart|ölçü).")}>
           {item ? <input disabled value={item.code} /> : <input autoFocus value={code} onChange={(e) => setCode(e.target.value)} />}
         </Field>
-        <Field label="Ad"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Tür">
+        <Field label={tx("Ad")}><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label={tx("Tür")}>
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
             {ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </Field>
-        <Field label="Birim"><input value={unit} onChange={(e) => setUnit(e.target.value)} /></Field>
-        <Field label="Minimum stok"><input inputMode="decimal" value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
-        <Field label="Sipariş miktarı" hint="Stok minimumun altına düşünce önerilecek en az miktar. 0: minimuma tamamlar.">
+        <Field label={tx("Birim")}><input value={unit} onChange={(e) => setUnit(e.target.value)} /></Field>
+        <Field label={tx("Minimum stok")}><input inputMode="decimal" value={minQty} onChange={(e) => setMinQty(e.target.value)} /></Field>
+        <Field label={tx("Sipariş miktarı")} hint={tx("Stok minimumun altına düşünce önerilecek en az miktar. 0: minimuma tamamlar.")}>
           <input inputMode="decimal" value={reorderQty} onChange={(e) => setReorderQty(e.target.value)} />
         </Field>
-        <Field label="Tercih edilen tedarikçi" hint={firmGone ? <span className="error">Kayıtlı firma silinmiş veya pasif; başka firma seçin.</span> : undefined}>
+        <Field label={tx("Tercih edilen tedarikçi")} hint={firmGone ? <span className="error">{tx("Kayıtlı firma silinmiş veya pasif; başka firma seçin.")}</span> : undefined}>
           <FirmSelect kind="supplier" value={firm} onChange={setFirm} />
         </Field>
-        <Field label={`Birim maliyet (${curSign()})`}><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
-        <Field label="Konum (raf/depo)"><input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
-        {!item && <Field label="Açılış miktarı"><input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} /></Field>}
+        <Field label={tx("Birim maliyet ({0})", curSign())}><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+        <Field label={tx("Konum (raf/depo)")}><input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
+        {!item && <Field label={tx("Açılış miktarı")}><input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} /></Field>}
       </div>
-      <div style={{ marginTop: 10 }}><Field label="Not"><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
+      <div style={{ marginTop: 10 }}><Field label={tx("Not")}><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
       {item && (
         <div style={{ marginTop: 12 }}>
-          <h4 style={{ margin: "0 0 6px" }}>Fotoğraflar</h4>
+          <h4 style={{ margin: "0 0 6px" }}>{tx("Fotoğraflar")}</h4>
           <Photos entity="stock" entityKey={String(item.id)} canEdit={can("stock", "edit")} />
         </div>
       )}
@@ -186,10 +187,10 @@ function ItemForm({ item, onClose }: { item?: StockItem; onClose: () => void }) 
 }
 
 const MOVE_OPTIONS = [
-  { value: "in", label: "Giriş" },
-  { value: "out", label: "Çıkış" },
-  { value: "count", label: "Sayım (miktarı düzelt)" },
-  { value: "issue", label: "Projeye çıkış" },
+  { value: "in", label: tx("Giriş") },
+  { value: "out", label: tx("Çıkış") },
+  { value: "count", label: tx("Sayım (miktarı düzelt)") },
+  { value: "issue", label: tx("Projeye çıkış") },
 ];
 
 function MoveModal({ item, onClose }: { item: StockItem; onClose: () => void }) {
@@ -204,30 +205,30 @@ function MoveModal({ item, onClose }: { item: StockItem; onClose: () => void }) 
     mutationFn: () => api.post<StockItem>(`/stock/${item.id}/moves`, {
       kind, qty: numOrNull(qty) ?? 0, unit_cost: kind === "in" ? numOrNull(cost) : null, project_id: project, note,
     }),
-    onSuccess: (i) => { toast(`${i.code}: stok ${fmtQty(i.qty)} ${i.unit}`); refresh(); onClose(); },
+    onSuccess: (i) => { toast(tx("{0}: stok {1} {2}", i.code, fmtQty(i.qty), i.unit)); refresh(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title={`Stok hareketi: ${item.code}`} onClose={onClose}
+    <Modal title={tx("Stok hareketi: {0}", item.code)} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || numOrNull(qty) === null || (kind === "issue" && !project)} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || numOrNull(qty) === null || (kind === "issue" && !project)} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>}>
-      <p className="muted">{item.name} · mevcut stok <b>{fmtQty(item.qty)} {item.unit}</b></p>
+      <p className="muted">{tx("{0} · mevcut stok", item.name)}{" "}<b>{fmtQty(item.qty)} {tx(item.unit)}</b></p>
       <div className="adm-form">
-        <Field label="Hareket">
+        <Field label={tx("Hareket")}>
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
             {MOVE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Field>
-        <Field label={kind === "count" ? "Sayılan miktar" : "Miktar"}><input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-        {kind === "in" && <Field label={`Birim maliyet (${curSign()})`} hint="Ortalama maliyeti günceller."><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>}
+        <Field label={kind === "count" ? tx("Sayılan miktar") : tx("Miktar")}><input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+        {kind === "in" && <Field label={tx("Birim maliyet ({0})", curSign())} hint={tx("Ortalama maliyeti günceller.")}><input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>}
         {(kind === "issue" || kind === "out") && (
-          <Field label="Proje" hint={kind === "issue" ? "Projeye verilen miktar ihtiyaç analizinde karşılanmış sayılır." : undefined}>
-            <ProjectSelect value={project} onChange={setProject} emptyLabel={kind === "issue" ? "(Proje seçin)" : "(Proje yok)"} />
+          <Field label={tx("Proje")} hint={kind === "issue" ? tx("Projeye verilen miktar ihtiyaç analizinde karşılanmış sayılır.") : undefined}>
+            <ProjectSelect value={project} onChange={setProject} emptyLabel={kind === "issue" ? tx("(Proje seçin)") : tx("(Proje yok)")} />
           </Field>
         )}
-        <Field label="Not"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label={tx("Not")}><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
     </Modal>
   );
@@ -255,7 +256,7 @@ function Reorder() {
       items: chosen.map((r) => ({ item_id: r.item_id, qty: numOrNull(pick(r).qty) ?? 0, firm_id: pick(r).firm })),
     }),
     onSuccess: (d) => {
-      toast(`${d.orders.length} taslak sipariş oluşturuldu`);
+      toast(tx("{0} taslak sipariş oluşturuldu", d.orders.length));
       setCreated(d.orders);
       setPicks({});
       setErrors({});
@@ -272,18 +273,18 @@ function Reorder() {
     <div className="content">
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, marginRight: 8 }}>Sipariş önerileri</h2>
-          <span className="muted">Stok ve açık stok siparişleri toplamı minimumun altında kalan kartlar.</span>
+          <h2 style={{ margin: 0, marginRight: 8 }}>{tx("Sipariş önerileri")}</h2>
+          <span className="muted">{tx("Stok ve açık stok siparişleri toplamı minimumun altında kalan kartlar.")}</span>
           <span style={{ flex: 1 }} />
           {canOrder && (
             <button className="btn primary" disabled={create.isPending || !chosen.length || chosen.some((r) => !numOrNull(pick(r).qty))} onClick={() => create.mutate()}>
-              Taslak sipariş oluştur ({chosen.length})
+              {tx("Taslak sipariş oluştur ({0})", chosen.length)}
             </button>
           )}
         </div>
         {created.length > 0 && (
-          <p>Oluşturulan taslaklar: {created.map((o, i) => (
-            <span key={o.id}>{i > 0 && ", "}<Link to={`/purchasing?po=${o.id}`}>{o.no}</Link> <span className="muted">({o.firm_name}, {o.line_count} kalem)</span></span>
+          <p>{tx("Oluşturulan taslaklar:")}{" "}{created.map((o, i) => (
+            <span key={o.id}>{i > 0 && ", "}<Link to={`/purchasing?po=${o.id}`}>{o.no}</Link> <span className="muted">{tx("({0}, {1} kalem)", o.firm_name, o.line_count)}</span></span>
           ))}</p>
         )}
         <Loading error={list.error} loading={list.isLoading} />
@@ -292,10 +293,10 @@ function Reorder() {
             <table className="simple erp-table erp-lines">
               <thead>
                 <tr>
-                  {canOrder && <th><input type="checkbox" aria-label="Tümünü seç" checked={allOn}
+                  {canOrder && <th><input type="checkbox" aria-label={tx("Tümünü seç")} checked={allOn}
                     onChange={() => setPicks(Object.fromEntries(rows.map((r) => [r.item_id, { ...picks[r.item_id], on: !allOn }])))} /></th>}
-                  <th>Kod</th><th>Ad</th><th className="num">Stok</th><th className="num">Siparişte</th><th className="num">Minimum</th>
-                  <th className="num">Önerilen</th><th>Tedarikçi</th><th className="num">Son fiyat</th>
+                  <th>{tx("Kod")}</th><th>{tx("Ad")}</th><th className="num">{tx("Stok")}</th><th className="num">{tx("Siparişte")}</th><th className="num">{tx("Minimum")}</th>
+                  <th className="num">{tx("Önerilen")}</th><th>{tx("Tedarikçi")}</th><th className="num">{tx("Son fiyat")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,10 +304,10 @@ function Reorder() {
                   const p = pick(r);
                   return (
                     <tr key={r.item_id}>
-                      {canOrder && <td><input type="checkbox" aria-label={`${r.code} seç`} checked={p.on} onChange={(e) => set(r.item_id, { on: e.target.checked })} /></td>}
+                      {canOrder && <td><input type="checkbox" aria-label={tx("{0} seç", r.code)} checked={p.on} onChange={(e) => set(r.item_id, { on: e.target.checked })} /></td>}
                       <td className="mono">{r.code}</td>
                       <td>{r.name}</td>
-                      <td className="num">{fmtQty(r.qty)} {r.unit}</td>
+                      <td className="num">{fmtQty(r.qty)} {tx(r.unit)}</td>
                       <td className="num">{fmtQty(r.on_order)}</td>
                       <td className="num">{fmtQty(r.min_qty)}</td>
                       <td className="num">
@@ -315,13 +316,13 @@ function Reorder() {
                       <td style={{ minWidth: 180 }}>
                         {canOrder ? <FirmSelect kind="supplier" value={p.firm} onChange={(firm) => set(r.item_id, { firm })} /> : r.firm_name}
                         {errors[r.item_id] && <div className="error">{errors[r.item_id]}</div>}
-                        {r.firm_missing && <div className="muted">Tercih edilen firma silinmiş veya pasif.</div>}
+                        {r.firm_missing && <div className="muted">{tx("Tercih edilen firma silinmiş veya pasif.")}</div>}
                       </td>
                       <td className="num">{r.last_price == null ? "" : fmtMoney(r.last_price, r.last_currency ?? undefined)}</td>
                     </tr>
                   );
                 })}
-                {!rows.length && <tr><td colSpan={9} className="muted">Öneri yok: tüm kartlar minimumun üstünde.</td></tr>}
+                {!rows.length && <tr><td colSpan={9} className="muted">{tx("Öneri yok: tüm kartlar minimumun üstünde.")}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -336,8 +337,8 @@ function MovesTable({ rows, showItem }: { rows: StockMove[]; showItem?: boolean 
     <table className="simple erp-table">
       <thead>
         <tr>
-          <th>Tarih</th>{showItem && <th>Kod</th>}<th>Hareket</th><th className="num">Miktar</th><th className="num">Bakiye</th>
-          <th className="num">Birim maliyet</th><th>Proje</th><th>Belge</th><th>Not</th><th>Kullanıcı</th>
+          <th>{tx("Tarih")}</th>{showItem && <th>{tx("Kod")}</th>}<th>{tx("Hareket")}</th><th className="num">{tx("Miktar")}</th><th className="num">{tx("Bakiye")}</th>
+          <th className="num">{tx("Birim maliyet")}</th><th>{tx("Proje")}</th><th>{tx("Belge")}</th><th>{tx("Not")}</th><th>{tx("Kullanıcı")}</th>
         </tr>
       </thead>
       <tbody>
@@ -355,7 +356,7 @@ function MovesTable({ rows, showItem }: { rows: StockMove[]; showItem?: boolean 
             <td>{m.username}</td>
           </tr>
         ))}
-        {!rows.length && <tr><td colSpan={10} className="muted">Hareket yok.</td></tr>}
+        {!rows.length && <tr><td colSpan={10} className="muted">{tx("Hareket yok.")}</td></tr>}
       </tbody>
     </table>
   );
@@ -364,7 +365,7 @@ function MovesTable({ rows, showItem }: { rows: StockMove[]; showItem?: boolean 
 function LedgerModal({ item, onClose }: { item: StockItem; onClose: () => void }) {
   const q = useQuery({ queryKey: ["stock-moves", item.id], queryFn: () => api.get<StockMove[]>(`/stock/${item.id}/moves`) });
   return (
-    <Modal wide title={`Hareketler: ${item.code}`} onClose={onClose}>
+    <Modal wide title={tx("Hareketler: {0}", item.code)} onClose={onClose}>
       <Loading error={q.error} loading={q.isLoading} />
       {q.data && <div className="adm-scroll"><MovesTable rows={q.data} /></div>}
     </Modal>
@@ -381,8 +382,8 @@ function MovesTab() {
     <div className="content">
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
-          <ProjectSelect value={project} onChange={setProject} emptyLabel="Tüm projeler" />
-          <span className="muted">Son 500 hareket</span>
+          <ProjectSelect value={project} onChange={setProject} emptyLabel={tx("Tüm projeler")} />
+          <span className="muted">{tx("Son 500 hareket")}</span>
         </div>
         <Loading error={q.error} loading={q.isLoading} />
         {q.data && <div className="adm-scroll"><MovesTable rows={q.data} showItem /></div>}

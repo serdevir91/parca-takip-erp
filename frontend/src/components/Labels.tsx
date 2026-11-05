@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { mobileApp } from "../api/mobile";
 import { Modal } from "../pages/admin/shared";
 import { useToast } from "./Toast";
+import { tx } from "../api/i18n";
 
 export type Label = { payload: string; title: string; sub?: string };
 
@@ -40,16 +41,16 @@ export default function LabelsModal({ labels, onClose }: { labels: Label[]; onCl
     const app = mobileApp();
     if (!app) window.print();
     else if (app.print) app.print();
-    else toast("Bu uygulama sürümü yazdıramıyor; etiketi bilgisayardan yazdırın", true);
+    else toast(tx("Bu uygulama sürümü yazdıramıyor; etiketi bilgisayardan yazdırın"), true);
   };
   return (
-    <Modal wide title={`QR etiket (${labels.length})`} onClose={onClose}
+    <Modal wide title={tx("QR etiket ({0})", labels.length)} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Kapat</button>
-        <button className="btn primary" onClick={print}>Yazdır</button>
+        <button className="btn" onClick={onClose}>{tx("Kapat")}</button>
+        <button className="btn primary" onClick={print}>{tx("Yazdır")}</button>
       </>}>
       <Sheet labels={labels} svgs={svgs} className="label-sheet" />
-      <p className="muted">A4, sayfada 3 × 7 etiket (63 × 37 mm). Yazdırırken ölçek %100 olmalı.</p>
+      <p className="muted">{tx("A4, sayfada 3 × 7 etiket (63 × 37 mm). Yazdırırken ölçek %100 olmalı.")}</p>
       {createPortal(<Sheet labels={labels} svgs={svgs} className="label-print" />, document.body)}
     </Modal>
   );

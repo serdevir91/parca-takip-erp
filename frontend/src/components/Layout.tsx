@@ -12,6 +12,7 @@ import { mobileApp, onBack } from "../api/mobile";
 import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
 import { DesktopMenu } from "./DesktopMenu";
+import LangSelect from "./LangSelect";
 import Profile from "./Profile";
 import Notifications, { AdminWarnings } from "./Notifications";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
@@ -20,6 +21,7 @@ import type { ChatState } from "../pages/Chat";
 import { useToast } from "./Toast";
 import BrandMark from "./BrandMark";
 import { sys, useBrand } from "../api/system";
+import { LOCALE, tx } from "../api/i18n";
 
 export function useProject() {
   const { pid } = useParams();
@@ -28,7 +30,7 @@ export function useProject() {
   return { pid: id, project: q.data, ...q };
 }
 
-const ROLE_LABELS: Record<string, string> = { admin: "Admin", designer: "Tasarımcı", planner: "Planlama/Satın alma", viewer: "İzleyici" };
+const ROLE_LABELS: Record<string, string> = { admin: tx("Admin"), designer: tx("Tasarımcı"), planner: tx("Planlama/Satın alma"), viewer: tx("İzleyici") };
 
 // unless: hidden for users who have that module (they get the full screen instead)
 // off: open to everyone, hidden only when that module is switched off for the company
@@ -37,45 +39,45 @@ type Item = { to: string; label: string; icon: LucideIcon; module?: Module; any?
 type Group = { title: string; items: Item[] };
 
 const GROUPS: Group[] = [
-  { title: "", items: [{ to: "/", label: "Ana sayfa", icon: House, end: true }] },
-  { title: "Mühendislik", items: [{ to: "/projects", label: "Projeler", icon: FolderKanban, module: "projects" }] },
+  { title: "", items: [{ to: "/", label: tx("Ana sayfa"), icon: House, end: true }] },
+  { title: tx("Mühendislik"), items: [{ to: "/projects", label: tx("Projeler"), icon: FolderKanban, module: "projects" }] },
   {
-    title: "Planlama ve üretim", items: [
-      { to: "/purchasing", label: "Satın alma", icon: ShoppingCart, module: "purchasing" },
-      { to: "/work-orders", label: "İş emirleri", icon: Factory, module: "workorders" },
-      { to: "/stock", label: "Stok", icon: Boxes, module: "stock" },
-      { to: "/scan", label: "Barkod okut", icon: ScanLine, any: ["stock", "purchasing", "workorders"] },
-      { to: "/hr", label: "Personel ve zaman", icon: Clock, module: "hr", end: true },
-      { to: "/hr/me", label: "Personel kartım", icon: IdCard, unless: "hr" },
-      { to: "/attendance", label: "Mesai takibi", icon: Timer, off: "attendance" },
+    title: tx("Planlama ve üretim"), items: [
+      { to: "/purchasing", label: tx("Satın alma"), icon: ShoppingCart, module: "purchasing" },
+      { to: "/work-orders", label: tx("İş emirleri"), icon: Factory, module: "workorders" },
+      { to: "/stock", label: tx("Stok"), icon: Boxes, module: "stock" },
+      { to: "/scan", label: tx("Barkod okut"), icon: ScanLine, any: ["stock", "purchasing", "workorders"] },
+      { to: "/hr", label: tx("Personel ve zaman"), icon: Clock, module: "hr", end: true },
+      { to: "/hr/me", label: tx("Personel kartım"), icon: IdCard, unless: "hr" },
+      { to: "/attendance", label: tx("Mesai takibi"), icon: Timer, off: "attendance" },
     ],
   },
   {
-    title: "Ticari", items: [
-      { to: "/contacts", label: "Cari kartlar", icon: Contact, module: "contacts" },
-      { to: "/sales", label: "Satış ve teklif", icon: TrendingUp, module: "sales" },
-      { to: "/finance", label: "Fatura ve ödeme", icon: Wallet, module: "finance" },
+    title: tx("Ticari"), items: [
+      { to: "/contacts", label: tx("Cari kartlar"), icon: Contact, module: "contacts" },
+      { to: "/sales", label: tx("Satış ve teklif"), icon: TrendingUp, module: "sales" },
+      { to: "/finance", label: tx("Fatura ve ödeme"), icon: Wallet, module: "finance" },
     ],
   },
   {
-    title: "Sistem", items: [
-      { to: "/chat", label: "Sohbet", icon: MessageCircle, module: "chat" },
-      { to: "/admin", label: "Yönetim", icon: Settings, module: "admin" },
+    title: tx("Sistem"), items: [
+      { to: "/chat", label: tx("Sohbet"), icon: MessageCircle, module: "chat" },
+      { to: "/admin", label: tx("Yönetim"), icon: Settings, module: "admin" },
     ],
   },
 ];
 
 const PROJECT_ITEMS: Item[] = [
-  { to: "", label: "Proje özeti", icon: Layers, module: "projects", end: true },
-  { to: "/parts", label: "Parça listesi", icon: ListTree, module: "parts" },
-  { to: "/fasteners", label: "Bağlantı elemanları", icon: Wrench, module: "fasteners" },
-  { to: "/tree", label: "Ürün ağacı", icon: Network, module: "projects" },
-  { to: "/bom", label: "BOM sürümleri", icon: GitCompare, module: "projects" },
-  { to: "/drawings", label: "Teknik resimler", icon: FileText, module: "drawings" },
-  { to: "/control", label: "Kontrol listesi", icon: ClipboardCheck, module: "control" },
-  { to: "/planning", label: "İhtiyaç ve maliyet", icon: Calculator, module: "planning" },
-  { to: "/purchasing", label: "Satın alma", icon: ShoppingCart, module: "purchasing" },
-  { to: "/work-orders", label: "İş emirleri", icon: Factory, module: "workorders" },
+  { to: "", label: tx("Proje özeti"), icon: Layers, module: "projects", end: true },
+  { to: "/parts", label: tx("Parça listesi"), icon: ListTree, module: "parts" },
+  { to: "/fasteners", label: tx("Bağlantı elemanları"), icon: Wrench, module: "fasteners" },
+  { to: "/tree", label: tx("Ürün ağacı"), icon: Network, module: "projects" },
+  { to: "/bom", label: tx("BOM sürümleri"), icon: GitCompare, module: "projects" },
+  { to: "/drawings", label: tx("Teknik resimler"), icon: FileText, module: "drawings" },
+  { to: "/control", label: tx("Kontrol listesi"), icon: ClipboardCheck, module: "control" },
+  { to: "/planning", label: tx("İhtiyaç ve maliyet"), icon: Calculator, module: "planning" },
+  { to: "/purchasing", label: tx("Satın alma"), icon: ShoppingCart, module: "purchasing" },
+  { to: "/work-orders", label: tx("İş emirleri"), icon: Factory, module: "workorders" },
 ];
 
 const COLLAPSE_KEY = "erp_sidebar_collapsed";
@@ -146,8 +148,8 @@ function useDesktopAlerts() {
           seen = new Set(f.items.map((i) => i.key));
           after = f.last_id;
           if (!document.hasFocus()) {
-            show(notify, f.messages, "yeni mesaj");
-            show(notify, fresh.map((i) => ({ title: i.title, text: i.detail, link: i.link })), "yeni uyarı");
+            show(notify, f.messages, tx("yeni mesaj"));
+            show(notify, fresh.map((i) => ({ title: i.title, text: i.detail, link: i.link })), tx("yeni uyarı"));
           }
         } catch { /* server unreachable: the next poll catches up */ }
         if (!stopped) timer = window.setTimeout(() => void tick(), ALERT_POLL_MS);
@@ -178,7 +180,7 @@ function useChatPoll(enabled: boolean) {
     if (prev && prev.key !== st.key) {
       void qc.invalidateQueries({ predicate: (x) => x.queryKey[0] === "chat" && x.queryKey[1] !== "state" });
       if (!onChat && st.last_id > prev.last_id && st.unread > prev.unread) {
-        toast(`Yeni mesaj · ${st.unread} okunmamış (Sohbet)`);
+        toast(tx("Yeni mesaj · {0} okunmamış (Sohbet)", st.unread));
       }
     }
     last.current = st;
@@ -239,7 +241,7 @@ export default function Layout() {
       <i.icon size={17} strokeWidth={1.9} aria-hidden />
       <span className="nav-label">{i.label}</span>
       {i.to === "/chat" && unread > 0 && <span className="nav-badge">{unread > 99 ? "99+" : unread}</span>}
-      {i.to === "/admin" && signups > 0 && <span className="nav-badge" title="Onay bekleyen hesap istekleri">{signups}</span>}
+      {i.to === "/admin" && signups > 0 && <span className="nav-badge" title={tx("Onay bekleyen hesap istekleri")}>{signups}</span>}
     </NavLink>
   );
   const ThemeIcon = mode === "light" ? Sun : Moon;
@@ -249,10 +251,10 @@ export default function Layout() {
       {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
       <aside className="sidebar">
         <div className="brand">
-          <button className="icon-btn desk-only" onClick={toggle} aria-label={collapsed ? "Menüyü aç" : "Menüyü daralt"}>
+          <button className="icon-btn desk-only" onClick={toggle} aria-label={collapsed ? tx("Menüyü aç") : tx("Menüyü daralt")}>
             <Menu size={18} />
           </button>
-          <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label="Menüyü kapat">
+          <button className="icon-btn mobile-only" onClick={() => setNavOpen(false)} aria-label={tx("Menüyü kapat")}>
             <X size={18} />
           </button>
           <span className="brand-logo"><BrandMark logo={brand.logo} /></span>
@@ -266,9 +268,9 @@ export default function Layout() {
               <div key={g.title || "home"} className="nav-group">
                 {g.title && <div className="section">{g.title}</div>}
                 {items.map((i) => link(i))}
-                {g.title === "Mühendislik" && pid && (
+                {g.title === tx("Mühendislik") && pid && (
                   <div className="nav-project">
-                    <div className="section project-name" title={project?.name}>{project?.name ?? "Proje"}</div>
+                    <div className="section project-name" title={project?.name}>{project?.name ?? tx("Proje")}</div>
                     {PROJECT_ITEMS.filter(visible).map((i) => link(i, `/p/${pid}${i.to}`))}
                   </div>
                 )}
@@ -279,41 +281,42 @@ export default function Layout() {
       </aside>
       <div className="main">
         <header className="topbar">
-          <button className="icon-btn mobile-only nav-toggle" onClick={() => setNavOpen(true)} aria-label="Menü">
+          <button className="icon-btn mobile-only nav-toggle" onClick={() => setNavOpen(true)} aria-label={tx("Menü")}>
             <Menu size={20} />
             {unread > 0 && <span className="nav-dot" />}
           </button>
           <span className={live.online ? "live on" : "live off"}
-            title={live.online ? "Sunucuya bağlı. Diğer bilgisayarlardaki değişiklikler birkaç saniye içinde görünür."
-              : "Sunucuya ulaşılamıyor. Ağ bağlantısını kontrol edin."}>
-            <span className="dot" />{live.online ? "Canlı" : "Bağlantı yok"}
+            title={live.online ? tx("Sunucuya bağlı. Diğer bilgisayarlardaki değişiklikler birkaç saniye içinde görünür.")
+              : tx("Sunucuya ulaşılamıyor. Ağ bağlantısını kontrol edin.")}>
+            <span className="dot" />{live.online ? tx("Canlı") : tx("Bağlantı yok")}
           </span>
           <span className="spacer" />
-          <button className="icon-btn" title={`Tema: ${THEME_LABELS[mode]} (değiştirmek için tıklayın)`}
-            aria-label="Temayı değiştir" onClick={() => setMode(THEME_NEXT[mode])}>
+          <LangSelect />
+          <button className="icon-btn" title={tx("Tema: {0} (değiştirmek için tıklayın)", THEME_LABELS[mode])}
+            aria-label={tx("Temayı değiştir")} onClick={() => setMode(THEME_NEXT[mode])}>
             <ThemeIcon size={17} />
             <span className="icon-btn-text">{THEME_LABELS[mode]}</span>
           </button>
           <Notifications />
           <DesktopMenu />
           {app && (
-            <button className="icon-btn" title="Sunucuyu değiştir" aria-label="Sunucuyu değiştir" onClick={() => app.changeServer()}>
+            <button className="icon-btn" title={tx("Sunucuyu değiştir")} aria-label={tx("Sunucuyu değiştir")} onClick={() => app.changeServer()}>
               <Server size={17} />
             </button>
           )}
           <button className="icon-btn" disabled={upd.checking}
             onClick={() => { void upd.check(true); app?.checkUpdate(true); }}
-            title={upd.message || `Sürüm ${upd.info.current}`} aria-label="Güncellemeleri denetle">
+            title={upd.message || tx("Sürüm {0}", upd.info.current)} aria-label={tx("Güncellemeleri denetle")}>
             <RefreshCw size={17} className={upd.checking ? "spin" : undefined} />
           </button>
-          <button className="user-chip" title="Profilim: ad ve şifre" onClick={() => setProfile(true)}>
-            <span className="avatar">{(user?.full_name || user?.username || "?").slice(0, 1).toLocaleUpperCase("tr-TR")}</span>
+          <button className="user-chip" title={tx("Profilim: ad ve şifre")} onClick={() => setProfile(true)}>
+            <span className="avatar">{(user?.full_name || user?.username || "?").slice(0, 1).toLocaleUpperCase(LOCALE)}</span>
             <span className="user-text">
               <b>{user?.full_name || user?.username}</b>
               <small>{ROLE_LABELS[user?.role ?? ""] ?? user?.role}</small>
             </span>
           </button>
-          <button className="icon-btn" title="Çıkış" aria-label="Çıkış" onClick={() => { logout(); nav("/login"); }}>
+          <button className="icon-btn" title={tx("Çıkış yap")} aria-label={tx("Çıkış")} onClick={() => { logout(); nav("/login"); }}>
             <LogOut size={17} />
           </button>
         </header>
@@ -321,8 +324,8 @@ export default function Layout() {
         <UpdateBanner />
         {user?.default_password && (
           <div className="card alerts" style={{ margin: "8px 16px" }}>
-            <b>Yönetici şifresi hâlâ varsayılan (admin).</b> Ağdaki herkes yönetici olarak girebilir.{" "}
-            <button className="btn sm" onClick={() => setProfile(true)}>Şifreyi değiştir</button>
+            <b>{tx("Yönetici şifresi hâlâ varsayılan (admin).")}</b>{" "}{tx("Ağdaki herkes yönetici olarak girebilir.")}{" "}
+            <button className="btn sm" onClick={() => setProfile(true)}>{tx("Şifreyi değiştir")}</button>
           </div>
         )}
         {user?.role === "admin" && <AdminWarnings />}

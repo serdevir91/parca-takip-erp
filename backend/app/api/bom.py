@@ -19,6 +19,7 @@ from .deps import get_db, project_or_404
 
 projects_view, projects_edit = require("projects", "view"), require("projects", "edit")
 from .projects import version_brief
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/projects", tags=["bom"])
 
@@ -29,7 +30,7 @@ BOM_MAX_MB = 200
 def _version_or_404(db: Session, project: Project, vid: int) -> BomVersion:
     v = db.get(BomVersion, vid)
     if v is None or v.project_id != project.id:
-        raise HTTPException(404, "BOM sürümü bulunamadı")
+        raise HTTPException(404, tx("BOM sürümü bulunamadı"))
     return v
 
 
@@ -61,10 +62,10 @@ def upload(pid: int, file: UploadFile = File(...), note: str = Form(""),
                  db: Session = Depends(get_db), user: User = Depends(projects_edit)) -> dict:
     project = project_or_404(db, pid)
     if project.archived:
-        raise HTTPException(400, "Arşivlenmiş projeye BOM yüklenemez")
+        raise HTTPException(400, tx("Arşivlenmiş projeye BOM yüklenemez"))
     name = Path(file.filename or "bom.csv").name
     if not name.lower().endswith((".csv", ".txt")):
-        raise HTTPException(400, "BOM dosyası CSV olmalı")
+        raise HTTPException(400, tx("BOM dosyası CSV olmalı"))
     # Sync endpoint: parsing a large BOM must not block the event loop
     data = read_upload_sync(file, BOM_MAX_MB)
     try:
@@ -109,7 +110,7 @@ def version_file(pid: int, vid: int, db: Session = Depends(get_db), _: User = De
     v = _version_or_404(db, project, vid)
     path = Path(v.file_path) if v.file_path else None
     if path is None or not path.is_file():
-        raise HTTPException(404, "BOM dosyası sunucuda bulunamadı")
+        raise HTTPException(404, tx("BOM dosyası sunucuda bulunamadı"))
     return FileResponse(path, filename=v.filename, media_type="text/csv")
 
 
@@ -128,7 +129,7 @@ def approve(pid: int, vid: int, body: ApproveIn | None = None, db: Session = Dep
     project = project_or_404(db, pid)
     v = _version_or_404(db, project, vid)
     if project.archived:
-        raise HTTPException(400, "Arşivlenmiş projede BOM onaylanamaz")
+        raise HTTPException(400, tx("Arşivlenmiş projede BOM onaylanamaz"))
     pairs = [p.model_dump() for p in (body.alias_accept if body else [])]
     try:
         bomimport.approve(db, v, user, pairs)
@@ -211,16 +212,16 @@ def create_alias(pid: int, body: AliasIn, db: Session = Depends(get_db), user: U
     project = project_or_404(db, pid)
     alias, part_no = body.alias.strip(), body.part_no.strip()
     if not alias or not part_no:
-        raise HTTPException(400, "Takma ad ve parça numarası boş olamaz")
+        raise HTTPException(400, tx("Takma ad ve parça numarası boş olamaz"))
     if alias == part_no:
-        raise HTTPException(400, "Takma ad ile parça numarası aynı olamaz")
+        raise HTTPException(400, tx("Takma ad ile parça numarası aynı olamaz"))
     if db.scalar(select(PartAlias).where(PartAlias.alias == alias)):
-        raise HTTPException(400, f"Bu numara için zaten bir eşleştirme var: {alias}")
+        raise HTTPException(400, tx("Bu numara için zaten bir eşleştirme var: {0}", alias))
     if db.scalar(select(PartAlias).where(PartAlias.alias == part_no)):
-        raise HTTPException(400, f"{part_no} zaten başka bir numaranın takma adı; geçerli numarayı seçin")
+        raise HTTPException(400, tx("{0} zaten başka bir numaranın takma adı; geçerli numarayı seçin", part_no))
     if project.current_version_id and db.scalar(select(BomRow.id).where(
             BomRow.version_id == project.current_version_id, BomRow.part_no == alias).limit(1)):
-        raise HTTPException(400, f"{alias} güncel BOM'da hâlâ var; takma ad yapılamaz")
+        raise HTTPException(400, tx("{0} güncel BOM'da hâlâ var; takma ad yapılamaz", alias))
     a = PartAlias(alias=alias, part_no=part_no, created_by=user.username)
     db.add(a)
     db.flush()
@@ -240,7 +241,7 @@ def delete_alias(pid: int, aid: int, db: Session = Depends(get_db), user: User =
     project = project_or_404(db, pid)
     a = db.get(PartAlias, aid)
     if a is None:
-        raise HTTPException(404, "Eşleştirme bulunamadı")
+        raise HTTPException(404, tx("Eşleştirme bulunamadı"))
     audit.record(db, user, "part", a.part_no, "alias", a.alias, None, project.id, action="delete")
     db.delete(a)
     db.commit()

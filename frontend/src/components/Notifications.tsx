@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { errText, useToast } from "./Toast";
+import { tx } from "../api/i18n";
 
 type Item = { key: string; kind: string; title: string; detail: string; link: string; date: string | null; urgent: boolean };
 const QK = ["notifications"];
@@ -18,7 +19,7 @@ export function AdminWarnings() {
       {(q.data?.warnings ?? []).map((w) => (
         <div key={w.key} className="card alerts" role="alert" style={{ margin: "8px 16px" }}>
           <b>{w.title}</b> {w.detail}{" "}
-          <Link className="btn sm" to={w.link}>Ayarı aç</Link>
+          <Link className="btn sm" to={w.link}>{tx("Ayarı aç")}</Link>
         </div>
       ))}
     </>
@@ -45,30 +46,30 @@ export default function Notifications() {
 
   return (
     <>
-      <button className="icon-btn bell" title="Bildirimler" aria-label={`Bildirimler: ${count}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button className="icon-btn bell" title={tx("Bildirimler")} aria-label={tx("Bildirimler: {0}", count)} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Bell size={17} />
         {count > 0 && <span className="bell-count">{count > 99 ? "99+" : count}</span>}
       </button>
       {open && (
         <>
           <div className="notif-back" onClick={() => setOpen(false)} />
-          <div className="notif-pop" role="dialog" aria-label="Bildirimler">
+          <div className="notif-pop" role="dialog" aria-label={tx("Bildirimler")}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <b>Bildirimler</b>
+              <b>{tx("Bildirimler")}</b>
               {items.length > 0 && (
-                <button className="btn small" disabled={read.isPending} onClick={() => read.mutate(items.map((i) => i.key))}>Tümünü kapat</button>
+                <button className="btn small" disabled={read.isPending} onClick={() => read.mutate(items.map((i) => i.key))}>{tx("Tümünü kapat")}</button>
               )}
             </div>
-            {!items.length && <p className="muted">Bekleyen bildirim yok.</p>}
+            {!items.length && <p className="muted">{tx("Bekleyen bildirim yok.")}</p>}
             <ul>
               {items.map((i) => (
                 <li key={i.key} className={i.urgent ? "urgent" : undefined}>
                   <button className="notif-go" onClick={() => { setOpen(false); go(i.link); }}>
-                    <span className="muted">{i.kind}</span>
+                    <span className="muted">{tx(i.kind)}</span>
                     <b>{i.title}</b>
                     {i.detail && <span>{i.detail}</span>}
                   </button>
-                  <button className="icon-btn" title="Kapat" aria-label="Bildirimi kapat" onClick={() => read.mutate([i.key])}><X size={15} /></button>
+                  <button className="icon-btn" title={tx("Kapat")} aria-label={tx("Bildirimi kapat")} onClick={() => read.mutate([i.key])}><X size={15} /></button>
                 </li>
               ))}
             </ul>

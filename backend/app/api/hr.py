@@ -19,6 +19,7 @@ from ..services import audit, conflict
 from ..services.erp import WO_OPEN
 from ..services.system import system
 from .deps import any_user, get_db, project_or_404
+from app.core.i18n import tx
 
 hr_view, hr_edit = require("hr", "view"), require("hr", "edit")
 
@@ -84,7 +85,7 @@ def _emp_out(e: Employee, hours_30d: float = 0.0) -> dict[str, Any]:
 def _emp_or_404(db: Session, emp_id: int) -> Employee:
     e = db.get(Employee, emp_id)
     if e is None:
-        raise HTTPException(404, "Personel bulunamadı")
+        raise HTTPException(404, tx("Personel bulunamadı"))
     return e
 
 
@@ -93,10 +94,10 @@ def _check_user(db: Session, user_id: int | None, emp_id: int | None = None) -> 
     if user_id is None:
         return
     if db.get(User, user_id) is None:
-        raise HTTPException(404, "Kullanıcı bulunamadı")
+        raise HTTPException(404, tx("Kullanıcı bulunamadı"))
     other = db.scalar(select(Employee).where(Employee.user_id == user_id, Employee.id != (emp_id or 0)))
     if other is not None:
-        raise HTTPException(409, f"Bu kullanıcı zaten {other.name} kartına bağlı")
+        raise HTTPException(409, tx("Bu kullanıcı zaten {0} kartına bağlı", other.name))
 
 
 def _my_card(db: Session, me: User) -> Employee | None:
@@ -110,7 +111,7 @@ def _lock_card(db: Session, emp_id: int) -> Employee:
     db.execute(update(Employee).where(Employee.id == emp_id).values(name=Employee.name))
     e = db.get(Employee, emp_id, populate_existing=True)
     if e is None:
-        raise HTTPException(404, "Personel bulunamadı")
+        raise HTTPException(404, tx("Personel bulunamadı"))
     return e
 
 
@@ -118,9 +119,9 @@ def _active_card(db: Session, me: User) -> Employee:
     """The caller's own card for a self-service write, locked."""
     e = _my_card(db, me)
     if e is None:
-        raise HTTPException(400, "Hesabınıza bağlı personel kartı yok; yöneticinize başvurun")
+        raise HTTPException(400, tx("Hesabınıza bağlı personel kartı yok; yöneticinize başvurun"))
     if not e.active:
-        raise HTTPException(403, "Personel kartınız pasif")
+        raise HTTPException(403, tx("Personel kartınız pasif"))
     return _lock_card(db, e.id)
 
 
@@ -176,41 +177,41 @@ def _check_day(db: Session, emp_id: int, day: date, hours: float, own_id: int = 
     attended, _, forgot = _attended(db, emp_id, day)
     if attended is None:
         if total > 24:
-            raise HTTPException(400, f"Bir güne en çok 24 saat yazılabilir; toplam {num.text(total)} saat oluyor")
+            raise HTTPException(400, tx("Bir güne en çok 24 saat yazılabilir; toplam {0} saat oluyor", num.text(total)))
     elif total > attended:
         hint = " Çıkışınız unutulmuş; önce mesai düzeltme talebi açın." if forgot else ""
-        raise HTTPException(400, f"Bu günkü net mesainiz {num.text(attended)} saat; toplam {num.text(total)} saat yazılamaz.{hint}")
+        raise HTTPException(400, tx("Bu günkü net mesainiz {0} saat; toplam {1} saat yazılamaz.{2}", num.text(attended), num.text(total), hint))
 
 
 def _check_recent(day: date) -> None:
     if day > date.today():
-        raise HTTPException(400, "İleri tarihe saat yazılamaz")
+        raise HTTPException(400, tx("İleri tarihe saat yazılamaz"))
     if day < date.today() - timedelta(days=SELF_EDIT_DAYS):
-        raise HTTPException(403, f"{SELF_EDIT_DAYS} günden eski saatleri yalnızca yönetici değiştirir")
+        raise HTTPException(403, tx("{0} günden eski saatleri yalnızca yönetici değiştirir", SELF_EDIT_DAYS))
 
 
 def _my_target(db: Session, body: TimeEdit, entry: TimeEntry | None = None) -> tuple[int | None, int | None]:
     """(project_id, work_order_id) for a worker's entry. Only what the pick list offers, except what the entry
     already holds: an order closed since then must not block fixing the hours."""
     if body.work_order_id is None and body.project_id is None:
-        raise HTTPException(400, "İş emri veya proje seçin")
+        raise HTTPException(400, tx("İş emri veya proje seçin"))
     project_id = body.project_id
     if body.work_order_id is not None:
         wo = db.get(WorkOrder, body.work_order_id)
         if wo is None:
-            raise HTTPException(404, "İş emri bulunamadı")
+            raise HTTPException(404, tx("İş emri bulunamadı"))
         if wo.status not in WO_OPEN and not (entry and entry.work_order_id == wo.id):
-            raise HTTPException(400, f"{wo.no} açık bir iş emri değil")
+            raise HTTPException(400, tx("{0} açık bir iş emri değil", wo.no))
         if wo.project_id is not None:
             if project_id not in (None, wo.project_id):
-                raise HTTPException(400, f"{wo.no} seçilen projeye ait değil")
+                raise HTTPException(400, tx("{0} seçilen projeye ait değil", wo.no))
             project_id = wo.project_id
     if project_id is not None:
         p = db.get(Project, project_id)
         if p is None:
-            raise HTTPException(404, "Proje bulunamadı")
+            raise HTTPException(404, tx("Proje bulunamadı"))
         if p.archived and not (entry and entry.project_id == p.id):
-            raise HTTPException(400, f"{p.name} arşivde")
+            raise HTTPException(400, tx("{0} arşivde", p.name))
     return project_id, body.work_order_id
 
 
@@ -224,7 +225,7 @@ def _my_time_out(t: TimeEntry, project: str | None, wo: str | None) -> dict[str,
 def _my_entry(db: Session, e: Employee, entry_id: int) -> TimeEntry:
     t = db.get(TimeEntry, entry_id, populate_existing=True)
     if t is None or t.employee_id != e.id:
-        raise HTTPException(404, "Kayıt bulunamadı")
+        raise HTTPException(404, tx("Kayıt bulunamadı"))
     _check_recent(t.work_date)
     return t
 
@@ -356,11 +357,11 @@ def delete_employee(emp_id: int, me: User = Depends(hr_edit), db: Session = Depe
     """Delete only without time entries; otherwise mark the employee inactive (keeps the labor cost history)."""
     e = _emp_or_404(db, emp_id)
     if db.scalar(select(TimeEntry.id).where(TimeEntry.employee_id == e.id).limit(1)):
-        raise HTTPException(400, "Zaman kaydı olan personel silinemez; pasif yapın")
+        raise HTTPException(400, tx("Zaman kaydı olan personel silinemez; pasif yapın"))
     if db.scalar(select(Attendance.id).where(Attendance.employee_id == e.id).limit(1)):
-        raise HTTPException(400, "Mesai kaydı olan personel silinemez; pasif yapın")
+        raise HTTPException(400, tx("Mesai kaydı olan personel silinemez; pasif yapın"))
     if db.scalar(select(LeaveRequest.id).where(LeaveRequest.employee_id == e.id).limit(1)):
-        raise HTTPException(400, "İzin kaydı olan personel silinemez; pasif yapın")
+        raise HTTPException(400, tx("İzin kaydı olan personel silinemez; pasif yapın"))
     audit.record(db, me, "employee", e.id, "name", e.name, None, action="delete")
     db.delete(e)
     db.commit()
@@ -406,7 +407,7 @@ def list_time(employee_id: int | None = None, project_id: int | None = None, dat
 def _target(db: Session, body: TimeIn | TimeEdit) -> tuple[int | None, WorkOrder | None]:
     wo = db.get(WorkOrder, body.work_order_id) if body.work_order_id is not None else None
     if body.work_order_id is not None and wo is None:
-        raise HTTPException(404, "İş emri bulunamadı")
+        raise HTTPException(404, tx("İş emri bulunamadı"))
     project_id = body.project_id if body.project_id is not None else (wo.project_id if wo else None)
     if project_id is not None:
         project_or_404(db, project_id)
@@ -433,7 +434,7 @@ def edit_time(entry_id: int, body: TimeEdit, me: User = Depends(hr_edit), db: Se
     """A manager's correction of any entry; the wage snapshot stays."""
     t = db.get(TimeEntry, entry_id)
     if t is None:
-        raise HTTPException(404, "Kayıt bulunamadı")
+        raise HTTPException(404, tx("Kayıt bulunamadı"))
     conflict.claim(db, t, body.rev, me)
     project_id, wo = _target(db, body)
     audit.record_changes(db, me, t, {"work_date": body.work_date, "hours": body.hours, "project_id": project_id,
@@ -448,7 +449,7 @@ def edit_time(entry_id: int, body: TimeEdit, me: User = Depends(hr_edit), db: Se
 def delete_time(entry_id: int, me: User = Depends(hr_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     t = db.get(TimeEntry, entry_id)
     if t is None:
-        raise HTTPException(404, "Kayıt bulunamadı")
+        raise HTTPException(404, tx("Kayıt bulunamadı"))
     audit.record(db, me, "time_entry", t.id, "hours", t.hours, None, t.project_id, action="delete")
     db.delete(t)
     db.commit()

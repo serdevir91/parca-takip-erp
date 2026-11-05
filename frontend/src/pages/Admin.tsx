@@ -15,18 +15,19 @@ import HttpsTab from "./admin/Https";
 import HolidaysTab from "./admin/Holidays";
 import SystemSettingsTab from "./admin/SystemSettings";
 import MailSettingsTab from "./admin/MailSettings";
+import { tx } from "../api/i18n";
 
 const TABS: { id: string; label: string; C: ComponentType }[] = [
-  { id: "users", label: "Kullanıcılar", C: UsersTab },
-  { id: "system", label: "Sistem Ayarları", C: SystemSettingsTab },
-  { id: "settings", label: "BOM ve Parça", C: SettingsTab },
-  { id: "mail", label: "E-posta", C: MailSettingsTab },
-  { id: "fasteners", label: "Bağlantı Elemanı Kuralları", C: FastenerRulesTab },
-  { id: "t35", label: "Durum Listesi Kuralları", C: T35ConfigTab },
-  { id: "audit", label: "Denetim Kaydı", C: AuditLogTab },
-  { id: "backups", label: "Yedekler", C: BackupsTab },
+  { id: "users", label: tx("Kullanıcılar"), C: UsersTab },
+  { id: "system", label: tx("Sistem Ayarları"), C: SystemSettingsTab },
+  { id: "settings", label: tx("BOM ve Parça"), C: SettingsTab },
+  { id: "mail", label: tx("E-posta"), C: MailSettingsTab },
+  { id: "fasteners", label: tx("Bağlantı Elemanı Kuralları"), C: FastenerRulesTab },
+  { id: "t35", label: tx("Durum Listesi Kuralları"), C: T35ConfigTab },
+  { id: "audit", label: tx("Denetim Kaydı"), C: AuditLogTab },
+  { id: "backups", label: tx("Yedekler"), C: BackupsTab },
   { id: "https", label: "HTTPS", C: HttpsTab },
-  { id: "holidays", label: "Resmi Tatiller", C: HolidaysTab },
+  { id: "holidays", label: tx("Resmi Tatiller"), C: HolidaysTab },
 ];
 const TAB_KEY = "admin.tab";
 
@@ -58,7 +59,7 @@ export default function Admin() {
   const Current = (TABS.find((t) => t.id === tab) ?? TABS[0]).C;
   return (
     <Page>
-      <PageHeader icon={Settings} title="Yönetim" sub="Kullanıcılar ve yetkiler, ayarlar, denetim kaydı ve yedekler">
+      <PageHeader icon={Settings} title={tx("Yönetim")} sub={tx("Kullanıcılar ve yetkiler, ayarlar, denetim kaydı ve yedekler")}>
         <VersionBox />
       </PageHeader>
       <div className="tabs adm-tabs" role="tablist">
@@ -86,24 +87,24 @@ function VersionBox() {
   return (
     <div className="adm-version">
       <div className="muted">
-        Arayüz sürümü <b>{info.current}</b>
-        {server && <> · Sunucu sürümü <b>{server}</b></>}
-        {ver.error && !info.server && <span className="error"> · Sunucu sürümü alınamadı</span>}
+        {tx("Arayüz sürümü")}{" "}<b>{info.current}</b>
+        {server && <>{" "}{tx("· Sunucu sürümü")}{" "}<b>{server}</b></>}
+        {ver.error && !info.server && <span className="error">{" "}{tx("· Sunucu sürümü alınamadı")}</span>}
       </div>
       <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
         <button className="btn small" disabled={checking} onClick={() => void check(true)}>
-          {checking ? "Denetleniyor…" : "Güncellemeleri denetle"}
+          {checking ? tx("Denetleniyor…") : tx("Güncellemeleri denetle")}
         </button>
       </div>
       {available && (
         <div className="warn">
-          Yeni sürüm var{info.feed?.version ? `: ${info.feed.version}` : info.server ? `: ${info.server}` : ""}.
-          {info.server && info.server !== info.current && " Sayfayı yenileyerek güncel arayüzü yükleyin."}
-          {info.feed?.url && <> <a href={info.feed.url} target="_blank" rel="noreferrer">Ayrıntılar</a></>}
+          {tx("Yeni sürüm var")}{info.feed?.version ? `: ${info.feed.version}` : info.server ? `: ${info.server}` : ""}.
+          {info.server && info.server !== info.current && tx(" Sayfayı yenileyerek güncel arayüzü yükleyin.")}
+          {info.feed?.url && <> <a href={info.feed.url} target="_blank" rel="noreferrer">{tx("Ayrıntılar")}</a></>}
         </div>
       )}
       {info.feed?.notes && available && <div className="muted adm-small" style={{ whiteSpace: "pre-wrap" }}>{info.feed.notes}</div>}
-      {message && !available && <div className={message.startsWith("Güncel") ? "ok" : "error"}>{message}</div>}
+      {message && !available && <div className={message.startsWith(tx("Güncelleme denetlenemedi: {0}", "")) ? "error" : "ok"}>{message}</div>}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import {
   ArrowLeft, Check, CheckCheck, CheckSquare, ChevronDown, Copy, CornerUpLeft, Download, FileText, Forward, MessageCircle,
   Paperclip, Pencil, Pin, PinOff, Plus, Search, Send, Settings2, Trash2, User as UserIcon, Users, X,
 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type TouchEvent as ReactTouchEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, download, upload } from "../api/client";
 import { useAuth } from "../api/auth";
@@ -13,6 +13,7 @@ import { errText, useToast } from "../components/Toast";
 import Thumb from "../components/viewer/Thumb";
 import Viewer, { type ViewItem } from "../components/viewer/Viewer";
 import { Modal } from "./admin/shared";
+import { LOCALE, tx } from "../api/i18n";
 
 export type ChatState = { key: string; unread: number; last_id: number };
 type ChatUser = { id: number; name: string; username: string };
@@ -34,6 +35,7 @@ type MsgPage = { messages: Msg[]; more: boolean; last_read_id: number; read_by_a
 
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EDIT_MS = 48 * 3600 * 1000;
+const LONG_PRESS_MS = 450;
 const summary = (m: Msg) => m.body || (m.file ? `📎 ${m.file.name}` : "");
 const editable = (m: Msg) => !m.deleted && !m.forwarded_from && !!m.created_at && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
 
@@ -51,22 +53,22 @@ async function copyText(text: string) {
 }
 
 const isPdf = (name: string) => name.toLowerCase().endsWith(".pdf");
-const initial = (s: string) => (s || "?").slice(0, 1).toLocaleUpperCase("tr-TR");
+const initial = (s: string) => (s || "?").slice(0, 1).toLocaleUpperCase(LOCALE);
 const dayKey = (iso: string | null) => (iso ? new Date(iso).toDateString() : "");
-const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "");
+const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }) : "");
 function dayLabel(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
   const today = new Date();
   const y = new Date(); y.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Bugün";
-  if (d.toDateString() === y.toDateString()) return "Dün";
-  return d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric", weekday: "long" });
+  if (d.toDateString() === today.toDateString()) return tx("Bugün");
+  if (d.toDateString() === y.toDateString()) return tx("Dün");
+  return d.toLocaleDateString(LOCALE, { day: "numeric", month: "long", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric", weekday: "long" });
 }
 function listTime(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toDateString() === new Date().toDateString() ? timeOf(iso) : d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? timeOf(iso) : d.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit" });
 }
 
 /** Sohbet: direct messages and groups with file sharing. New messages arrive through the /chat/state poll in Layout. */
@@ -80,10 +82,10 @@ export default function Chat() {
   const [filter, setFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const list = useMemo(() => {
-    const f = filter.trim().toLocaleLowerCase("tr-TR");
+    const f = filter.trim().toLocaleLowerCase(LOCALE);
     const all = [...(rooms.data ?? [])].sort((a, b) => (b.last_at ?? "").localeCompare(a.last_at ?? ""));
-    return f ? all.filter((r) => r.name.toLocaleLowerCase("tr-TR").includes(f)
-      || r.members.some((m) => m.name.toLocaleLowerCase("tr-TR").includes(f))) : all;
+    return f ? all.filter((r) => r.name.toLocaleLowerCase(LOCALE).includes(f)
+      || r.members.some((m) => m.name.toLocaleLowerCase(LOCALE).includes(f))) : all;
   }, [rooms.data, filter]);
   const room = rooms.data?.find((r) => r.id === roomId) ?? null;
 
@@ -92,24 +94,24 @@ export default function Chat() {
       <div className={`chat${roomId ? " has-room" : ""}`}>
         <aside className="chat-rooms">
           <div className="chat-rooms-head">
-            <h2><MessageCircle size={18} /> Sohbet</h2>
-            {canWrite && <button className="btn small primary" onClick={() => setCreating(true)}><Plus size={15} /> Yeni</button>}
+            <h2><MessageCircle size={18} />{" "}{tx("Sohbet")}</h2>
+            {canWrite && <button className="btn small primary" onClick={() => setCreating(true)}><Plus size={15} />{" "}{tx("Yeni")}</button>}
           </div>
           <label className="chat-search">
             <Search size={15} />
-            <input type="search" placeholder="Kişi veya grup ara…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            <input type="search" placeholder={tx("Kişi veya grup ara…")} value={filter} onChange={(e) => setFilter(e.target.value)} />
           </label>
           <div className="chat-room-list">
             {rooms.isError && <div className="error">{errText(rooms.error)}</div>}
             {rooms.isSuccess && !list.length && (
-              <div className="empty">{filter ? "Eşleşen sohbet yok." : "Henüz sohbet yok. “Yeni” ile bir kişiye yazın veya grup kurun."}</div>
+              <div className="empty">{filter ? tx("Eşleşen sohbet yok.") : tx("Henüz sohbet yok. “Yeni” ile bir kişiye yazın veya grup kurun.")}</div>
             )}
             {list.map((r) => (
               <button key={r.id} className={`chat-room${r.id === roomId ? " on" : ""}${r.unread ? " unread" : ""}`} onClick={() => open(r.id)}>
                 <span className={`chat-avatar${r.kind === "group" ? " group" : ""}`}>{r.kind === "group" ? <Users size={16} /> : initial(r.name)}</span>
                 <span className="chat-room-text">
                   <span className="chat-room-top"><b>{r.name}</b><small>{listTime(r.last_at)}</small></span>
-                  <span className="chat-room-last">{r.last_message || (r.kind === "group" ? `${r.members.length} üye` : "Mesaj yok")}</span>
+                  <span className="chat-room-last">{r.last_message || (r.kind === "group" ? tx("{0} üye", r.members.length) : tx("Mesaj yok"))}</span>
                 </span>
                 {r.unread > 0 && <span className="chat-badge">{r.unread > 99 ? "99+" : r.unread}</span>}
               </button>
@@ -118,7 +120,7 @@ export default function Chat() {
         </aside>
         <section className="chat-pane">
           {room ? <RoomPane key={room.id} room={room} canWrite={canWrite} onBack={() => open(null)} onLeft={() => open(null)} />
-            : <div className="chat-empty"><MessageCircle size={42} /><p>Bir sohbet seçin veya yeni bir sohbet başlatın.</p></div>}
+            : <div className="chat-empty"><MessageCircle size={42} /><p>{tx("Bir sohbet seçin veya yeni bir sohbet başlatın.")}</p></div>}
         </section>
       </div>
       {creating && <NewChat onClose={() => setCreating(false)} onOpen={(id) => { setCreating(false); open(id); }} />}
@@ -146,6 +148,8 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
   const [replying, setReplying] = useState<Msg | null>(null);
   const [editing, setEditing] = useState<Msg | null>(null);
   const [menu, setMenu] = useState<{ m: Msg; x: number; y: number } | null>(null);
+  const press = useRef<number | undefined>(undefined);
+  const held = useRef(false);
   const [deleting, setDeleting] = useState<Msg[] | null>(null);
   const [forwarding, setForwarding] = useState<number[] | null>(null);
   const [picked, setPicked] = useState<Set<number> | null>(null);
@@ -260,7 +264,7 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
         const f = new FormData();
         f.append("body", body);
         if (replyTo) f.append("reply_to", replyTo);
-        setBusy("Gönderiliyor…");
+        setBusy(tx("Gönderiliyor…"));
         await upload(`${base}/messages`, f);
       } else {
         for (const [i, file] of files.entries()) {
@@ -273,8 +277,8 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
             if (t) f.append("thumb", t, "t.jpg");
           }
           const tag = files.length > 1 ? `${i + 1} / ${files.length} ` : "";
-          setBusy(`${tag}${file.name} gönderiliyor…`);
-          await upload(`${base}/messages`, f, (pct) => setBusy(`${tag}${file.name} gönderiliyor… %${pct}`));
+          setBusy(tx("{0}{1} gönderiliyor…", tag, file.name));
+          await upload(`${base}/messages`, f, (pct) => setBusy(tx("{0}{1} gönderiliyor… %{2}", tag, file.name, pct)));
         }
       }
       setText("");
@@ -314,12 +318,12 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
   const copy = async (list: Msg[]) => {
     try {
       await copyText(list.map(summary).join("\n"));
-      toast("Kopyalandı");
+      toast(tx("Kopyalandı"));
     } catch (e) { toast(errText(e), true); }
   };
   const jump = (id: number) => {
     const el = document.getElementById(`chat-m-${id}`);
-    if (!el) { toast("Mesaj yüklü değil. “Daha eski mesajlar” ile açın."); return; }
+    if (!el) { toast(tx("Mesaj yüklü değil. “Daha eski mesajlar” ile açın.")); return; }
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.add("flash");
     window.setTimeout(() => el.classList.remove("flash"), 1500);
@@ -327,6 +331,22 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
   const openMenu = (e: ReactMouseEvent, m: Msg) => {
     e.preventDefault();
     setMenu({ m, x: e.clientX, y: e.clientY });
+  };
+  /** Phones have no hover or right click: a long press on the message opens the same menu. */
+  const pressStart = (e: ReactTouchEvent, m: Msg) => {
+    const { clientX: x, clientY: y } = e.touches[0];
+    window.clearTimeout(press.current);
+    press.current = window.setTimeout(() => {
+      held.current = true;
+      setMenu({ m, x, y });
+    }, LONG_PRESS_MS);
+  };
+  const pressMove = () => window.clearTimeout(press.current);
+  /** The finger that opened the menu lifts over it: that release must not count as a tap on the menu. */
+  const pressEnd = (e: ReactTouchEvent) => {
+    window.clearTimeout(press.current);
+    if (held.current) e.preventDefault();
+    held.current = false;
   };
   const toggle = (id: number) => setPicked((old) => {
     const next = new Set(old);
@@ -350,8 +370,8 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
     if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); }
   };
   const others = room.members.filter((m) => m.id !== user?.id);
-  const sub = room.kind === "group" ? room.members.map((m) => (m.id === user?.id ? "Siz" : m.name)).join(", ")
-    : others[0]?.username ? `@${others[0].username}${others[0].active ? "" : " · pasif kullanıcı"}` : "";
+  const sub = room.kind === "group" ? room.members.map((m) => (m.id === user?.id ? tx("Siz") : m.name)).join(", ")
+    : others[0]?.username ? `@${others[0].username}${others[0].active ? "" : tx(" · pasif kullanıcı")}` : "";
 
   return (
     <div className={`chat-room-pane${over ? " drop" : ""}`}
@@ -359,37 +379,37 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
       onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }} onDrop={onDrop}>
       {picked ? (
         <header className="chat-head chat-picking">
-          <button className="icon-btn" onClick={() => setPicked(null)} aria-label="Seçimi bırak"><X size={18} /></button>
-          <b style={{ flex: 1 }}>{picked.size} mesaj seçili</b>
-          <button className="icon-btn" onClick={() => void copy(pickedMsgs).then(() => setPicked(null))} title="Kopyala" aria-label="Kopyala"><Copy size={18} /></button>
-          {canWrite && <button className="icon-btn" disabled={pickedMsgs.some((m) => m.deleted)} onClick={() => setForwarding(pickedMsgs.map((m) => m.id))} title="İlet" aria-label="İlet"><Forward size={18} /></button>}
-          <button className="icon-btn" onClick={() => setDeleting(pickedMsgs)} title="Sil" aria-label="Sil"><Trash2 size={18} /></button>
+          <button className="icon-btn" onClick={() => setPicked(null)} aria-label={tx("Seçimi bırak")}><X size={18} /></button>
+          <b style={{ flex: 1 }}>{tx("{0} mesaj seçili", picked.size)}</b>
+          <button className="icon-btn" onClick={() => void copy(pickedMsgs).then(() => setPicked(null))} title={tx("Kopyala")} aria-label={tx("Kopyala")}><Copy size={18} /></button>
+          {canWrite && <button className="icon-btn" disabled={pickedMsgs.some((m) => m.deleted)} onClick={() => setForwarding(pickedMsgs.map((m) => m.id))} title={tx("İlet")} aria-label={tx("İlet")}><Forward size={18} /></button>}
+          <button className="icon-btn" onClick={() => setDeleting(pickedMsgs)} title={tx("Sil")} aria-label={tx("Sil")}><Trash2 size={18} /></button>
         </header>
       ) : <header className="chat-head">
-        <button className="icon-btn chat-back" onClick={onBack} aria-label="Sohbetler"><ArrowLeft size={18} /></button>
+        <button className="icon-btn chat-back" onClick={onBack} aria-label={tx("Sohbetler")}><ArrowLeft size={18} /></button>
         <span className={`chat-avatar${room.kind === "group" ? " group" : ""}`}>{room.kind === "group" ? <Users size={16} /> : initial(room.name)}</span>
         <div className="chat-head-text">
           <b>{room.name}</b>
           <small className="muted" title={sub}>{sub}</small>
         </div>
         {room.kind === "group" && (
-          <button className="icon-btn" onClick={() => setSettings(true)} title="Grup ayarları" aria-label="Grup ayarları"><Settings2 size={18} /></button>
+          <button className="icon-btn" onClick={() => setSettings(true)} title={tx("Grup ayarları")} aria-label={tx("Grup ayarları")}><Settings2 size={18} /></button>
         )}
       </header>}
       {room.pinned && (
         <div className="chat-pinned">
           <Pin size={15} />
           <button className="chat-pinned-text" onClick={() => jump(room.pinned!.id)}>
-            <b>Sabitlenmiş mesaj</b><span>{room.pinned.user_name}: {room.pinned.text}</span>
+            <b>{tx("Sabitlenmiş mesaj")}</b><span>{room.pinned.user_name}: {room.pinned.text}</span>
           </button>
-          {canPin && <button className="icon-btn" onClick={() => void pin(null)} title="Sabitlemeyi kaldır" aria-label="Sabitlemeyi kaldır"><X size={15} /></button>}
+          {canPin && <button className="icon-btn" onClick={() => void pin(null)} title={tx("Sabitlemeyi kaldır")} aria-label={tx("Sabitlemeyi kaldır")}><X size={15} /></button>}
         </div>
       )}
       <div className="chat-msgs" ref={scroller} onScroll={onScroll}>
-        {more && <div className="chat-more"><button className="btn small" onClick={() => void older()}>Daha eski mesajlar</button></div>}
-        {loading && <div className="muted chat-sys">Yükleniyor…</div>}
+        {more && <div className="chat-more"><button className="btn small" onClick={() => void older()}>{tx("Daha eski mesajlar")}</button></div>}
+        {loading && <div className="muted chat-sys">{tx("Yükleniyor…")}</div>}
         {err && <div className="error">{err}</div>}
-        {!loading && !msgs.length && <div className="muted chat-sys">İlk mesajı yazın. Dosya göndermek için 📎 veya sürükle-bırak.</div>}
+        {!loading && !msgs.length && <div className="muted chat-sys">{tx("İlk mesajı yazın. Dosya göndermek için 📎 veya sürükle-bırak.")}</div>}
         {msgs.map((m, i) => {
           const prev = msgs[i - 1];
           const newDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
@@ -402,27 +422,27 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
               {m.kind === "system" ? <div className="chat-sys">{m.body} · {timeOf(m.created_at)}</div> : (
                 <div id={`chat-m-${m.id}`} className={`chat-msg${mine ? " mine" : ""}${picked?.has(m.id) ? " picked" : ""}`}
                   onClick={picked ? () => toggle(m.id) : undefined}>
-                  {picked && <input type="checkbox" className="chat-check" readOnly checked={picked.has(m.id)} tabIndex={-1} aria-label="Mesajı seç" />}
-                  <div className={`chat-bubble${m.deleted ? " deleted" : ""}`} onContextMenu={picked ? undefined : (e) => openMenu(e, m)}>
-                    {!picked && <button className="chat-more-btn" onClick={(e) => openMenu(e, m)} title="Mesaj işlemleri" aria-label="Mesaj işlemleri"><ChevronDown size={15} /></button>}
+                  {picked && <input type="checkbox" className="chat-check" readOnly checked={picked.has(m.id)} tabIndex={-1} aria-label={tx("Mesajı seç")} />}
+                  <div className={`chat-bubble${m.deleted ? " deleted" : ""}`} onContextMenu={picked ? undefined : (e) => openMenu(e, m)}
+                    onTouchStart={picked ? undefined : (e) => pressStart(e, m)} onTouchMove={pressMove} onTouchEnd={pressEnd} onTouchCancel={pressEnd}>
                     {head && <div className="chat-author">{m.user_name}</div>}
-                    {m.deleted ? <i className="muted">Bu mesaj silindi</i> : <>
-                      {m.forwarded_from && <div className="chat-forwarded"><Forward size={12} /> İletildi: {m.forwarded_from}</div>}
+                    {m.deleted ? <i className="muted">{tx("Bu mesaj silindi")}</i> : <>
+                      {m.forwarded_from && <div className="chat-forwarded"><Forward size={12} />{" "}{tx("İletildi: {0}", m.forwarded_from)}</div>}
                       {m.reply_to && (
                         <button className="chat-quote" onClick={(e) => { e.stopPropagation(); jump(m.reply_to!.id); }}>
                           <b>{m.reply_to.user_name}</b>
-                          <span>{m.reply_to.deleted ? "Bu mesaj silindi" : m.reply_to.text}</span>
+                          <span>{m.reply_to.deleted ? tx("Bu mesaj silindi") : m.reply_to.text}</span>
                         </button>
                       )}
                       {m.file && <Attachment m={m} onOpen={() => openFile(m)} />}
                       {m.body && <div className="chat-text">{m.body}</div>}
                     </>}
                     <div className="chat-meta">
-                      {m.edited_at && <span>düzenlendi</span>}
+                      {m.edited_at && <span>{tx("düzenlendi")}</span>}
                       {timeOf(m.created_at)}
                       {mine && !m.deleted && (m.id <= readAll
-                        ? <CheckCheck size={14} className="seen" aria-label="Görüldü" />
-                        : <Check size={14} aria-label="Gönderildi" />)}
+                        ? <CheckCheck size={14} className="seen" aria-label={tx("Görüldü")} />
+                        : <Check size={14} aria-label={tx("Gönderildi")} />)}
                     </div>
                     {!!m.reactions.length && (
                       <div className="chat-reactions">
@@ -433,6 +453,7 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
                       </div>
                     )}
                   </div>
+                  {!picked && <button className="chat-more-btn" onClick={(e) => openMenu(e, m)} title={tx("Mesaj işlemleri")} aria-label={tx("Mesaj işlemleri")}><ChevronDown size={16} /></button>}
                 </div>
               )}
             </Fragment>
@@ -445,10 +466,10 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
             <div className="chat-context">
               {editing ? <Pencil size={15} /> : <CornerUpLeft size={15} />}
               <div className="chat-context-text">
-                <b>{editing ? "Mesajı düzenle" : replying!.user_name}</b>
+                <b>{editing ? tx("Mesajı düzenle") : replying!.user_name}</b>
                 <span>{summary(editing ?? replying!)}</span>
               </div>
-              <button className="icon-btn" onClick={cancelCompose} aria-label="Vazgeç"><X size={15} /></button>
+              <button className="icon-btn" onClick={cancelCompose} aria-label={tx("Vazgeç")}><X size={15} /></button>
             </div>
           )}
           {!!files.length && (
@@ -456,16 +477,16 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
               {files.map((f, i) => (
                 <span key={i} className="chat-file-chip" title={f.name}>
                   {isImageFile(f) ? "🖼" : "📄"} {f.name} <small className="muted">{fmtBytes(f.size)}</small>
-                  <button onClick={() => setFiles((x) => x.filter((_, j) => j !== i))} aria-label="Kaldır" disabled={!!busy}><X size={13} /></button>
+                  <button onClick={() => setFiles((x) => x.filter((_, j) => j !== i))} aria-label={tx("Kaldır")} disabled={!!busy}><X size={13} /></button>
                 </span>
               ))}
             </div>
           )}
           {busy && <div className="muted chat-busy">{busy}</div>}
           <div className="chat-compose-row">
-            <button className="icon-btn" onClick={() => pick.current?.click()} disabled={!!busy || !!editing} title="Dosya ekle" aria-label="Dosya ekle"><Paperclip size={19} /></button>
+            <button className="icon-btn" onClick={() => pick.current?.click()} disabled={!!busy || !!editing} title={tx("Dosya ekle")} aria-label={tx("Dosya ekle")}><Paperclip size={19} /></button>
             <input ref={pick} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-            <textarea ref={input} rows={1} value={text} placeholder="Mesaj yazın…" title="Enter: gönder · Shift+Enter: yeni satır"
+            <textarea ref={input} rows={1} value={text} placeholder={tx("Mesaj yazın…")} title={tx("Enter: gönder · Shift+Enter: yeni satır")}
               onChange={(e) => setText(e.target.value)} onPaste={onPaste} maxLength={10000}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
@@ -475,38 +496,38 @@ function RoomPane({ room, canWrite, onBack, onLeft }: { room: Room; canWrite: bo
                   if (last) { e.preventDefault(); startEdit(last); }
                 }
               }} />
-            <button className="btn primary chat-send" onClick={() => void send()} disabled={!!busy || (!text.trim() && !files.length && !editing?.file)} aria-label={editing ? "Kaydet" : "Gönder"}><Send size={17} /></button>
+            <button className="btn primary chat-send" onClick={() => void send()} disabled={!!busy || (!text.trim() && !files.length && !editing?.file)} aria-label={editing ? tx("Kaydet") : tx("Gönder")}><Send size={17} /></button>
           </div>
         </div>
-      ) : <div className="muted chat-compose">Sohbet için yalnızca okuma yetkiniz var.</div>}
-      {over && <div className="chat-drop">Göndermek için dosyaları bırakın</div>}
+      ) : <div className="muted chat-compose">{tx("Sohbet için yalnızca okuma yetkiniz var.")}</div>}
+      {over && <div className="chat-drop">{tx("Göndermek için dosyaları bırakın")}</div>}
       {viewing !== null && viewing >= 0 && items.length > 0 && <Viewer items={items} start={viewing} onClose={() => setViewing(null)} />}
       {settings && <GroupSettings room={room} onClose={() => setSettings(false)} onLeft={onLeft} />}
       {menu && (
-        <MessageMenu at={menu} onClose={() => setMenu(null)} canWrite={canWrite}
+        <MessageMenu at={menu} onClose={() => { if (!held.current) setMenu(null); }} canWrite={canWrite}
           onReact={(emoji) => void react(menu.m, emoji)}
           actions={[
-            ...(canWrite && !menu.m.deleted ? [{ icon: <CornerUpLeft size={16} />, label: "Yanıtla", run: () => { setEditing(null); setReplying(menu.m); input.current?.focus(); } }] : []),
-            ...(!menu.m.deleted ? [{ icon: <Copy size={16} />, label: "Kopyala", run: () => void copy([menu.m]) }] : []),
-            ...(canWrite && !menu.m.deleted ? [{ icon: <Forward size={16} />, label: "İlet", run: () => setForwarding([menu.m.id]) }] : []),
+            ...(canWrite && !menu.m.deleted ? [{ icon: <CornerUpLeft size={16} />, label: tx("Yanıtla"), run: () => { setEditing(null); setReplying(menu.m); input.current?.focus(); } }] : []),
+            ...(!menu.m.deleted ? [{ icon: <Copy size={16} />, label: tx("Kopyala"), run: () => void copy([menu.m]) }] : []),
+            ...(canWrite && !menu.m.deleted ? [{ icon: <Forward size={16} />, label: tx("İlet"), run: () => setForwarding([menu.m.id]) }] : []),
             ...(canPin && !menu.m.deleted ? [room.pinned?.id === menu.m.id
-              ? { icon: <PinOff size={16} />, label: "Sabitlemeyi kaldır", run: () => void pin(null) }
-              : { icon: <Pin size={16} />, label: "Sabitle", run: () => void pin(menu.m.id) }] : []),
-            ...(canWrite && menu.m.user_id === user?.id && editable(menu.m) ? [{ icon: <Pencil size={16} />, label: "Düzenle", run: () => startEdit(menu.m) }] : []),
-            { icon: <CheckSquare size={16} />, label: "Seç", run: () => setPicked(new Set([menu.m.id])) },
-            { icon: <Trash2 size={16} />, label: "Sil", danger: true, run: () => setDeleting([menu.m]) },
+              ? { icon: <PinOff size={16} />, label: tx("Sabitlemeyi kaldır"), run: () => void pin(null) }
+              : { icon: <Pin size={16} />, label: tx("Sabitle"), run: () => void pin(menu.m.id) }] : []),
+            ...(canWrite && menu.m.user_id === user?.id && editable(menu.m) ? [{ icon: <Pencil size={16} />, label: tx("Düzenle"), run: () => startEdit(menu.m) }] : []),
+            { icon: <CheckSquare size={16} />, label: tx("Seç"), run: () => setPicked(new Set([menu.m.id])) },
+            { icon: <Trash2 size={16} />, label: tx("Sil"), danger: true, run: () => setDeleting([menu.m]) },
           ]} />
       )}
       {deleting && (
-        <Modal title={deleting.length > 1 ? `${deleting.length} mesaj silinsin mi?` : "Mesaj silinsin mi?"} onClose={() => setDeleting(null)}
+        <Modal title={deleting.length > 1 ? tx("{0} mesaj silinsin mi?", deleting.length) : tx("Mesaj silinsin mi?")} onClose={() => setDeleting(null)}
           footer={<>
-            <button className="btn" onClick={() => setDeleting(null)}>Vazgeç</button>
-            <button className="btn" onClick={() => void remove(deleting, "me")}>Benden sil</button>
-            {deleting.every(canDeleteAll) && <button className="btn danger" onClick={() => void remove(deleting, "all")}>Herkesten sil</button>}
+            <button className="btn" onClick={() => setDeleting(null)}>{tx("Vazgeç")}</button>
+            <button className="btn" onClick={() => void remove(deleting, "me")}>{tx("Benden sil")}</button>
+            {deleting.every(canDeleteAll) && <button className="btn danger" onClick={() => void remove(deleting, "all")}>{tx("Herkesten sil")}</button>}
           </>}>
           <p className="muted" style={{ margin: 0 }}>
-            “Benden sil” yalnızca sizin ekranınızdan kaldırır.
-            {deleting.every(canDeleteAll) ? " “Herkesten sil” mesajı ve dosyasını herkesten kaldırır, geri alınamaz." : ""}
+            {tx("“Benden sil” yalnızca sizin ekranınızdan kaldırır.")}
+            {deleting.every(canDeleteAll) ? tx(" “Herkesten sil” mesajı ve dosyasını herkesten kaldırır, geri alınamaz.") : ""}
           </p>
         </Modal>
       )}
@@ -534,7 +555,7 @@ function MessageMenu({ at, actions, canWrite, onReact, onClose }: {
         {canWrite && !at.m.deleted && (
           <div className="chat-menu-emoji">
             {REACTIONS.map((r) => (
-              <button key={r} className={at.m.reactions.some((x) => x.mine && x.emoji === r) ? "on" : ""} aria-label={`Tepki ${r}`}
+              <button key={r} className={at.m.reactions.some((x) => x.mine && x.emoji === r) ? "on" : ""} aria-label={tx("Tepki {0}", r)}
                 onClick={() => { onReact(r); onClose(); }}>{r}</button>
             ))}
           </div>
@@ -554,26 +575,26 @@ function ForwardModal({ ids, onClose, onDone }: { ids: number[]; onClose: () => 
   const [filter, setFilter] = useState("");
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
-  const f = filter.trim().toLocaleLowerCase("tr-TR");
-  const list = (rooms.data ?? []).filter((r) => !f || r.name.toLocaleLowerCase("tr-TR").includes(f));
+  const f = filter.trim().toLocaleLowerCase(LOCALE);
+  const list = (rooms.data ?? []).filter((r) => !f || r.name.toLocaleLowerCase(LOCALE).includes(f));
   const go = async () => {
     setBusy(true);
     try {
       await api.post("/chat/forward", { message_ids: ids, room_ids: [...sel] });
-      toast(sel.size > 1 ? `${sel.size} sohbete iletildi` : "İletildi");
+      toast(sel.size > 1 ? tx("{0} sohbete iletildi", sel.size) : tx("İletildi"));
       void qc.invalidateQueries({ queryKey: ["chat"] });
       onDone();
     } catch (e) { toast(errText(e), true); setBusy(false); }
   };
   return (
-    <Modal title={ids.length > 1 ? `${ids.length} mesajı ilet` : "Mesajı ilet"} onClose={onClose}
+    <Modal title={ids.length > 1 ? tx("{0} mesajı ilet", ids.length) : tx("Mesajı ilet")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={busy || !sel.size} onClick={() => void go()}>İlet ({sel.size})</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={busy || !sel.size} onClick={() => void go()}>{tx("İlet ({0})", sel.size)}</button>
       </>}>
-      <input type="search" autoFocus placeholder="Sohbet ara…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+      <input type="search" autoFocus placeholder={tx("Sohbet ara…")} value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
       {rooms.isError && <div className="error">{errText(rooms.error)}</div>}
-      {rooms.isSuccess && !list.length && <div className="empty">Sohbet yok.</div>}
+      {rooms.isSuccess && !list.length && <div className="empty">{tx("Sohbet yok.")}</div>}
       <div className="chat-pick">
         {list.map((r) => (
           <button key={r.id} className={`chat-pick-row${sel.has(r.id) ? " on" : ""}`}
@@ -594,7 +615,7 @@ function Attachment({ m, onOpen }: { m: Msg; onOpen: () => void }) {
   const dl = () => void download(`/chat/messages/${m.id}/file?download=true`, f.name).catch((e) => toast(errText(e), true));
   if (f.image) {
     return (
-      <button className="chat-image" onClick={onOpen} title="Büyütmek için tıklayın">
+      <button className="chat-image" onClick={onOpen} title={tx("Büyütmek için tıklayın")}>
         <Thumb path={`/chat/messages/${m.id}/thumb`} label={f.name} />
       </button>
     );
@@ -606,8 +627,8 @@ function Attachment({ m, onOpen }: { m: Msg; onOpen: () => void }) {
         <b title={f.name}>{f.name}</b>
         <small className="muted">{fmtBytes(f.size)}</small>
       </div>
-      {isPdf(f.name) && <button className="btn small" onClick={onOpen}>İncele</button>}
-      <button className="btn small" onClick={dl} title="İndir" aria-label="İndir"><Download size={15} /></button>
+      {isPdf(f.name) && <button className="btn small" onClick={onOpen}>{tx("İncele")}</button>}
+      <button className="btn small" onClick={dl} title={tx("İndir")} aria-label={tx("İndir")}><Download size={15} /></button>
     </div>
   );
 }
@@ -620,9 +641,9 @@ function useChatUsers() {
 function UserPicker({ users, selected, toggle, filter }: {
   users: ChatUser[]; selected?: Set<number>; toggle: (u: ChatUser) => void; filter: string;
 }) {
-  const f = filter.trim().toLocaleLowerCase("tr-TR");
-  const list = f ? users.filter((u) => `${u.name} ${u.username}`.toLocaleLowerCase("tr-TR").includes(f)) : users;
-  if (!list.length) return <div className="empty">Kullanıcı yok.</div>;
+  const f = filter.trim().toLocaleLowerCase(LOCALE);
+  const list = f ? users.filter((u) => `${u.name} ${u.username}`.toLocaleLowerCase(LOCALE).includes(f)) : users;
+  if (!list.length) return <div className="empty">{tx("Kullanıcı yok.")}</div>;
   return (
     <div className="chat-pick">
       {list.map((u) => (
@@ -655,20 +676,20 @@ function NewChat({ onClose, onOpen }: { onClose: () => void; onOpen: (roomId: nu
     try { done(await api.post<Room>("/chat/groups", { name: name.trim(), member_ids: [...sel] })); } catch (e) { toast(errText(e), true); setBusy(false); }
   };
   return (
-    <Modal title="Yeni sohbet" onClose={onClose}
+    <Modal title={tx("Yeni sohbet")} onClose={onClose}
       footer={tab === "group" ? <>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={busy || !name.trim() || !sel.size} onClick={() => void group()}>Grubu kur ({sel.size} kişi)</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={busy || !name.trim() || !sel.size} onClick={() => void group()}>{tx("Grubu kur ({0} kişi)", sel.size)}</button>
       </> : undefined}>
       <div className="seg" style={{ marginBottom: 10 }}>
-        <button className={tab === "direct" ? "on" : ""} onClick={() => setTab("direct")}><UserIcon size={15} /> Kişiye özel</button>
-        <button className={tab === "group" ? "on" : ""} onClick={() => setTab("group")}><Users size={15} /> Grup</button>
+        <button className={tab === "direct" ? "on" : ""} onClick={() => setTab("direct")}><UserIcon size={15} />{" "}{tx("Kişiye özel")}</button>
+        <button className={tab === "group" ? "on" : ""} onClick={() => setTab("group")}><Users size={15} />{" "}{tx("Grup")}</button>
       </div>
       {tab === "group" && (
-        <input autoFocus placeholder="Grup adı (ör. Montaj ekibi)" value={name} maxLength={120}
+        <input autoFocus placeholder={tx("Grup adı (ör. Montaj ekibi)")} value={name} maxLength={120}
           onChange={(e) => setName(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
       )}
-      <input type="search" placeholder="Kişi ara…" value={filter} onChange={(e) => setFilter(e.target.value)}
+      <input type="search" placeholder={tx("Kişi ara…")} value={filter} onChange={(e) => setFilter(e.target.value)}
         autoFocus={tab === "direct"} style={{ width: "100%", marginBottom: 8 }} />
       {users.isError && <div className="error">{errText(users.error)}</div>}
       {users.data && (tab === "direct"
@@ -697,55 +718,55 @@ function GroupSettings({ room, onClose, onLeft }: { room: Room; onClose: () => v
   const admins = room.members.filter((m) => m.is_admin).map((m) => m.id);
   const toggleAdmin = (m: Member) => void patch(
     { admins: m.is_admin ? admins.filter((x) => x !== m.id) : [...admins, m.id] },
-    m.is_admin ? `${m.name} artık yönetici değil` : `${m.name} yönetici yapıldı`);
+    m.is_admin ? tx("{0} artık yönetici değil", m.name) : tx("{0} yönetici yapıldı", m.name));
   const leave = async () => {
-    if (!confirm(`“${room.name}” grubundan ayrılmak istiyor musunuz?`)) return;
+    if (!confirm(tx("“{0}” grubundan ayrılmak istiyor musunuz?", room.name))) return;
     try { await api.post(`/chat/rooms/${room.id}/leave`, {}); refresh(); onClose(); onLeft(); } catch (e) { toast(errText(e), true); }
   };
   const candidates = (users.data ?? []).filter((u) => !room.members.some((m) => m.id === u.id));
 
   return (
-    <Modal title="Grup ayarları" onClose={onClose}
+    <Modal title={tx("Grup ayarları")} onClose={onClose}
       footer={<>
-        <button className="btn danger" onClick={() => void leave()}>Gruptan ayrıl</button>
+        <button className="btn danger" onClick={() => void leave()}>{tx("Gruptan ayrıl")}</button>
         <span style={{ flex: 1 }} />
-        <button className="btn" onClick={onClose}>Kapat</button>
+        <button className="btn" onClick={onClose}>{tx("Kapat")}</button>
       </>}>
       {admin ? (
         <div className="row" style={{ marginBottom: 12 }}>
           <input value={name} maxLength={120} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
           <button className="btn" disabled={!name.trim() || name.trim() === room.name}
-            onClick={() => void patch({ name: name.trim() }, "Grup adı değişti")}>Yeniden adlandır</button>
+            onClick={() => void patch({ name: name.trim() }, tx("Grup adı değişti"))}>{tx("Yeniden adlandır")}</button>
         </div>
-      ) : <p className="muted" style={{ marginTop: 0 }}>Üyeleri ve adı yalnızca grup yöneticileri değiştirebilir.</p>}
-      <h4 style={{ margin: "0 0 6px" }}>Üyeler ({room.members.length})</h4>
+      ) : <p className="muted" style={{ marginTop: 0 }}>{tx("Üyeleri ve adı yalnızca grup yöneticileri değiştirebilir.")}</p>}
+      <h4 style={{ margin: "0 0 6px" }}>{tx("Üyeler ({0})", room.members.length)}</h4>
       <div className="chat-pick">
         {room.members.map((m) => (
           <div key={m.id} className="chat-pick-row">
             <span className="chat-avatar">{initial(m.name)}</span>
             <span className="chat-room-text">
-              <b>{m.id === user?.id ? `${m.name} (siz)` : m.name}</b>
-              <small className="muted">@{m.username}{m.is_admin ? " · yönetici" : ""}{m.active ? "" : " · pasif"}</small>
+              <b>{m.id === user?.id ? tx("{0} (siz)", m.name) : m.name}</b>
+              <small className="muted">@{m.username}{m.is_admin ? tx(" · yönetici") : ""}{m.active ? "" : tx(" · pasif")}</small>
             </span>
             {admin && m.id !== user?.id && <>
-              <button className="btn small" onClick={() => toggleAdmin(m)}>{m.is_admin ? "Yöneticiliği al" : "Yönetici yap"}</button>
-              <button className="btn small danger" onClick={() => void patch({ remove: [m.id] }, `${m.name} çıkarıldı`)}>Çıkar</button>
+              <button className="btn small" onClick={() => toggleAdmin(m)}>{m.is_admin ? tx("Yöneticiliği al") : tx("Yönetici yap")}</button>
+              <button className="btn small danger" onClick={() => void patch({ remove: [m.id] }, tx("{0} çıkarıldı", m.name))}>{tx("Çıkar")}</button>
             </>}
           </div>
         ))}
       </div>
       {admin && (adding ? (
         <div style={{ marginTop: 12 }}>
-          <input type="search" placeholder="Eklenecek kişiyi ara…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+          <input type="search" placeholder={tx("Eklenecek kişiyi ara…")} value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
           <UserPicker users={candidates} filter={filter} selected={sel}
             toggle={(u) => setSel((s) => { const n = new Set(s); if (n.has(u.id)) n.delete(u.id); else n.add(u.id); return n; })} />
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 8 }}>
-            <button className="btn" onClick={() => { setAdding(false); setSel(new Set()); }}>Vazgeç</button>
+            <button className="btn" onClick={() => { setAdding(false); setSel(new Set()); }}>{tx("Vazgeç")}</button>
             <button className="btn primary" disabled={!sel.size}
-              onClick={() => void patch({ add: [...sel] }, `${sel.size} kişi eklendi`).then(() => { setAdding(false); setSel(new Set()); })}>Ekle</button>
+              onClick={() => void patch({ add: [...sel] }, tx("{0} kişi eklendi", sel.size)).then(() => { setAdding(false); setSel(new Set()); })}>{tx("Ekle")}</button>
           </div>
         </div>
-      ) : <button className="btn" style={{ marginTop: 12 }} onClick={() => setAdding(true)}><Plus size={15} /> Üye ekle</button>)}
+      ) : <button className="btn" style={{ marginTop: 12 }} onClick={() => setAdding(true)}><Plus size={15} />{" "}{tx("Üye ekle")}</button>)}
     </Modal>
   );
 }

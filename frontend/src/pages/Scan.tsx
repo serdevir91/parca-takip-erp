@@ -10,6 +10,7 @@ import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
 import { Loading } from "./admin/shared";
 import { PO_COLORS, WO_COLORS, fmtDay, fmtQty, numOrNull, type PoLine, type WoMaterial, type WoWarning, type WorkOrder } from "./erp/common";
+import { tx } from "../api/i18n";
 
 type StockDetail = { code: string; name: string; kind_label: string; unit: string; qty: number; min_qty: number; location: string };
 type PoDetail = { no: string; firm_name: string; status: string; status_label: string; due_date: string | null; lines: PoLine[] };
@@ -79,7 +80,7 @@ function CameraReader({ onRead, onClose }: { onRead: (text: string) => void; onC
         void video.current.play();
       }
       tick();
-    }).catch((e) => { toast(`Kamera açılamadı: ${errText(e)}`, true); onClose(); });
+    }).catch((e) => { toast(tx("Kamera açılamadı: {0}", errText(e)), true); onClose(); });
     return () => {
       stopped = true;
       clearTimeout(timer);
@@ -128,16 +129,16 @@ export default function Scan() {
     try {
       const hit = await decodePhoto(file);
       if (hit) read(hit);
-      else toast("Fotoğrafta QR kod okunamadı. Daha yakından ve net çekin.", true);
+      else toast(tx("Fotoğrafta QR kod okunamadı. Daha yakından ve net çekin."), true);
     } catch {
-      toast("Fotoğraf açılamadı", true);
+      toast(tx("Fotoğraf açılamadı"), true);
     } finally {
       setDecoding(false);
     }
   };
 
   if (!(can("stock") || can("purchasing") || can("workorders"))) {
-    return <Page><div className="card empty">Tarama için stok, satın alma veya iş emri yetkisi gerekli.</div></Page>;
+    return <Page><div className="card empty">{tx("Tarama için stok, satın alma veya iş emri yetkisi gerekli.")}</div></Page>;
   }
   const submit = (e: FormEvent) => { e.preventDefault(); read(text); };
   const failed = res.error instanceof ApiError ? res.error : null;
@@ -145,30 +146,30 @@ export default function Scan() {
     <Page>
       <div className="scan">
         <div className="card">
-          <h2 style={{ margin: "0 0 10px" }}>Barkod okut</h2>
+          <h2 style={{ margin: "0 0 10px" }}>{tx("Barkod okut")}</h2>
           <form onSubmit={submit}>
             <input ref={box} value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" autoCapitalize="off"
-              spellCheck={false} enterKeyHint="go" placeholder="Okutun veya kodu yazın" aria-label="Barkod veya stok kodu" />
-            <button className="btn primary" disabled={!text.trim()}>Bul</button>
+              spellCheck={false} enterKeyHint="go" placeholder={tx("Okutun veya kodu yazın")} aria-label={tx("Barkod veya stok kodu")} />
+            <button className="btn primary" disabled={!text.trim()}>{tx("Bul")}</button>
           </form>
           <div className="scan-ways" style={{ marginTop: 10 }}>
             {liveCamera && (
               <button type="button" className="btn" onClick={() => setCamera((v) => !v)}>
-                <Camera size={16} /> {camera ? "Kamerayı kapat" : "Kamera ile okut"}
+                <Camera size={16} /> {camera ? tx("Kamerayı kapat") : tx("Kamera ile okut")}
               </button>
             )}
             <label className="btn">
-              <ImageIcon size={16} /> {decoding ? "Okunuyor…" : "Fotoğraf ile okut"}
+              <ImageIcon size={16} /> {decoding ? tx("Okunuyor…") : tx("Fotoğraf ile okut")}
               <input type="file" accept="image/*" capture="environment" disabled={decoding}
                 onChange={(e) => { void photo(e.target.files?.[0]); e.target.value = ""; }} />
             </label>
           </div>
           {!liveCamera && (
             <div className="scan-note">
-              <b>Canlı kamera bu bağlantıda kapalı.</b> Tarayıcılar kamerayı yalnızca şifreli (HTTPS) bağlantıda açar; bu ekran düz HTTP ile açıldı. Fotoğraf ile okutma burada da çalışır.
+              <b>{tx("Canlı kamera bu bağlantıda kapalı.")}</b>{" "}{tx("Tarayıcılar kamerayı yalnızca şifreli (HTTPS) bağlantıda açar; bu ekran düz HTTP ile açıldı. Fotoğraf ile okutma burada da çalışır.")}
               {isAdmin
-                ? <> Canlı kamera için <Link to="/admin?tab=https">Yönetim › HTTPS</Link> sekmesinden HTTPS'i açın, sonra uygulamaya https:// adresiyle bağlanın.</>
-                : <> Canlı kamera için yöneticinizden Yönetim › HTTPS sekmesinden HTTPS'i açmasını isteyin.</>}
+                ? <>{" "}{tx("Canlı kamera için")}{" "}<Link to="/admin?tab=https">{tx("Yönetim › HTTPS")}</Link>{" "}{tx("sekmesinden HTTPS'i açın, sonra uygulamaya https:// adresiyle bağlanın.")}</>
+                : <>{" "}{tx("Canlı kamera için yöneticinizden Yönetim › HTTPS sekmesinden HTTPS'i açmasını isteyin.")}</>}
             </div>
           )}
         </div>
@@ -204,7 +205,7 @@ function ResultCard({ r }: { r: Result }) {
   );
 }
 
-const STOCK_ACTIONS: Record<string, string> = { in: "Giriş", out: "Çıkış", count: "Sayım" };
+const STOCK_ACTIONS: Record<string, string> = { in: tx("Giriş"), out: tx("Çıkış"), count: tx("Sayım") };
 
 function StockCard({ id, d, actions }: { id: number; d: StockDetail; actions: string[] }) {
   const toast = useToast();
@@ -213,23 +214,23 @@ function StockCard({ id, d, actions }: { id: number; d: StockDetail; actions: st
   const [qty, setQty] = useState("");
   const save = useMutation({
     mutationFn: () => api.post<{ qty: number; unit: string }>(`/stock/${id}/moves`, { kind, qty: numOrNull(qty) ?? 0 }),
-    onSuccess: (i) => { toast(`${d.code}: stok ${fmtQty(i.qty)} ${i.unit}`); setQty(""); done(); },
+    onSuccess: (i) => { toast(tx("{0}: stok {1} {2}", d.code, fmtQty(i.qty), i.unit)); setQty(""); done(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <>
-      <span className="badge">Stok kartı</span>
+      <span className="badge">{tx("Stok kartı")}</span>
       <h3 className="mono">{d.code}</h3>
-      <Facts rows={[["Ad", d.name], ["Tür", d.kind_label], ["Stok", <b>{fmtQty(d.qty)} {d.unit}</b>], ["Min. stok", d.min_qty ? fmtQty(d.min_qty) : ""], ["Konum", d.location]]} />
+      <Facts rows={[[tx("Ad"), d.name], [tx("Tür"), d.kind_label], [tx("Stok"), <b>{fmtQty(d.qty)} {tx(d.unit)}</b>], [tx("Min. stok"), d.min_qty ? fmtQty(d.min_qty) : ""], [tx("Konum"), d.location]]} />
       {actions.length > 0 && (
         <div className="scan-act">
-          <div className="seg" role="group" aria-label="Hareket">
+          <div className="seg" role="group" aria-label={tx("Hareket")}>
             {actions.map((a) => <button key={a} type="button" className={kind === a ? "on" : ""} onClick={() => setKind(a)}>{STOCK_ACTIONS[a]}</button>)}
           </div>
           <div className="row">
-            <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} aria-label="Miktar"
-              placeholder={kind === "count" ? "Sayılan miktar" : "Miktar"} />
-            <button className="btn primary" disabled={save.isPending || numOrNull(qty) === null} onClick={() => save.mutate()}>Kaydet</button>
+            <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} aria-label={tx("Miktar")}
+              placeholder={kind === "count" ? tx("Sayılan miktar") : tx("Miktar")} />
+            <button className="btn primary" disabled={save.isPending || numOrNull(qty) === null} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
           </div>
         </div>
       )}
@@ -245,32 +246,32 @@ function PoCard({ id, d, actions }: { id: number; d: PoDetail; actions: string[]
   const picked = d.lines.map((l) => ({ line_id: l.id as number, qty: numOrNull(qty[l.id as number] ?? "") ?? 0 })).filter((l) => l.qty > 0);
   const save = useMutation({
     mutationFn: () => api.post(`/purchase-orders/${id}/receive`, { lines: picked }),
-    onSuccess: () => { toast(`${d.no}: mal kabul işlendi`); setQty({}); done(); },
+    onSuccess: () => { toast(tx("{0}: mal kabul işlendi", d.no)); setQty({}); done(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <>
-      <span className="badge">Satın alma siparişi</span>
+      <span className="badge">{tx("Satın alma siparişi")}</span>
       <h3>{d.no}</h3>
-      <Facts rows={[["Firma", d.firm_name], ["Durum", <span className="badge" style={statusStyle(PO_COLORS[d.status])}>{d.status_label}</span>], ["Termin", fmtDay(d.due_date)]]} />
+      <Facts rows={[[tx("Firma"), d.firm_name], [tx("Durum"), <span className="badge" style={statusStyle(PO_COLORS[d.status])}>{d.status_label}</span>], [tx("Termin"), fmtDay(d.due_date)]]} />
       {d.lines.map((l) => (
         <div className="scan-line" key={l.id}>
           <div>
             <b className="mono">{l.code || l.description}</b><br />
-            <small>{l.code ? `${l.description} · ` : ""}kalan {fmtQty(l.remaining)} {l.unit}</small>
+            <small>{l.code ? `${l.description} · ` : ""}{tx("kalan {0} {1}", fmtQty(l.remaining), l.unit)}</small>
           </div>
           {canReceive && (
-            <input inputMode="decimal" value={qty[l.id as number] ?? ""} placeholder={fmtQty(l.remaining)} aria-label={`${l.code} teslim miktarı`}
+            <input inputMode="decimal" value={qty[l.id as number] ?? ""} placeholder={fmtQty(l.remaining)} aria-label={tx("{0} teslim miktarı", l.code)}
               onChange={(e) => setQty((q) => ({ ...q, [l.id as number]: e.target.value }))} />
           )}
         </div>
       ))}
-      {!d.lines.length && <p className="muted">Açık satır yok.</p>}
+      {!d.lines.length && <p className="muted">{tx("Açık satır yok.")}</p>}
       {canReceive && (
         <div className="scan-act">
           <div className="row">
-            <button className="btn" onClick={() => setQty(Object.fromEntries(d.lines.map((l) => [l.id as number, String(l.remaining)])))}>Tümünü doldur</button>
-            <button className="btn primary" style={{ flex: 1 }} disabled={save.isPending || !picked.length} onClick={() => save.mutate()}>Mal kabul</button>
+            <button className="btn" onClick={() => setQty(Object.fromEntries(d.lines.map((l) => [l.id as number, String(l.remaining)])))}>{tx("Tümünü doldur")}</button>
+            <button className="btn primary" style={{ flex: 1 }} disabled={save.isPending || !picked.length} onClick={() => save.mutate()}>{tx("Mal kabul")}</button>
           </div>
         </div>
       )}
@@ -287,48 +288,48 @@ function WoCard({ id, d, actions }: { id: number; d: WoDetail; actions: string[]
   const [warnings, setWarnings] = useState<WoWarning[]>([]);
   const start = useMutation({
     mutationFn: () => api.post(`/work-orders/${id}/status`, { status: "in_progress" }),
-    onSuccess: () => { toast(`${d.no} başlatıldı`); done(); },
+    onSuccess: () => { toast(tx("{0} başlatıldı", d.no)); done(); },
     onError: (e) => toast(errText(e), true),
   });
   const complete = useMutation({
     mutationFn: () => api.post<WorkOrder & { warnings: WoWarning[] }>(`/work-orders/${id}/complete`, { qty: numOrNull(made) ?? 0 }),
-    onSuccess: (w) => { toast(`${w.no}: ${fmtQty(w.done_qty)} / ${fmtQty(w.qty)} üretildi`); setMade(""); setWarnings(w.warnings); done(); },
+    onSuccess: (w) => { toast(tx("{0}: {1} / {2} üretildi", w.no, fmtQty(w.done_qty), fmtQty(w.qty))); setMade(""); setWarnings(w.warnings); done(); },
     onError: (e) => toast(errText(e), true),
   });
   const issue = useMutation({
     mutationFn: () => api.post(`/work-orders/${id}/materials/${mid}/issue`, { qty: numOrNull(issueQty) ?? 0 }),
-    onSuccess: () => { toast("Malzeme çıkışı işlendi"); setIssueQty(""); done(); },
+    onSuccess: () => { toast(tx("Malzeme çıkışı işlendi")); setIssueQty(""); done(); },
     onError: (e) => toast(errText(e), true),
   });
   return (
     <>
-      <span className="badge">İş emri</span>
+      <span className="badge">{tx("İş emri")}</span>
       <h3>{d.no}</h3>
-      <Facts rows={[["Parça", <span className="mono">{d.part_no}</span>], ["Açıklama", d.description], ["Proje", d.project_name],
-        ["Durum", <span className="badge" style={statusStyle(WO_COLORS[d.status])}>{d.status_label}</span>],
-        ["Üretilen", `${fmtQty(d.done_qty)} / ${fmtQty(d.qty)}`]]} />
+      <Facts rows={[[tx("Parça"), <span className="mono">{d.part_no}</span>], [tx("Açıklama"), d.description], [tx("Proje"), d.project_name],
+        [tx("Durum"), <span className="badge" style={statusStyle(WO_COLORS[d.status])}>{d.status_label}</span>],
+        [tx("Üretilen"), `${fmtQty(d.done_qty)} / ${fmtQty(d.qty)}`]]} />
       {warnings.length > 0 && <ul className="scan-warn">{warnings.map((w) => <li key={w.code}>{w.message}</li>)}</ul>}
       {actions.includes("start") && (
-        <div className="scan-act"><button className="btn" disabled={start.isPending} onClick={() => start.mutate()}>Başlat</button></div>
+        <div className="scan-act"><button className="btn" disabled={start.isPending} onClick={() => start.mutate()}>{tx("Başlat")}</button></div>
       )}
       {actions.includes("complete") && (
         <div className="scan-act">
           <div className="row">
-            <input inputMode="decimal" value={made} onChange={(e) => setMade(e.target.value)} placeholder={`Üretilen (kalan ${fmtQty(d.remaining)})`} aria-label="Üretilen miktar" />
-            <button className="btn primary" disabled={complete.isPending || !numOrNull(made)} onClick={() => complete.mutate()}>Üretim girişi</button>
+            <input inputMode="decimal" value={made} onChange={(e) => setMade(e.target.value)} placeholder={tx("Üretilen (kalan {0})", fmtQty(d.remaining))} aria-label={tx("Üretilen miktar")} />
+            <button className="btn primary" disabled={complete.isPending || !numOrNull(made)} onClick={() => complete.mutate()}>{tx("Üretim girişi")}</button>
           </div>
         </div>
       )}
       {actions.includes("issue") && (
         <div className="scan-act">
-          <select value={mid ?? ""} onChange={(e) => setMid(Number(e.target.value))} aria-label="Malzeme">
+          <select value={mid ?? ""} onChange={(e) => setMid(Number(e.target.value))} aria-label={tx("Malzeme")}>
             {d.materials.map((m) => (
-              <option key={m.id} value={m.id}>{m.code} · {fmtQty(m.issued_qty)} / {fmtQty(m.planned_qty)} {m.unit}{m.stock_qty != null ? ` · stok ${fmtQty(m.stock_qty)}` : ""}</option>
+              <option key={m.id} value={m.id}>{m.code} · {fmtQty(m.issued_qty)} / {fmtQty(m.planned_qty)} {m.unit}{m.stock_qty != null ? tx(" · stok {0}", fmtQty(m.stock_qty)) : ""}</option>
             ))}
           </select>
           <div className="row">
-            <input inputMode="decimal" value={issueQty} onChange={(e) => setIssueQty(e.target.value)} placeholder="Miktar" aria-label="Çıkış miktarı" />
-            <button className="btn primary" disabled={issue.isPending || !mid || !numOrNull(issueQty)} onClick={() => issue.mutate()}>Malzeme çıkışı</button>
+            <input inputMode="decimal" value={issueQty} onChange={(e) => setIssueQty(e.target.value)} placeholder={tx("Miktar")} aria-label={tx("Çıkış miktarı")} />
+            <button className="btn primary" disabled={issue.isPending || !mid || !numOrNull(issueQty)} onClick={() => issue.mutate()}>{tx("Malzeme çıkışı")}</button>
           </div>
         </div>
       )}

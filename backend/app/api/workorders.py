@@ -13,6 +13,7 @@ from ..models import Project, User, WorkOrder, WorkOrderMaterial, WorkOrderOp
 from ..services import audit, conflict, erp, womaterials
 from ..permissions import can, require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 workorders_view, workorders_edit = require("workorders", "view"), require("workorders", "edit")
 
@@ -90,21 +91,21 @@ class OpsIn(BaseModel):
 def _wo_or_404(db: Session, wo_id: int) -> WorkOrder:
     w = db.get(WorkOrder, wo_id)
     if w is None:
-        raise HTTPException(404, "İş emri bulunamadı")
+        raise HTTPException(404, tx("İş emri bulunamadı"))
     return w
 
 
 def _material_or_404(db: Session, w: WorkOrder, mid: int) -> WorkOrderMaterial:
     m = db.get(WorkOrderMaterial, mid)
     if m is None or m.wo_id != w.id:
-        raise HTTPException(404, "Malzeme bulunamadı")
+        raise HTTPException(404, tx("Malzeme bulunamadı"))
     return m
 
 
 def _op_or_404(db: Session, w: WorkOrder, op_id: int) -> WorkOrderOp:
     o = db.get(WorkOrderOp, op_id)
     if o is None or o.wo_id != w.id:
-        raise HTTPException(404, "Operasyon bulunamadı")
+        raise HTTPException(404, tx("Operasyon bulunamadı"))
     return o
 
 
@@ -164,13 +165,13 @@ def update_work_order(wo_id: int, body: WoUpdate, me: User = Depends(workorders_
     w = _wo_or_404(db, wo_id)
     conflict.claim(db, w, body.rev, me)
     if w.status in erp.WO_FINAL:
-        raise HTTPException(400, f"{erp.WO_STATUS[w.status]} durumundaki iş emri düzenlenemez")
+        raise HTTPException(400, tx("{0} durumundaki iş emri düzenlenemez", erp.WO_STATUS[w.status]))
     changes = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set and k != "rev"}
     for k in ("description", "qty", "firm_name", "note"):
         if k in changes and changes[k] is None:
             del changes[k]
     if "qty" in changes and changes["qty"] + erp.EPS < w.done_qty:
-        raise HTTPException(400, "Miktar üretilen miktarın altına indirilemez")
+        raise HTTPException(400, tx("Miktar üretilen miktarın altına indirilemez"))
     audit.record_changes(db, me, w, changes, "work_order", w.no, w.project_id)
     db.commit()
     return _out(db, w)
@@ -197,9 +198,9 @@ def complete(wo_id: int, body: CompleteIn, me: User = Depends(workorders_edit), 
 def delete_work_order(wo_id: int, me: User = Depends(workorders_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     w = _wo_or_404(db, wo_id)
     if w.status != "planned":
-        raise HTTPException(400, "Yalnızca planlanmış iş emri silinebilir; başlamış olanı iptal edin")
+        raise HTTPException(400, tx("Yalnızca planlanmış iş emri silinebilir; başlamış olanı iptal edin"))
     if any(m.issued_qty > erp.EPS for m in womaterials.materials(db, w)):
-        raise HTTPException(400, "Malzeme çıkılmış iş emri silinemez; önce malzemeyi iade edin")
+        raise HTTPException(400, tx("Malzeme çıkılmış iş emri silinemez; önce malzemeyi iade edin"))
     audit.record(db, me, "work_order", w.no, "no", w.no, None, w.project_id, action="delete")
     db.delete(w)
     db.commit()
@@ -285,6 +286,6 @@ def need_to_work_orders(pid: int, body: FromNeedIn, me: User = Depends(workorder
                  note="İhtiyaç analizinden oluşturuldu")
         out.append(w)
     if not out:
-        raise HTTPException(400, "Seçilen kalemlerde iş emri açılacak eksik parça yok")
+        raise HTTPException(400, tx("Seçilen kalemlerde iş emri açılacak eksik parça yok"))
     db.commit()
     return [_out(db, w) for w in out]

@@ -7,6 +7,7 @@ import { ApiError } from "../api/client";
 import { errText } from "./Toast";
 import { useGestures } from "./viewer/gestures";
 import type { NavProps } from "./viewer/ImageLightbox";
+import { LOCALE, tx } from "../api/i18n";
 
 // Bundled worker: no external resources (offline LAN).
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -18,7 +19,7 @@ const STEP = 1.25;
 /** Fetch a protected API file as raw bytes. `path` is without the /api prefix. */
 async function fetchBytes(path: string, signal: AbortSignal): Promise<ArrayBuffer> {
   const res = await fetch(`/api${path}`, { signal });
-  if (!res.ok) throw new ApiError(res.status, res.status === 404 ? "Dosya bulunamadı" : `Dosya alınamadı (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, res.status === 404 ? tx("Dosya bulunamadı") : tx("Dosya alınamadı ({0})", res.status));
   return res.arrayBuffer();
 }
 
@@ -82,7 +83,7 @@ export default function PdfViewer({ src, title, onClose, onDownload, nav, footer
       .catch((e: unknown) => {
         if (ctl.signal.aborted) return;
         const name = e && typeof e === "object" && "name" in e ? String((e as { name: unknown }).name) : "";
-        setError(name === "InvalidPDFException" ? "Dosya geçerli bir PDF değil." : errText(e));
+        setError(name === "InvalidPDFException" ? tx("Dosya geçerli bir PDF değil.") : errText(e));
       });
     return () => {
       ctl.abort();
@@ -238,44 +239,44 @@ export default function PdfViewer({ src, title, onClose, onDownload, nav, footer
           <b className="pdfv-title" title={title}>{title}</b>
           <span className="spacer" style={{ flex: 1 }} />
           {nav && nav.count > 1 && <>
-            <button className="btn small" onClick={nav.prev} title="Önceki dosya"><ChevronLeft size={16} /></button>
-            <span className="muted">Dosya {nav.index + 1} / {nav.count}</span>
-            <button className="btn small" onClick={nav.next} title="Sonraki dosya"><ChevronRight size={16} /></button>
+            <button className="btn small" onClick={nav.prev} title={tx("Önceki dosya")}><ChevronLeft size={16} /></button>
+            <span className="muted">{tx("Dosya")}{" "}{nav.index + 1} / {nav.count}</span>
+            <button className="btn small" onClick={nav.next} title={tx("Sonraki dosya")}><ChevronRight size={16} /></button>
             <span className="muted">|</span>
           </>}
           {pages > 1 && <>
-            <button className="btn small" disabled={page <= 1} onClick={() => go(page - 1)} title="Önceki sayfa">‹</button>
-            <input className="pdfv-page" value={pageInput} aria-label="Sayfa"
+            <button className="btn small" disabled={page <= 1} onClick={() => go(page - 1)} title={tx("Önceki sayfa")}>‹</button>
+            <input className="pdfv-page" value={pageInput} aria-label={tx("Sayfa")}
               onChange={(e) => setPageInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") go(Number(pageInput) || 1); }}
               onBlur={() => go(Number(pageInput) || page)} />
-            <span className="muted">/ {pages.toLocaleString("tr-TR")}</span>
-            <button className="btn small" disabled={page >= pages} onClick={() => go(page + 1)} title="Sonraki sayfa">›</button>
+            <span className="muted">/ {pages.toLocaleString(LOCALE)}</span>
+            <button className="btn small" disabled={page >= pages} onClick={() => go(page + 1)} title={tx("Sonraki sayfa")}>›</button>
             <span className="muted">|</span>
           </>}
-          <button className="btn small" onClick={() => zoom(1 / STEP)} title="Uzaklaştır (−)"><ZoomOut size={16} /></button>
-          <span className="muted pdfv-zoom">%{Math.round(scale * 100).toLocaleString("tr-TR")}</span>
-          <button className="btn small" onClick={() => zoom(STEP)} title="Yakınlaştır (+)"><ZoomIn size={16} /></button>
-          <button className={"btn small" + (fit ? " primary" : "")} onClick={() => setFit(true)} title="Sayfayı sığdır (0)"><Maximize size={16} /></button>
+          <button className="btn small" onClick={() => zoom(1 / STEP)} title={tx("Uzaklaştır (−)")}><ZoomOut size={16} /></button>
+          <span className="muted pdfv-zoom">%{Math.round(scale * 100).toLocaleString(LOCALE)}</span>
+          <button className="btn small" onClick={() => zoom(STEP)} title={tx("Yakınlaştır (+)")}><ZoomIn size={16} /></button>
+          <button className={"btn small" + (fit ? " primary" : "")} onClick={() => setFit(true)} title={tx("Sayfayı sığdır (0)")}><Maximize size={16} /></button>
           <button className="btn small" onClick={() => { const el = boxRef.current; if (el) zoomAt(1 / scaleRef.current, el.clientWidth / 2, el.clientHeight / 2); }}>%100</button>
           {actions}
-          {onDownload && <button className="btn small" onClick={onDownload} title="İndir"><Download size={16} /></button>}
-          <button className="btn small" onClick={onClose} title="Kapat (Esc)"><X size={16} /></button>
+          {onDownload && <button className="btn small" onClick={onDownload} title={tx("İndir")}><Download size={16} /></button>}
+          <button className="btn small" onClick={onClose} title={tx("Kapat (Esc)")}><X size={16} /></button>
         </div>
         <div className="viewer-wrap">
         <div className="pdfv-body pan-zoom" ref={boxRef}>
           {error ? (
-            <div className="error" style={{ padding: 16 }}>PDF açılamadı: {error}</div>
+            <div className="error" style={{ padding: 16 }}>{tx("PDF açılamadı: {0}", error)}</div>
           ) : (
             <>
-              {(!doc || rendering) && <div className="muted pdfv-loading">{doc ? "Sayfa çiziliyor…" : "PDF yükleniyor…"}</div>}
+              {(!doc || rendering) && <div className="muted pdfv-loading">{doc ? tx("Sayfa çiziliyor…") : tx("PDF yükleniyor…")}</div>}
               <canvas ref={canvasRef} className="pdfv-canvas" />
             </>
           )}
         </div>
           {nav && nav.count > 1 && <>
-            <button className="viewer-arrow left" onClick={nav.prev} aria-label="Önceki"><ChevronLeft size={28} /></button>
-            <button className="viewer-arrow right" onClick={nav.next} aria-label="Sonraki"><ChevronRight size={28} /></button>
+            <button className="viewer-arrow left" onClick={nav.prev} aria-label={tx("Önceki")}><ChevronLeft size={28} /></button>
+            <button className="viewer-arrow right" onClick={nav.next} aria-label={tx("Sonraki")}><ChevronRight size={28} /></button>
           </>}
         </div>
         {footer}

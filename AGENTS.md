@@ -190,7 +190,10 @@ HTTPS pinning: Android `Pin.java` keeps the first certificate per server (TOFU),
 Docker-free mode: `python -m app.cli serve` on SQLite (WAL); the backend serves `frontend/dist` itself when `ERP_STATIC_DIR` is unset and `../frontend/dist` exists (never inside the image). Windows: `KURULUM_DOCKERSIZ.bat` -> `deploy/windows_native_install.ps1` (winget Python 3.12 + Node, data in `C:\ParcaTakipVeri`, Task Scheduler task `ParcaTakipERP` as SYSTEM). Codespaces demo: `.devcontainer/` (setup.sh builds + seeds, start.sh serves port 8000, admin/admin).
 
 ## Rules
-- The UI text is Turkish, with correct characters (ç, ğ, ı, İ, ö, ş, ü). This app is an explicit exception to the workspace's English-default rule.
+- The interface is available in Turkish, English, Spanish and German (1.6.0). Turkish is the source text and the default; a user's choice is kept in `localStorage` `erp_lang` and mirrored to a cookie of the same name. Write new UI text in Turkish, with correct characters (ç, ğ, ı, İ, ö, ş, ü), inside `tx("...", ...args)` from `frontend/src/api/i18n.ts`, and add its translation to `frontend/src/locales/{en,es,de}.json`. Server messages use `tx()` from `app/core/i18n.py` with `backend/app/locales/{en,es,de}.json`. Placeholders are `{0}`, `{1}`. This app stays an explicit exception to the workspace's English-default rule.
+- Never wrap stored values in `tx()` at the place they are written or compared (status, progress, material status, temin kinds, units, payment methods). Translate them where they are shown: `tx(row.status)`, or add the column to `VALUE_COLUMNS` in `DataGrid.tsx`. Fields ending in `_label` and `label` in API responses are translated by `localizeLabels` in `client.ts`.
+- The tracking workbook (`services/excel_export.py`) stays Turkish on purpose: its formulas, validation lists and the Excel import depend on that text.
+- Native shells have their own catalogs: `desktop/shell_i18n.py`, the `I18N` object in both `setup.html` files, and Android `res/values*/strings.xml`. They follow the device language.
 - Store status colors as hex without `#`. `statusStyle(hex)` in the frontend renders them.
 - Acceptance numbers for spec §10 are covered by `tests/test_bomimport.py`. For the 11-02 BOM they are:
   - 450 rows and 62 fastener rows.

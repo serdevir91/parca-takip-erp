@@ -13,6 +13,7 @@ from ..models import Project, PurchaseOrder, StockItem, User, WorkOrder
 from ..permissions import can
 from ..services import erp, womaterials
 from .deps import any_user, get_db
+from app.core.i18n import tx
 
 router = APIRouter(tags=["scan"])
 
@@ -65,7 +66,7 @@ def _find(db: Session, me: User, text: str) -> dict[str, Any] | None:
     module = PREFIXES.get(kind, "stock")
     # Asked before the lookup: without the right, a number that exists looks the same as one that does not
     if not can(me, module, "view"):
-        raise HTTPException(403, "Bu kaydı görme yetkiniz yok")
+        raise HTTPException(403, tx("Bu kaydı görme yetkiniz yok"))
     if kind == "WO":
         w = db.scalar(select(WorkOrder).where(WorkOrder.no == rest.strip()))
         return _wo(db, me, w) if w else None
@@ -80,10 +81,10 @@ def _find(db: Session, me: User, text: str) -> dict[str, Any] | None:
 @router.post("/scan/resolve")
 def resolve(body: ResolveIn, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     if not any(can(me, m, "view") for m in MODULES):
-        raise HTTPException(403, "Tarama için stok, satın alma veya iş emri yetkisi gerekli")
+        raise HTTPException(403, tx("Tarama için stok, satın alma veya iş emri yetkisi gerekli"))
     text = body.payload.strip()
     if not text:
-        raise HTTPException(400, "Boş okuma")
+        raise HTTPException(400, tx("Boş okuma"))
     denied: HTTPException | None = None
     for candidate in dict.fromkeys((text, text.translate(TURKISH_Q))):
         try:
@@ -93,4 +94,4 @@ def resolve(body: ResolveIn, me: User = Depends(any_user), db: Session = Depends
             continue
         if hit is not None:
             return hit
-    raise denied or HTTPException(404, f"Kayıt bulunamadı: {text}")
+    raise denied or HTTPException(404, tx("Kayıt bulunamadı: {0}", text))

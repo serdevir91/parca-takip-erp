@@ -14,6 +14,7 @@ from ..models import Firm, Invoice, Payment, Project, PurchaseOrder, User
 from ..permissions import require
 from ..services import audit, commerce, conflict, erp, fx, system
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 finance_view, finance_edit = require("finance", "view"), require("finance", "edit")
 
@@ -89,7 +90,7 @@ class PaymentIn(BaseModel):
 def _inv_or_404(db: Session, inv_id: int) -> Invoice:
     inv = db.get(Invoice, inv_id)
     if inv is None:
-        raise HTTPException(404, "Fatura bulunamadı")
+        raise HTTPException(404, tx("Fatura bulunamadı"))
     return inv
 
 
@@ -144,7 +145,7 @@ def list_invoices(kind: str | None = None, status: str | None = None, firm_id: i
 def create_invoice(body: InvoiceIn, me: User = Depends(finance_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     firm = commerce.firm_or_404(db, body.firm_id)
     if not firm and not body.firm_name.strip():
-        raise HTTPException(400, "Firma seçin")
+        raise HTTPException(400, tx("Firma seçin"))
     if body.project_id is not None:
         project_or_404(db, body.project_id)
     sets = system.system(db)["commerce"]
@@ -167,7 +168,7 @@ def invoice_from_po(po_id: int, body: FromPoIn, me: User = Depends(finance_edit)
                     db: Session = Depends(get_db)) -> dict[str, Any]:
     po = db.get(PurchaseOrder, po_id)
     if po is None:
-        raise HTTPException(404, "Sipariş bulunamadı")
+        raise HTTPException(404, tx("Sipariş bulunamadı"))
     inv = commerce.invoice_from_po(db, me, po, body.no,
                                    system.system(db)["commerce"]["vat"] if body.tax_rate is None else body.tax_rate,
                                    [(l.line_id, l.qty) for l in body.lines] if body.lines is not None else None, body.rate)
@@ -186,7 +187,7 @@ def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_
     inv = _inv_or_404(db, inv_id)
     conflict.claim(db, inv, body.rev, me)
     if inv.status != "draft":
-        raise HTTPException(400, "Yalnızca taslak fatura düzenlenebilir")
+        raise HTTPException(400, tx("Yalnızca taslak fatura düzenlenebilir"))
     sent = body.model_fields_set
     changes: dict[str, Any] = {}
     if "firm_id" in sent:
@@ -198,7 +199,7 @@ def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_
         changes["project_id"] = body.project_id
     if body.no is not None and inv.kind == "purchase":
         if not body.no.strip():
-            raise HTTPException(400, "Fatura numarası boş olamaz")
+            raise HTTPException(400, tx("Fatura numarası boş olamaz"))
         changes["no"] = body.no.strip()
     for k in ("invoice_date", "due_date", "currency", "tax_rate", "note"):
         if k in sent and (getattr(body, k) is not None or k == "due_date"):
@@ -206,7 +207,7 @@ def update_invoice(inv_id: int, body: InvoiceUpdate, me: User = Depends(finance_
     if "currency" in changes:
         changes["currency"] = fx.clean_currency(changes["currency"])
         if (inv.sales_order_id or inv.purchase_order_id) and changes["currency"] != fx.norm(inv.currency):
-            raise HTTPException(400, "Siparişten oluşan faturanın para birimi değiştirilemez")
+            raise HTTPException(400, tx("Siparişten oluşan faturanın para birimi değiştirilemez"))
     if "rate" in sent or changes.get("currency", inv.currency) != inv.currency:
         changes["rate"] = body.rate if body.rate is not None else fx.rate_on(
             db, changes.get("currency", inv.currency),
@@ -227,17 +228,17 @@ def invoice_status(inv_id: int, body: StatusIn, me: User = Depends(finance_edit)
     erp.lock_order(db, inv)
     allowed = {"draft": {"issued", "cancelled"}, "issued": {"cancelled"}}.get(inv.status, set())
     if body.status not in allowed:
-        raise HTTPException(400, "Bu durum değişikliği yapılamaz")
+        raise HTTPException(400, tx("Bu durum değişikliği yapılamaz"))
     if body.status == "issued" and not inv.lines:
-        raise HTTPException(400, "Satırı olmayan fatura kesilemez")
+        raise HTTPException(400, tx("Satırı olmayan fatura kesilemez"))
     if body.status == "cancelled" and commerce.paid_by_invoice(db, [inv.id]).get(inv.id):
-        raise HTTPException(400, "Ödemesi girilmiş fatura iptal edilemez; önce ödemeleri silin")
+        raise HTTPException(400, tx("Ödemesi girilmiş fatura iptal edilemez; önce ödemeleri silin"))
     if body.status == "cancelled" and commerce.credited_by_invoice(db, [inv.id]).get(inv.id):
-        raise HTTPException(400, "Alacak dekontu kesilmiş fatura iptal edilemez; önce dekontu iptal edin")
+        raise HTTPException(400, tx("Alacak dekontu kesilmiş fatura iptal edilemez; önce dekontu iptal edin"))
     if body.status == "issued" and inv.credit_of_id:
         source = db.get(Invoice, inv.credit_of_id)
         if source is None or source.status != "issued":
-            raise HTTPException(400, "Karşılık gelen fatura kesili değil, dekont kesilemez")
+            raise HTTPException(400, tx("Karşılık gelen fatura kesili değil, dekont kesilemez"))
     if body.status == "issued" and inv.rate is None:
         inv.rate = fx.rate_on(db, inv.currency, fx.first_day(inv.invoice_date, inv.created_at))
     audit.record(db, me, "invoice", inv.no, "status", inv.status, body.status, inv.project_id)
@@ -250,7 +251,7 @@ def invoice_status(inv_id: int, body: StatusIn, me: User = Depends(finance_edit)
 def delete_invoice(inv_id: int, me: User = Depends(finance_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     inv = _inv_or_404(db, inv_id)
     if inv.status != "draft":
-        raise HTTPException(400, "Yalnızca taslak fatura silinebilir; kesilmiş faturayı iptal edin")
+        raise HTTPException(400, tx("Yalnızca taslak fatura silinebilir; kesilmiş faturayı iptal edin"))
     audit.record(db, me, "invoice", inv.no, "no", inv.no, None, inv.project_id, action="delete")
     db.delete(inv)
     db.commit()
@@ -289,28 +290,28 @@ def list_payments(direction: str | None = None, firm_id: int | None = None, _: U
 @router.post("/payments", status_code=201)
 def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.direction not in commerce.PAY_DIRECTIONS:
-        raise HTTPException(400, "Yön tahsilat veya ödeme olmalı")
+        raise HTTPException(400, tx("Yön tahsilat veya ödeme olmalı"))
     inv = _inv_or_404(db, body.invoice_id) if body.invoice_id is not None else None
     firm_id = body.firm_id
     currency = fx.clean_currency(body.currency or (inv.currency if inv else system.system(db)["commerce"]["currency"]))
     if inv is not None:
         if currency != fx.norm(inv.currency):
-            raise HTTPException(400, f"Faturaya bağlı ödeme faturanın para biriminde ({inv.currency}) girilir")
+            raise HTTPException(400, tx("Faturaya bağlı ödeme faturanın para biriminde ({0}) girilir", inv.currency))
         if inv.status != "issued":
-            raise HTTPException(400, "Ödeme yalnızca kesilmiş faturaya bağlanabilir")
+            raise HTTPException(400, tx("Ödeme yalnızca kesilmiş faturaya bağlanabilir"))
         if inv.kind in commerce.CREDIT_OF:
-            raise HTTPException(400, "Dekonta ödeme bağlanmaz; firmanın cari hesabına ödeme girin")
+            raise HTTPException(400, tx("Dekonta ödeme bağlanmaz; firmanın cari hesabına ödeme girin"))
         want = "in" if inv.kind == "sales" else "out"
         if body.direction != want:
-            raise HTTPException(400, "Satış faturasına tahsilat, alış faturasına ödeme girilir")
+            raise HTTPException(400, tx("Satış faturasına tahsilat, alış faturasına ödeme girilir"))
         rest = commerce.inv_out(inv, commerce.paid_by_invoice(db, [inv.id]).get(inv.id, 0.0), False,
                                 credited=commerce.credited_by_invoice(db, [inv.id]).get(inv.id, 0.0))["remaining"]
         if body.amount > rest + commerce.EPS:
-            raise HTTPException(400, f"Tutar faturanın kalan borcundan ({rest:,.2f}) büyük")
+            raise HTTPException(400, tx("Tutar faturanın kalan borcundan ({0}) büyük", f"{rest:,.2f}"))
         firm_id = inv.firm_id
     firm = commerce.firm_or_404(db, firm_id)
     if firm is None and inv is None:
-        raise HTTPException(400, "Firma veya fatura seçin")
+        raise HTTPException(400, tx("Firma veya fatura seçin"))
     pay_date = body.pay_date or date.today()
     p = Payment(direction=body.direction, firm_id=firm.id if firm else None,
                 firm_name=firm.name if firm else (inv.firm_name if inv else ""), invoice_id=inv.id if inv else None,
@@ -327,7 +328,7 @@ def create_payment(body: PaymentIn, me: User = Depends(finance_edit), db: Sessio
 def delete_payment(pay_id: int, me: User = Depends(finance_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     p = db.get(Payment, pay_id)
     if p is None:
-        raise HTTPException(404, "Ödeme bulunamadı")
+        raise HTTPException(404, tx("Ödeme bulunamadı"))
     audit.record(db, me, "payment", p.id, "amount", p.amount, None, action="delete")
     db.delete(p)
     db.commit()

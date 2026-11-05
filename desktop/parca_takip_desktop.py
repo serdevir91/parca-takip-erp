@@ -56,8 +56,10 @@ else:
     SERVER_SRC = BACKEND_DIR
     ASSETS = BUNDLE
     sys.path.insert(0, str(BACKEND_DIR))
+    sys.path.insert(0, str(BUNDLE))
 
 from app.config import Settings  # noqa: E402  (no settings are read at import time)
+from shell_i18n import st  # noqa: E402
 
 APP_NAME = "LAB ERP"
 VERSION = Settings.model_fields["app_version"].default
@@ -295,7 +297,7 @@ class EmbeddedServer:
         end = time.monotonic() + timeout
         while not self.server.started:
             if not t.is_alive() or time.monotonic() > end:
-                raise RuntimeError(self.error or f"Sunucu {self.port} portunda başlatılamadı")
+                raise RuntimeError(self.error or st("Sunucu {0} portunda başlatılamadı", self.port))
             time.sleep(0.1)
 
     def _run(self) -> None:
@@ -399,12 +401,12 @@ class DesktopApp:
     # server. The checks are plain calls because pywebview reads each method's parameter names.
     def _setup_only(self) -> None:
         if not self._on_setup:
-            raise PermissionError("Bu işlem yalnızca ayarlar ekranından yapılabilir")
+            raise PermissionError(st("Bu işlem yalnızca ayarlar ekranından yapılabilir"))
 
     def _app_only(self) -> None:
         url = None if self._on_setup else self._window.get_current_url()
         if url and self._base and not (url == self._base or url.startswith(self._base + "/")):
-            raise PermissionError("Bu sayfa uygulama işlemlerini kullanamaz")
+            raise PermissionError(st("Bu sayfa uygulama işlemlerini kullanamaz"))
 
     def _context(self) -> ssl.SSLContext | None:
         """How to talk to the connected server with credentials: only the certificate seen and approved."""
@@ -448,9 +450,9 @@ class DesktopApp:
         self._setup_only()
         u = normalize_url(url)
         if not u:
-            return {"ok": False, "error": "Sunucu adresini yazın"}
+            return {"ok": False, "error": st("Sunucu adresini yazın")}
         return {"ok": True, "url": u, "https": u.startswith("https://")} if is_erp(u, 5) else {
-            "ok": False, "error": f"{u} adresinde LAB ERP sunucusu bulunamadı"}
+            "ok": False, "error": st("{0} adresinde LAB ERP sunucusu bulunamadı", u)}
 
     def discover(self) -> list[dict]:
         self._setup_only()
@@ -473,11 +475,11 @@ class DesktopApp:
         from remote_install import RemoteInstall, build_package
 
         if self._remote is not None and not self._remote.done:
-            return {"ok": False, "error": "Kurulum sürüyor"}
+            return {"ok": False, "error": st("Kurulum sürüyor")}
         try:
             job = RemoteInstall(form, ASSETS / "server_install.sh", config_dir() / "known_hosts")
         except ValueError:
-            return {"ok": False, "error": "Port bir sayı olmalı"}
+            return {"ok": False, "error": st("Port bir sayı olmalı")}
         err = job.validate()
         if err:
             return {"ok": False, "error": err}
@@ -497,7 +499,7 @@ class DesktopApp:
         try:
             job = RemoteInstall(form, ASSETS / "server_install.sh", config_dir() / "known_hosts")
         except ValueError:
-            return {"ok": False, "error": "Port bir sayı olmalı", "problem": "form"}
+            return {"ok": False, "error": st("Port bir sayı olmalı"), "problem": "form"}
         return job.check()
 
     def remote_status(self) -> dict:
@@ -517,15 +519,15 @@ class DesktopApp:
             try:
                 port = int(form.get("port") or DEFAULT_PORT)
             except ValueError:
-                return {"ok": False, "error": "Port bir sayı olmalı"}
+                return {"ok": False, "error": st("Port bir sayı olmalı")}
             if not data_dir:
-                return {"ok": False, "error": "Veri klasörünü seçin"}
+                return {"ok": False, "error": st("Veri klasörünü seçin")}
             if not 1 <= port <= 65535:
-                return {"ok": False, "error": "Port 1-65535 arasında olmalı"}
+                return {"ok": False, "error": st("Port 1-65535 arasında olmalı")}
             if not self.data_dir_has_db(data_dir):
                 admin_password = str(form.get("admin_password") or "")
                 if len(admin_password) < 8:
-                    return {"ok": False, "error": "Yönetici şifresi en az 8 karakter olmalı"}
+                    return {"ok": False, "error": st("Yönetici şifresi en az 8 karakter olmalı")}
             cfg.update(mode="server", data_dir=data_dir, port=port)
             cfg.setdefault("jwt_secret", secrets.token_urlsafe(48))
         elif mode == "client":
@@ -537,7 +539,7 @@ class DesktopApp:
             cfg.pop("server_fingerprint", None)
             cfg.pop("server_cert", None)
         else:
-            return {"ok": False, "error": "Çalışma şeklini seçin"}
+            return {"ok": False, "error": st("Çalışma şeklini seçin")}
         self._cfg = cfg
         save_config(cfg)
         if self._server is not None:
@@ -556,10 +558,12 @@ class DesktopApp:
 
         path = str(req.get("path") or "")
         if not path.startswith("/") or not self._base:
-            return {"ok": False, "error": "Geçersiz istek"}
+            return {"ok": False, "error": st("Geçersiz istek")}
         headers = {"User-Agent": f"ParcaTakipERP/{VERSION}"}
         if req.get("token"):
             headers["Authorization"] = f"Bearer {req['token']}"
+        if req.get("lang"):
+            headers["X-Lang"] = str(req["lang"])
         data = None
         if req.get("body") is not None:
             data = json.dumps(req["body"]).encode("utf-8")
@@ -575,9 +579,9 @@ class DesktopApp:
             except (ValueError, AttributeError):
                 pass
             return {"ok": False, "status": e.code,
-                    "error": detail if isinstance(detail, str) and detail else f"İndirme başarısız ({e.code})"}
+                    "error": detail if isinstance(detail, str) and detail else st("İndirme başarısız ({0})", e.code)}
         except OSError as e:
-            return {"ok": False, "error": f"Sunucuya ulaşılamadı: {e}"}
+            return {"ok": False, "error": st("Sunucuya ulaşılamadı: {0}", e)}
         with resp:
             name = safe_name(disposition_name(resp.headers.get("Content-Disposition", "")) or
                              str(req.get("filename") or ""))
@@ -598,7 +602,7 @@ class DesktopApp:
                 with open(target, "wb") as f:
                     shutil.copyfileobj(resp, f, 1024 * 1024)
             except OSError as e:
-                return {"ok": False, "error": f"Dosya yazılamadı: {e}"}
+                return {"ok": False, "error": st("Dosya yazılamadı: {0}", e)}
         if action == "open":
             open_with_default(target)
         return {"ok": True, "path": str(target)}
@@ -646,8 +650,8 @@ class DesktopApp:
         if PIN_TEST is None and seen != self._refused_last:   # one page load can open several connections
             self._refused_last = seen
             threading.Thread(target=self._fail, name="cert-refused", daemon=True, args=(
-                "GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlantı kesildi. Araya biri girmiş olabilir. "
-                "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin.",)).start()
+                st("GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlantı kesildi. Araya biri girmiş olabilir. "
+                   "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin."),)).start()
 
     def _check_pin(self, url: str) -> str | None:
         """Why this https server must not be used, or None. The first contact asks the user."""
@@ -655,20 +659,20 @@ class DesktopApp:
         try:
             der = peer_certificate(url)
         except OSError as e:
-            return f"{url} ile güvenli bağlantı kurulamadı: {e}"
+            return st("{0} ile güvenli bağlantı kurulamadı: {1}", url, e)
         seen = hashlib.sha256(der).hexdigest()
         pin = c.get("server_fingerprint")
         if pin == seen:
             return None
         if pin:
             log.warning("server certificate changed: %s", url)
-            return ("GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlanılmadı. Araya biri girmiş olabilir. "
-                    "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin.")
+            return st("GÜVENLİK UYARISI: Sunucunun sertifikası değişmiş, bağlanılmadı. Araya biri girmiş olabilir. "
+                      "Sertifikayı yönetici değiştirdiyse bu ekrandan sunucuyu yeniden kaydedin.")
         pretty = " ".join(seen[i:i + 4] for i in range(0, len(seen), 4))
         if not self._window.create_confirmation_dialog(
-                "Güvenli bağlantı", f"{url} sunucusuna ilk kez güvenli bağlanılıyor.\n\nParmak izi:\n{pretty}\n\n"
-                                    "Sunucuda Yönetim > HTTPS ekranındaki parmak iziyle aynıysa onaylayın."):
-            return "Sunucunun parmak izi onaylanmadı, bağlanılmadı."
+                st("Güvenli bağlantı"), st("{0} sunucusuna ilk kez güvenli bağlanılıyor.\n\nParmak izi:\n{1}\n\n"
+                                           "Sunucuda Yönetim > HTTPS ekranındaki parmak iziyle aynıysa onaylayın.", url, pretty)):
+            return st("Sunucunun parmak izi onaylanmadı, bağlanılmadı.")
         c.update(server_fingerprint=seen, server_cert=base64.b64encode(der).decode())
         save_config({k: v for k, v in c.items() if not k.startswith("_")})
         return None
@@ -692,17 +696,18 @@ class DesktopApp:
                     log.exception("discovery failed")
                     found = []
                 if len(found) != 1:
-                    return self._fail(f"{url} adresindeki sunucuya bağlanılamadı. Sunucu bilgisayarın açık, "
-                                      "uygulamanın çalışır ve iki cihazın aynı ağda olduğunu kontrol edin."
-                                      + (" Ağda birden fazla sunucu var, birini seçin." if found else ""))
+                    extra = (" " + st("Ağda birden fazla sunucu var, birini seçin.")) if found else ""
+                    return self._fail(st("{0} adresindeki sunucuya bağlanılamadı. Sunucu bilgisayarın açık, "
+                                         "uygulamanın çalışır ve iki cihazın aynı ağda olduğunu kontrol edin.", url)
+                                      + extra)
                 # A discovery answer proves nothing, anyone on the LAN can send one. Without a matching pin
                 # (checked for real by _check_pin below) the user decides.
                 new = found[0]["url"]
                 known = c.get("server_fingerprint")
                 if not (known and found[0].get("fingerprint") == known) and not self._window.create_confirmation_dialog(
-                        "Sunucu adresi", f"{url} yanıt vermiyor. Ağda {new} adresinde bir sunucu bulundu.\n\n"
-                                         "Bu sizin sunucunuzsa ve adresi değiştiyse onaylayın."):
-                    return self._fail(f"{url} adresindeki sunucuya bağlanılamadı.")
+                        st("Sunucu adresi"), st("{0} yanıt vermiyor. Ağda {1} adresinde bir sunucu bulundu.\n\n"
+                                                "Bu sizin sunucunuzsa ve adresi değiştiyse onaylayın.", url, new)):
+                    return self._fail(st("{0} adresindeki sunucuya bağlanılamadı.", url))
                 log.info("server moved: %s -> %s", url, new)
                 url = c["server_url"] = new
                 save_config({k: v for k, v in c.items() if not k.startswith("_")})
@@ -728,14 +733,14 @@ class DesktopApp:
                     self._base = local
                     self._open_server(local + "/")
                     return None
-                return self._fail(f"{port} numaralı port başka bir program tarafından kullanılıyor. "
-                                  "Ayarlardan başka bir port seçin.")
+                return self._fail(st("{0} numaralı port başka bir program tarafından kullanılıyor. "
+                                     "Ayarlardan başka bir port seçin.", port))
             try:
                 srv = EmbeddedServer(Path(c["data_dir"]), port, c["jwt_secret"], admin_password)
                 srv.start()
             except Exception as e:  # noqa: BLE001 - shown on the setup page
                 log.exception("server start failed")
-                return self._fail(f"Sunucu başlatılamadı: {e}")
+                return self._fail(st("Sunucu başlatılamadı: {0}", e))
             self._server = srv
             self._base = srv.local_url
         self._start_background()
@@ -747,12 +752,12 @@ class DesktopApp:
     # --- background mode: the app outlives the window until the tray's quit item. A server keeps serving,
     # and both server and client keep delivering notifications from the hidden window. ---
     def _tray_title(self) -> str:
-        return f"{APP_NAME} sunucusu çalışıyor" if self._server else f"{APP_NAME} çalışıyor"
+        return st("{0} sunucusu çalışıyor", APP_NAME) if self._server else st("{0} çalışıyor", APP_NAME)
 
     def _tray_address(self, _item=None) -> str:
         if not self._server:
             return ""
-        return "Adres: " + (", ".join(f"{ip}:{self._server.port}" for ip in lan_addresses()) or "ağ bağlantısı yok")
+        return st("Adres: {0}", ", ".join(f"{ip}:{self._server.port}" for ip in lan_addresses()) or st("ağ bağlantısı yok"))
 
     def _start_background(self) -> None:
         if not IS_WIN:
@@ -766,10 +771,10 @@ class DesktopApp:
             from PIL import Image
 
             self._tray = pystray.Icon("LabERP", Image.open(ASSETS / "icon.ico"), self._tray_title(), pystray.Menu(
-                pystray.MenuItem(f"{APP_NAME} penceresini aç", lambda icon, item: self._open_from_tray(), default=True),
+                pystray.MenuItem(st("{0} penceresini aç", APP_NAME), lambda icon, item: self._open_from_tray(), default=True),
                 pystray.MenuItem(self._tray_address, None, enabled=False, visible=lambda item: self._server is not None),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem(lambda item: "Sunucuyu durdur ve çık" if self._server else "Çık",
+                pystray.MenuItem(lambda item: st("Sunucuyu durdur ve çık") if self._server else st("Çık"),
                                  lambda icon, item: self._tray_quit())))
             self._tray.run_detached()
             self._window.native.FormClosing += self._on_form_closing
@@ -796,9 +801,9 @@ class DesktopApp:
         self._window.hide()
         if not self._hint_shown:
             self._hint_shown = True
-            what = "Sunucu" if self._server else "Uygulama"
-            self._tray.notify(f"{what} arka planda çalışmaya devam ediyor, bildirimler gelir. Kapatmak için saatin "
-                              f"yanındaki gizli simgelerden {APP_NAME} simgesine sağ tıklayın.", APP_NAME)
+            what = st("Sunucu") if self._server else st("Uygulama")
+            self._tray.notify(st("{0} arka planda çalışmaya devam ediyor, bildirimler gelir. Kapatmak için saatin "
+                                 "yanındaki gizli simgelerden {1} simgesine sağ tıklayın.", what, APP_NAME), APP_NAME)
 
     def _show_window(self) -> None:
         self._window.show()
@@ -818,7 +823,7 @@ class DesktopApp:
         if self._server is None:
             self._leave()
             return
-        text = "Sunucu durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. Kapatılsın mı?"
+        text = st("Sunucu durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. Kapatılsın mı?")
         # OK/Cancel, warning icon, always on top: the window may be hidden, so it cannot own this dialog
         if ctypes.windll.user32.MessageBoxW(None, text, APP_NAME, 0x1 | 0x30 | 0x40000 | 0x10000) == 1:
             self._leave()
@@ -972,7 +977,7 @@ class DesktopApp:
         result: dict = {"version": VERSION}
         try:
             result["tray"] = until(lambda: self._tray is not None and self._tray.visible, 90)
-            result["notified"] = self.notify(APP_NAME, "Bildirim testi", "/chat")["ok"]
+            result["notified"] = self.notify(APP_NAME, st("Bildirim testi"), "/chat")["ok"]
             hwnd = ctypes.c_void_p(int(self._window.native.Handle.ToInt64()))
             user32 = ctypes.windll.user32
             user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
@@ -1011,22 +1016,22 @@ class DesktopApp:
         except (OSError, ValueError, KeyError) as e:
             log.info("update check failed: %s", e)
             if not silent:
-                self._alert(f"Güncelleme sunucusuna ulaşılamadı.\n{e}")
+                self._alert(st("Güncelleme sunucusuna ulaşılamadı.\n{0}", e))
             return
         if rel is None:
             if not silent:
-                self._alert(f"{APP_NAME} güncel (sürüm {VERSION}).")
+                self._alert(st("{0} güncel (sürüm {1}).", APP_NAME, VERSION))
             return
-        msg = f"Yeni sürüm {rel['version']} hazır (kullandığınız sürüm {VERSION})."
+        msg = st("Yeni sürüm {0} hazır (kullandığınız sürüm {1}).", rel['version'], VERSION)
         if IS_WIN and rel["asset"]:
-            if self._window.create_confirmation_dialog("Güncelleme", msg + "\n\nŞimdi indirip kurulsun mu?"):
+            if self._window.create_confirmation_dialog(st("Güncelleme"), msg + "\n\n" + st("Şimdi indirip kurulsun mu?")):
                 self._install_update(rel["asset"], rel["signature"])
-        elif self._window.create_confirmation_dialog("Güncelleme", msg + "\n\nİndirme sayfası açılsın mı?"):
+        elif self._window.create_confirmation_dialog(st("Güncelleme"), msg + "\n\n" + st("İndirme sayfası açılsın mı?")):
             webbrowser.open(rel["url"])
 
     def _install_update(self, url: str, signature_url: str | None) -> None:
         if not signature_url:
-            self._alert("Bu güncellemenin imzası henüz yayımlanmamış. Birazdan yeniden deneyin.")
+            self._alert(st("Bu güncellemenin imzası henüz yayımlanmamış. Birazdan yeniden deneyin."))
             return
         target = Path(tempfile.gettempdir()) / safe_name(url.rsplit("/", 1)[-1], "LabERP-Setup.exe")
         try:
@@ -1037,12 +1042,12 @@ class DesktopApp:
             with urllib.request.urlopen(urllib.request.Request(signature_url, headers=headers), timeout=30) as r:
                 signature = r.read(1024)
         except OSError as e:
-            self._alert(f"Güncelleme indirilemedi.\n{e}")
+            self._alert(st("Güncelleme indirilemedi.\n{0}", e))
             return
         if not verify_update(target, signature):
             target.unlink(missing_ok=True)
             log.error("update signature check failed: %s", url)
-            self._alert("Güncelleme dosyasının imzası doğrulanamadı, dosya silindi ve kurulmadı.")
+            self._alert(st("Güncelleme dosyasının imzası doğrulanamadı, dosya silindi ve kurulmadı."))
             return
         # The installer closes this app, updates it and starts it again (postinstall entry in installer.iss)
         subprocess.Popen([str(target), "/SILENT", "/NORESTART"], close_fds=True)
@@ -1068,7 +1073,7 @@ class DesktopApp:
             self.show_settings()
         elif name == "open_data":
             if self._server is None:
-                return {"ok": False, "error": "Veri klasörü yalnızca sunucu modunda bu bilgisayardadır."}
+                return {"ok": False, "error": st("Veri klasörü yalnızca sunucu modunda bu bilgisayardadır.")}
             open_folder(self._server.data_dir)
         elif name == "restart":
             threading.Timer(0.2, self._restart).start()
@@ -1080,7 +1085,7 @@ class DesktopApp:
             else:
                 threading.Timer(0.1, self._window.destroy).start()
         else:
-            return {"ok": False, "error": f"Bilinmeyen işlem: {name}"}
+            return {"ok": False, "error": st("Bilinmeyen işlem: {0}", name)}
         return {"ok": True}
 
     def notify(self, title: str, body: str, link: str = "") -> dict:
@@ -1149,8 +1154,8 @@ class DesktopApp:
             width=1440, height=900, min_size=(960, 600), maximized=True, text_select=True,
             confirm_close=server_mode and not IS_WIN, background_color="#0f172a",
             localization={"global.quitConfirmation":
-                          "Uygulama kapanınca sunucu da durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. "
-                          "Kapatılsın mı?"} if server_mode and not IS_WIN else None)
+                          st("Uygulama kapanınca sunucu da durur ve ağdaki diğer kullanıcıların bağlantısı kesilir. "
+                             "Kapatılsın mı?")} if server_mode and not IS_WIN else None)
         self._window.events.closed += lambda: self._server and self._server.stop()
         icon = ASSETS / "icon.ico"
         if TRAY_TEST is not None:

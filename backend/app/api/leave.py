@@ -22,6 +22,7 @@ from ..services import audit
 from ..services.system import system
 from .deps import any_user, get_db
 from .hr import _active_card, _lock_card, _my_card
+from app.core.i18n import tx
 
 att_view, att_edit = require("attendance", "view"), require("attendance", "edit")
 
@@ -56,7 +57,7 @@ class NoteIn(BaseModel):
 
 def attendance_on() -> None:
     if "attendance" in get_settings().disabled_modules:
-        raise HTTPException(403, "Mesai takibi kapalı")
+        raise HTTPException(403, tx("Mesai takibi kapalı"))
 
 
 def _year_days(r: LeaveRequest, year: int, off: dict[date, float]) -> float:
@@ -87,17 +88,17 @@ def balance(db: Session, e: Employee, year: int) -> dict[str, Any]:
 
 def _check_range(db: Session, e: Employee, body: LeaveIn) -> int:
     if body.end_date < body.start_date:
-        raise HTTPException(400, "Bitiş tarihi başlangıçtan önce olamaz")
+        raise HTTPException(400, tx("Bitiş tarihi başlangıçtan önce olamaz"))
     if (body.end_date - body.start_date).days > MAX_SPAN_DAYS:
-        raise HTTPException(400, "Bir izin kaydı bir yıldan uzun olamaz; bölerek girin")
+        raise HTTPException(400, tx("Bir izin kaydı bir yıldan uzun olamaz; bölerek girin"))
     days = working_days(body.start_date, body.end_date, off_days(db, body.start_date, body.end_date))
     if days == 0:
-        raise HTTPException(400, "Seçilen aralıkta iş günü yok")
+        raise HTTPException(400, tx("Seçilen aralıkta iş günü yok"))
     clash = db.scalar(select(LeaveRequest).where(LeaveRequest.employee_id == e.id, LeaveRequest.status.in_(LIVE),
                                                  LeaveRequest.start_date <= body.end_date,
                                                  LeaveRequest.end_date >= body.start_date))
     if clash is not None:
-        raise HTTPException(409, f"{clash.start_date:%d.%m.%Y} - {clash.end_date:%d.%m.%Y} izni ile çakışıyor")
+        raise HTTPException(409, tx("{0} - {1} izni ile çakışıyor", f"{clash.start_date:%d.%m.%Y}", f"{clash.end_date:%d.%m.%Y}"))
     return days
 
 
@@ -110,7 +111,7 @@ def _check_balance(db: Session, e: Employee, r: LeaveRequest) -> None:
         free = b["entitled"] - b["used"]
         need = _year_days(r, year, off_days(db, date(year, 1, 1), date(year, 12, 31)))
         if need > free:
-            raise HTTPException(409, f"{year} yıllık izin bakiyesi yetersiz: kalan {num.text(free)} gün, istenen {num.text(need)} gün")
+            raise HTTPException(409, tx("{0} yıllık izin bakiyesi yetersiz: kalan {1} gün, istenen {2} gün", year, num.text(free), num.text(need)))
 
 
 def _out(r: LeaveRequest, name: str = "") -> dict[str, Any]:
@@ -142,7 +143,7 @@ def _locked(db: Session, leave_id: int) -> tuple[Employee, LeaveRequest]:
     """The request as it stands once the card is locked: a decision made a moment ago is seen, not overwritten."""
     emp_id = db.scalar(select(LeaveRequest.employee_id).where(LeaveRequest.id == leave_id))
     if emp_id is None:
-        raise HTTPException(404, "İzin kaydı bulunamadı")
+        raise HTTPException(404, tx("İzin kaydı bulunamadı"))
     e = _lock_card(db, emp_id)
     return e, db.get(LeaveRequest, leave_id, populate_existing=True)
 
@@ -181,7 +182,7 @@ def my_leave(year: int | None = None, me: User = Depends(any_user), db: Session 
     attendance_on()
     year = year or date.today().year
     if not 2000 <= year <= 2100:
-        raise HTTPException(400, "Geçersiz yıl")
+        raise HTTPException(400, tx("Geçersiz yıl"))
     e = _my_card(db, me)
     if e is None:
         return {"employee": None, "balance": None, "rows": []}
@@ -206,9 +207,9 @@ def cancel_my_leave(leave_id: int, me: User = Depends(any_user), db: Session = D
     e = _active_card(db, me)
     r = db.get(LeaveRequest, leave_id, populate_existing=True)
     if r is None or r.employee_id != e.id:
-        raise HTTPException(404, "İzin kaydı bulunamadı")
+        raise HTTPException(404, tx("İzin kaydı bulunamadı"))
     if r.status != "pending":
-        raise HTTPException(409, "Yalnızca bekleyen talep iptal edilebilir")
+        raise HTTPException(409, tx("Yalnızca bekleyen talep iptal edilebilir"))
     old, r.status = r.status, "cancelled"
     audit.record(db, me, "leave", r.id, "status", old, r.status)
     db.commit()
@@ -254,7 +255,7 @@ def decide_leave(leave_id: int, body: DecideIn, me: User = Depends(att_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     e, r = _locked(db, leave_id)
     if r.status != "pending":
-        raise HTTPException(409, "Bu talep zaten sonuçlanmış")
+        raise HTTPException(409, tx("Bu talep zaten sonuçlanmış"))
     if body.approve:
         _check_balance(db, e, r)
     _close(db, me, r, "approved" if body.approve else "rejected", body.note)
@@ -267,7 +268,7 @@ def cancel_leave(leave_id: int, body: NoteIn, me: User = Depends(att_edit),
                  db: Session = Depends(get_db)) -> dict[str, Any]:
     e, r = _locked(db, leave_id)
     if r.status != "approved":
-        raise HTTPException(409, "Yalnızca onaylı izin iptal edilebilir")
+        raise HTTPException(409, tx("Yalnızca onaylı izin iptal edilebilir"))
     _close(db, me, r, "cancelled", body.note or r.decision_note)
     db.commit()
     return _out(r, e.name)

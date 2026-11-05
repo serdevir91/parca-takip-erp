@@ -18,6 +18,7 @@ from ..core import numbers as num
 from ..config import Settings, get_settings
 from ..permissions import MODULE_KEYS
 from .settings import get_setting
+from app.core.i18n import tx
 
 ALWAYS_ON = ("admin",)                         # switching this off would lock the settings screen itself
 LOGO_PREFIX = "data:image/png;base64,"
@@ -97,38 +98,41 @@ def for_user(db: Session) -> dict[str, Any]:
 
 # ---------- validation ----------
 def _text(v: Any, label: str, limit: int, required: bool = False) -> str:
+    label = tx(label)
     if not isinstance(v, str):
-        raise HTTPException(400, f"{label} metin olmalı")
+        raise HTTPException(400, tx("{0} metin olmalı", label))
     out = v.strip()
     if len(out) > limit:
-        raise HTTPException(400, f"{label} en fazla {limit} karakter olabilir")
+        raise HTTPException(400, tx("{0} en fazla {1} karakter olabilir", label, limit))
     if required and not out:
-        raise HTTPException(400, f"{label} boş olamaz")
+        raise HTTPException(400, tx("{0} boş olamaz", label))
     return out
 
 
 def _number(v: Any, label: str, low: float, high: float, whole: bool = True) -> float | int:
+    label = tx(label)
     try:
         n = float(v)
     except (TypeError, ValueError) as e:
-        raise HTTPException(400, f"{label} sayı olmalı") from e
+        raise HTTPException(400, tx("{0} sayı olmalı", label)) from e
     if not low <= n <= high or (whole and n != int(n)):
         kind = "tam sayı" if whole else "sayı"
-        raise HTTPException(400, f"{label} {num.text(low)} ile {num.text(high)} arasında bir {kind} olmalı")
+        raise HTTPException(400, tx("{0} {1} ile {2} arasında bir {3} olmalı", label, num.text(low), num.text(high), kind))
     return int(n) if whole else n
 
 
 def _doc_prefix(v: Any, label: str) -> str:
+    label = tx(label)
     out = _text(v, label, 8, required=True)
     if not re.fullmatch(r"[A-Za-z0-9]+", out):
-        raise HTTPException(400, f"{label} yalnızca harf ve rakamdan oluşmalı")
+        raise HTTPException(400, tx("{0} yalnızca harf ve rakamdan oluşmalı", label))
     return out
 
 
 def _company(v: dict[str, Any]) -> dict[str, Any]:
     logo = v["logo"]
     if logo and (not isinstance(logo, str) or not logo.startswith(LOGO_PREFIX) or len(logo) > LOGO_MAX):
-        raise HTTPException(400, "Logo en fazla 150 KB boyutunda bir PNG olmalı")
+        raise HTTPException(400, tx("Logo en fazla 150 KB boyutunda bir PNG olmalı"))
     return {"app_name": _text(v["app_name"], "Uygulama adı", 40, required=True), "logo": logo,
             "name": _text(v["name"], "Şirket adı", 160), "address": _text(v["address"], "Adres", 300),
             "phone": _text(v["phone"], "Telefon", 40), "email": _text(v["email"], "E-posta", 120),
@@ -138,20 +142,20 @@ def _company(v: dict[str, Any]) -> dict[str, Any]:
 
 def _basis(v: Any) -> str:
     if v not in ("today", "doc"):
-        raise HTTPException(400, "Kur esası bugünkü kur veya belge kuru olmalı")
+        raise HTTPException(400, tx("Kur esası bugünkü kur veya belge kuru olmalı"))
     return v
 
 
 def _commerce(v: dict[str, Any]) -> dict[str, Any]:
     cur = _text(v["currency"], "Para birimi", 3, required=True).upper()
     if not re.fullmatch(r"[A-Z]{3}", cur):
-        raise HTTPException(400, "Para birimi TRY, EUR, USD gibi üç harfli kod olmalı")
+        raise HTTPException(400, tx("Para birimi TRY, EUR, USD gibi üç harfli kod olmalı"))
     raw = v["pay_methods"]
     if not isinstance(raw, list):
-        raise HTTPException(400, "Ödeme yöntemleri bir liste olmalı")
+        raise HTTPException(400, tx("Ödeme yöntemleri bir liste olmalı"))
     methods = list(dict.fromkeys(m for m in (_text(x, "Ödeme yöntemi", 30) for x in raw) if m))
     if not methods:
-        raise HTTPException(400, "En az bir ödeme yöntemi gerekli")
+        raise HTTPException(400, tx("En az bir ödeme yöntemi gerekli"))
     return {"currency": cur, "vat": _number(v["vat"], "KDV oranı", 0, 100, whole=False),
             "payment_days": _number(v["payment_days"], "Vade", 0, 365),
             "quote_days": _number(v["quote_days"], "Teklif geçerliliği", 0, 365), "pay_methods": methods,
@@ -181,7 +185,7 @@ def _security(v: dict[str, Any]) -> dict[str, Any]:
 def _files(v: dict[str, Any]) -> dict[str, Any]:
     at = _text(v["backup_time"], "Yedek saati", 5, required=True)
     if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", at):
-        raise HTTPException(400, "Yedek saati SS:DD biçiminde olmalı (örn. 02:00)")
+        raise HTTPException(400, tx("Yedek saati SS:DD biçiminde olmalı (örn. 02:00)"))
     return {"upload_mb": _number(v["upload_mb"], "Yükleme sınırı", 1, 10240),
             "keep_days": _number(v["keep_days"], "Yedek saklama süresi", 1, 3650), "backup_time": at}
 
@@ -189,7 +193,7 @@ def _files(v: dict[str, Any]) -> dict[str, Any]:
 def _modules(v: dict[str, Any]) -> dict[str, Any]:
     off = v["off"]
     if not isinstance(off, list) or any(k not in MODULE_KEYS or k in ALWAYS_ON for k in off):
-        raise HTTPException(400, "Kapatılamayan veya bilinmeyen modül")
+        raise HTTPException(400, tx("Kapatılamayan veya bilinmeyen modül"))
     return {"off": [k for k in MODULE_KEYS if k in off]}
 
 
@@ -200,12 +204,12 @@ _SECTIONS = {"company": _company, "commerce": _commerce, "production": _producti
 def clean(value: Any) -> dict[str, Any]:
     """Validate a full or partial settings object; only values that differ from the defaults are stored."""
     if not isinstance(value, dict):
-        raise HTTPException(400, "Sistem ayarları bir nesne olmalı")
+        raise HTTPException(400, tx("Sistem ayarları bir nesne olmalı"))
     out: dict[str, Any] = {}
     for sec, base in defaults().items():
         given = value.get(sec) or {}
         if not isinstance(given, dict):
-            raise HTTPException(400, "Sistem ayarları bir nesne olmalı")
+            raise HTTPException(400, tx("Sistem ayarları bir nesne olmalı"))
         checked = _SECTIONS[sec]({**base, **given})
         changed = {k: x for k, x in checked.items() if x != base[k]}
         if changed:

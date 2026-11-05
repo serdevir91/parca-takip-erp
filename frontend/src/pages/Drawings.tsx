@@ -10,6 +10,7 @@ import { api, ApiError, APP_HEADERS, blobUrl, desktopFile, download, upload } fr
 import { desktop } from "../api/desktop";
 import { useAuth } from "../api/auth";
 import { LayoutGrid, List } from "lucide-react";
+import { LOCALE, tx } from "../api/i18n";
 
 // ---------- API types (backend/app/services/drawings.py drawing_out / project_listing / _result) ----------
 type Suggestion = { part_no: string; score: number };
@@ -50,25 +51,25 @@ const IMAGE_EXTS_OR_PDF = new Set(["pdf", "png", "jpg", "jpeg"]);
 const dwItem = (d: DrawingOut): ViewItem => ({
   key: d.id, name: d.filename, path: `/drawings/${d.id}/file`, thumb: d.has_thumb ? `/drawings/${d.id}/thumb` : undefined,
   kind: d.ext === "pdf" ? "pdf" : "image",
-  caption: [d.part_no, d.rev ? `Rev ${d.rev}` : ""].filter(Boolean).join(" · "),
+  caption: [d.part_no, d.rev ? tx("Rev {0}", d.rev) : ""].filter(Boolean).join(" · "),
 });
-const VIA_LABELS: Record<string, string> = { exact: "Otomatik", normalized: "Otomatik (normalize)", alias: "Alias", manual: "Elle" };
+const VIA_LABELS: Record<string, string> = { exact: tx("Otomatik"), normalized: tx("Otomatik (normalize)"), alias: tx("Alias"), manual: tx("Elle") };
 const STATUS_LABELS: Record<UploadResult["status"], string> = {
-  created: "Yeni", new_version: "Yeni sürüm", unchanged: "Değişmedi", rejected: "Reddedildi",
+  created: tx("Yeni"), new_version: tx("Yeni sürüm"), unchanged: tx("Değişmedi"), rejected: tx("Reddedildi"),
 };
 const ZIP_MODES = [
-  { v: "pdf", l: "Sadece PDF" }, { v: "pdf_dwg", l: "PDF + DWG" }, { v: "all", l: "Tüm dosyalar" },
+  { v: "pdf", l: tx("Sadece PDF") }, { v: "pdf_dwg", l: tx("PDF + DWG") }, { v: "all", l: tx("Tüm dosyalar") },
 ];
 const UPLOAD_CONCURRENCY = 3;
 const THUMB_CONCURRENCY = 4;
 const ROW_H = 44;
 
-const fmtDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "");
+const fmtDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" }) : "");
 function fmtSize(n: number | null | undefined): string {
   if (n == null) return "";
-  if (n < 1024) return `${n.toLocaleString("tr-TR")} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} KB`;
-  return `${(n / 1024 / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;
+  if (n < 1024) return `${n.toLocaleString(LOCALE)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} KB`;
+  return `${(n / 1024 / 1024).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} MB`;
 }
 const viaLabel = (v: string | null | undefined) => (v ? VIA_LABELS[v] ?? v : "");
 
@@ -78,7 +79,7 @@ async function postDownload(path: string, body: unknown, fallbackName: string): 
   const headers: Record<string, string> = { "Content-Type": "application/json", ...APP_HEADERS };
   const res = await fetch(`/api${path}`, { method: "POST", headers, body: JSON.stringify(body) });
   if (!res.ok) {
-    let msg = `İndirme başarısız (${res.status})`;
+    let msg = tx("İndirme başarısız ({0})", res.status);
     try {
       const j = await res.json();
       if (j && typeof j.detail === "string") msg = j.detail;
@@ -157,7 +158,7 @@ function Thumb({ d, cache, onOpen }: { d: DrawingOut; cache: ThumbCache; onOpen:
   if (!url) return <span className="dw-thumb dw-thumb-empty">{url === null ? "—" : "…"}</span>;
   return (
     <img className="dw-thumb" src={url} alt="" loading="lazy"
-      onClick={(e) => { e.stopPropagation(); onOpen(); }} title="Önizleme – açmak için tıklayın" />
+      onClick={(e) => { e.stopPropagation(); onOpen(); }} title={tx("Önizleme – açmak için tıklayın")} />
   );
 }
 
@@ -257,7 +258,7 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
     };
     await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, items.length) }, worker));
     if (mounted.current) setBusy(false);
-    toast(`${items.length.toLocaleString("tr-TR")} dosyanın yüklemesi tamamlandı`);
+    toast(tx("{0} dosyanın yüklemesi tamamlandı", items.length.toLocaleString(LOCALE)));
     onFinished();
   }, [pid, onFinished, toast]);
 
@@ -294,11 +295,11 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
           void filesFromDrop(e.dataTransfer).then(stage).catch((er) => toast(errText(er), true));
         }}
       >
-        <div><b>Teknik resimleri buraya sürükleyip bırakın</b></div>
-        <div className="muted">PDF, DWG, DXF, SLDDRW, SLDPRT, SLDASM, STEP/STP, PNG/JPG veya .zip · klasör de bırakılabilir</div>
+        <div><b>{tx("Teknik resimleri buraya sürükleyip bırakın")}</b></div>
+        <div className="muted">{tx("PDF, DWG, DXF, SLDDRW, SLDPRT, SLDASM, STEP/STP, PNG/JPG veya .zip · klasör de bırakılabilir")}</div>
         <div className="row" style={{ justifyContent: "center", marginTop: 8 }}>
-          <button className="btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>Dosya seç</button>
-          <button className="btn" disabled={busy} onClick={() => dirRef.current?.click()}>Klasör seç</button>
+          <button className="btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>{tx("Dosya seç")}</button>
+          <button className="btn" disabled={busy} onClick={() => dirRef.current?.click()}>{tx("Klasör seç")}</button>
         </div>
         <input ref={fileRef} type="file" multiple hidden
           accept=".pdf,.dwg,.dxf,.slddrw,.sldprt,.sldasm,.step,.stp,.png,.jpg,.jpeg,.zip"
@@ -314,13 +315,13 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
               <input type="checkbox" checked={pickedCount === staged.length}
                 ref={(el) => { if (el) el.indeterminate = pickedCount > 0 && pickedCount < staged.length; }}
                 onChange={() => setSkipped(pickedCount === staged.length ? new Set(staged) : new Set())} />
-              Tümünü seç <span className="muted">({staged.length.toLocaleString("tr-TR")})</span>
+              {tx("Tümünü seç")}{" "}<span className="muted">({staged.length.toLocaleString(LOCALE)})</span>
             </label>
             <span className="spacer" style={{ flex: 1 }} />
-            <button className="btn small" onClick={clearStaged}>Vazgeç</button>
+            <button className="btn small" onClick={clearStaged}>{tx("Vazgeç")}</button>
             <button className="btn small primary" disabled={!pickedCount}
               onClick={() => { const list = staged.filter((f) => !skipped.has(f)); clearStaged(); void start(list); }}>
-              Seçilenleri yükle ({pickedCount.toLocaleString("tr-TR")})
+              {tx("Seçilenleri yükle ({0})", pickedCount.toLocaleString(LOCALE))}
             </button>
           </div>
           <div className="dw-queue">
@@ -339,10 +340,10 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
       {queue.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <div className="row">
-            <b>{busy ? "Yükleniyor" : "Yükleme tamamlandı"}</b>
-            <span className="muted">{done.toLocaleString("tr-TR")} / {queue.length.toLocaleString("tr-TR")} dosya</span>
+            <b>{busy ? tx("Yükleniyor") : tx("Yükleme tamamlandı")}</b>
+            <span className="muted">{tx("{0} / {1} dosya", done.toLocaleString(LOCALE), queue.length.toLocaleString(LOCALE))}</span>
             <div className="progress" style={{ flex: 1, minWidth: 120 }}><div style={{ width: `${totalPct}%` }} /></div>
-            {!busy && <button className="btn small" onClick={() => setQueue([])}>Temizle</button>}
+            {!busy && <button className="btn small" onClick={() => setQueue([])}>{tx("Temizle")}</button>}
           </div>
           <div className="dw-queue">
             {queue.map((q) => (
@@ -350,9 +351,9 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
                 <span className="dw-qname" title={q.file.name}>{q.file.name}</span>
                 <span className="muted">{fmtSize(q.file.size)}</span>
                 {q.state === "error" ? (
-                  <span className="badge err" title={q.error}>Hata: {q.error}</span>
+                  <span className="badge err" title={q.error}>{tx("Hata: {0}", q.error)}</span>
                 ) : q.state === "waiting" ? (
-                  <span className="muted">Sırada</span>
+                  <span className="muted">{tx("Sırada")}</span>
                 ) : (
                   <div className="progress" style={{ width: 120 }}><div style={{ width: `${q.pct}%` }} /></div>
                 )}
@@ -362,17 +363,17 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
           {results.length > 0 && (
             <>
               <div className="row" style={{ marginTop: 10 }}>
-                <span className="badge">Kaydedilen: {sum.stored.toLocaleString("tr-TR")}</span>
-                <span className="badge">Değişmeyen: {sum.unchanged.toLocaleString("tr-TR")}</span>
-                <span className="badge new">Eşleşen: {sum.matched.toLocaleString("tr-TR")}</span>
-                <span className={"badge" + (sum.unmatched ? " warn" : "")}>Eşleşmeyen: {sum.unmatched.toLocaleString("tr-TR")}</span>
-                <span className={"badge" + (sum.rev ? " warn" : "")}>Revizyon uyumsuz: {sum.rev.toLocaleString("tr-TR")}</span>
-                <span className={"badge" + (sum.rejected ? " err" : "")}>Reddedilen: {sum.rejected.toLocaleString("tr-TR")}</span>
+                <span className="badge">{tx("Kaydedilen: {0}", sum.stored.toLocaleString(LOCALE))}</span>
+                <span className="badge">{tx("Değişmeyen: {0}", sum.unchanged.toLocaleString(LOCALE))}</span>
+                <span className="badge new">{tx("Eşleşen: {0}", sum.matched.toLocaleString(LOCALE))}</span>
+                <span className={"badge" + (sum.unmatched ? " warn" : "")}>{tx("Eşleşmeyen: {0}", sum.unmatched.toLocaleString(LOCALE))}</span>
+                <span className={"badge" + (sum.rev ? " warn" : "")}>{tx("Revizyon uyumsuz: {0}", sum.rev.toLocaleString(LOCALE))}</span>
+                <span className={"badge" + (sum.rejected ? " err" : "")}>{tx("Reddedilen: {0}", sum.rejected.toLocaleString(LOCALE))}</span>
               </div>
               <div className="dw-results">
                 <table className="simple">
                   <thead>
-                    <tr><th>Dosya</th><th>Durum</th><th>Parça No</th><th>Rev (resim / BOM)</th><th>Not</th></tr>
+                    <tr><th>{tx("Dosya")}</th><th>{tx("Durum")}</th><th>{tx("Parça No")}</th><th>{tx("Rev (resim / BOM)")}</th><th>{tx("Not")}</th></tr>
                   </thead>
                   <tbody>
                     {shownResults.map((r, i) => (
@@ -381,13 +382,13 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
                         <td>
                           <span className={"badge" + (r.status === "rejected" ? " err" : r.status === "unchanged" ? "" : " new")}>{STATUS_LABELS[r.status] ?? r.status}</span>
                         </td>
-                        <td>{r.part_no ?? (r.status !== "rejected" && <span className="badge warn">Eşleşmedi</span>)}</td>
+                        <td>{r.part_no ?? (r.status !== "rejected" && <span className="badge warn">{tx("Eşleşmedi")}</span>)}</td>
                         <td>
                           {r.status !== "rejected" && <>{r.rev || "—"} / {r.bom_rev || "—"}</>}
-                          {r.rev_mismatch && <span className="badge warn" style={{ marginLeft: 6 }}>Uyumsuz</span>}
+                          {r.rev_mismatch && <span className="badge warn" style={{ marginLeft: 6 }}>{tx("Uyumsuz")}</span>}
                         </td>
                         <td className="muted">
-                          {r.error || (r.suggestions?.length ? `Öneri: ${r.suggestions.slice(0, 3).map((s) => s.part_no).join(", ")}` : viaLabel(r.via))}
+                          {r.error || (r.suggestions?.length ? tx("Öneri: {0}", r.suggestions.slice(0, 3).map((s) => s.part_no).join(", ")) : viaLabel(r.via))}
                         </td>
                       </tr>
                     ))}
@@ -395,7 +396,7 @@ function UploadPanel({ pid, onFinished }: { pid: number; onFinished: () => void 
                 </table>
                 {results.length > shownResults.length && (
                   <div className="muted" style={{ padding: 6 }}>
-                    İlk {shownResults.length.toLocaleString("tr-TR")} sonuç gösteriliyor (toplam {results.length.toLocaleString("tr-TR")}).
+                    {tx("İlk {0} sonuç gösteriliyor (toplam {1}).", shownResults.length.toLocaleString(LOCALE), results.length.toLocaleString(LOCALE))}
                   </div>
                 )}
               </div>
@@ -424,7 +425,7 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
     mutationFn: (part_no: string | null) => api.post<DrawingDetail>(`/drawings/${d0.id}/assign`, { part_no }),
     onSuccess: (r) => {
       qc.setQueryData(["drawing", d0.id], r);
-      toast(r.part_no ? `Resim ${r.part_no} parçasına eşleştirildi` : "Eşleşme kaldırıldı");
+      toast(r.part_no ? tx("Resim {0} parçasına eşleştirildi", r.part_no) : tx("Eşleşme kaldırıldı"));
       onChanged();
     },
     onError: (e) => toast(errText(e), true),
@@ -432,7 +433,7 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
   const delVersion = useMutation({
     mutationFn: (vid: number) => api.del<{ deleted: boolean; drawing: DrawingDetail | null }>(`/drawings/versions/${vid}`),
     onSuccess: (r) => {
-      toast("Sürüm silindi");
+      toast(tx("Sürüm silindi"));
       onChanged();
       if (r.drawing) qc.setQueryData(["drawing", d0.id], r.drawing);
       else onClose();
@@ -441,7 +442,7 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
   });
   const delDrawing = useMutation({
     mutationFn: () => api.del(`/drawings/${d0.id}`),
-    onSuccess: () => { toast("Resim silindi"); onChanged(); onClose(); },
+    onSuccess: () => { toast(tx("Resim silindi")); onChanged(); onClose(); },
     onError: (e) => toast(errText(e), true),
   });
   const busy = assign.isPending || delVersion.isPending || delDrawing.isPending;
@@ -451,72 +452,72 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
     <div className="drawer" role="dialog" aria-label={d.filename}>
       <div className="row">
         <h2 style={{ margin: 0, flex: 1, wordBreak: "break-all" }}>{d.filename}</h2>
-        <button className="btn small" onClick={onClose}>Kapat</button>
+        <button className="btn small" onClick={onClose}>{tx("Kapat")}</button>
       </div>
       {q.isError && <div className="error">{errText(q.error)}</div>}
       <table className="simple" style={{ marginTop: 10 }}>
         <tbody>
-          <tr><th>Parça No</th><td>{d.part_no ?? <span className="badge warn">Eşleşmedi</span>}</td></tr>
-          <tr><th>Eşleşme</th><td>{viaLabel(d.match_via) || "—"}</td></tr>
-          <tr><th>Tür</th><td>{d.ext.toUpperCase()}</td></tr>
-          <tr><th>Revizyon</th><td>
-            {d.rev || "—"}{d0.bom_rev != null && <> · BOM: {d0.bom_rev || "—"}</>}
-            {d0.rev_mismatch && <span className="badge warn" style={{ marginLeft: 6 }}>Revizyon uyumsuz</span>}
+          <tr><th>{tx("Parça No")}</th><td>{d.part_no ?? <span className="badge warn">{tx("Eşleşmedi")}</span>}</td></tr>
+          <tr><th>{tx("Eşleşme")}</th><td>{viaLabel(d.match_via) || "—"}</td></tr>
+          <tr><th>{tx("Tür")}</th><td>{d.ext.toUpperCase()}</td></tr>
+          <tr><th>{tx("Revizyon")}</th><td>
+            {d.rev || "—"}{d0.bom_rev != null && <>{" "}{tx("· BOM:")}{" "}{d0.bom_rev || "—"}</>}
+            {d0.rev_mismatch && <span className="badge warn" style={{ marginLeft: 6 }}>{tx("Revizyon uyumsuz")}</span>}
           </td></tr>
-          <tr><th>Güncel sürüm</th><td>v{d.current_version} · {fmtSize(d.size)}</td></tr>
-          <tr><th>Yükleyen</th><td>{d.uploaded_by || "—"} · {fmtDate(d.uploaded_at)}</td></tr>
+          <tr><th>{tx("Güncel sürüm")}</th><td>{tx("v{0} · {1}", d.current_version, fmtSize(d.size))}</td></tr>
+          <tr><th>{tx("Yükleyen")}</th><td>{d.uploaded_by || "—"} · {fmtDate(d.uploaded_at)}</td></tr>
         </tbody>
       </table>
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn primary" onClick={() => onOpen(d)}>{d.inline ? "Aç" : "İndir"}</button>
-        {d.inline && <button className="btn" onClick={() => void download(`/drawings/${d.id}/file`, d.filename).catch((e) => toast(errText(e), true))}>İndir</button>}
+        <button className="btn primary" onClick={() => onOpen(d)}>{d.inline ? tx("Aç") : tx("İndir")}</button>
+        {d.inline && <button className="btn" onClick={() => void download(`/drawings/${d.id}/file`, d.filename).catch((e) => toast(errText(e), true))}>{tx("İndir")}</button>}
       </div>
 
       {canDesign && (
         <>
-          <h2>Elle eşleştir</h2>
+          <h2>{tx("Elle eşleştir")}</h2>
           <div className="row">
-            <input list="dw-part-nos" value={pno} onChange={(e) => setPno(e.target.value)} placeholder="Parça numarası…" style={{ flex: 1, minWidth: 180 }}
+            <input list="dw-part-nos" value={pno} onChange={(e) => setPno(e.target.value)} placeholder={tx("Parça numarası…")} style={{ flex: 1, minWidth: 180 }}
               onKeyDown={(e) => { if (e.key === "Enter" && pno.trim()) assign.mutate(pno.trim()); }} />
-            <button className="btn primary" disabled={busy || !pno.trim() || pno.trim() === d.part_no} onClick={() => assign.mutate(pno.trim())}>Eşleştir</button>
-            {d.part_no && <button className="btn" disabled={busy} onClick={() => assign.mutate(null)}>Eşleşmeyi kaldır</button>}
+            <button className="btn primary" disabled={busy || !pno.trim() || pno.trim() === d.part_no} onClick={() => assign.mutate(pno.trim())}>{tx("Eşleştir")}</button>
+            {d.part_no && <button className="btn" disabled={busy} onClick={() => assign.mutate(null)}>{tx("Eşleşmeyi kaldır")}</button>}
           </div>
-          {partNos.length === 0 && <div className="muted">Parça listesi yüklenemedi; numarayı elle yazabilirsiniz.</div>}
+          {partNos.length === 0 && <div className="muted">{tx("Parça listesi yüklenemedi; numarayı elle yazabilirsiniz.")}</div>}
           {!d.part_no && sugg.length > 0 && (
             <div className="row" style={{ marginTop: 6 }}>
-              <span className="muted">Öneriler:</span>
+              <span className="muted">{tx("Öneriler:")}</span>
               {sugg.slice(0, 6).map((s) => (
                 <button key={s.part_no} className="btn small" disabled={busy} onClick={() => assign.mutate(s.part_no)}
-                  title={`Benzerlik %${Math.round(s.score * (s.score <= 1 ? 100 : 1))}`}>{s.part_no}</button>
+                  title={tx("Benzerlik %{0}", Math.round(s.score * (s.score <= 1 ? 100 : 1)))}>{s.part_no}</button>
               ))}
             </div>
           )}
         </>
       )}
 
-      <h2>Sürüm geçmişi</h2>
-      {q.isLoading ? <div className="muted">Yükleniyor…</div> : (
+      <h2>{tx("Sürüm geçmişi")}</h2>
+      {q.isLoading ? <div className="muted">{tx("Yükleniyor…")}</div> : (
         <table className="simple">
-          <thead><tr><th>Sürüm</th><th>Boyut</th><th>Yükleyen</th><th>Tarih</th><th /></tr></thead>
+          <thead><tr><th>{tx("Sürüm")}</th><th>{tx("Boyut")}</th><th>{tx("Yükleyen")}</th><th>{tx("Tarih")}</th><th /></tr></thead>
           <tbody>
             {(q.data?.versions ?? []).map((v) => (
               <tr key={v.id}>
-                <td>v{v.version_no}{v.version_no === d.current_version && <span className="badge new" style={{ marginLeft: 6 }}>Güncel</span>}</td>
+                <td>{tx("v{0}", v.version_no)}{v.version_no === d.current_version && <span className="badge new" style={{ marginLeft: 6 }}>{tx("Güncel")}</span>}</td>
                 <td>{fmtSize(v.size)}</td>
                 <td>{v.uploaded_by || "—"}</td>
                 <td>{fmtDate(v.uploaded_at)}</td>
                 <td>
                   <div className="row" style={{ flexWrap: "nowrap" }}>
-                    <button className="btn small" onClick={() => onOpen(d, v)}>{d.inline ? "Aç" : "İndir"}</button>
+                    <button className="btn small" onClick={() => onOpen(d, v)}>{d.inline ? tx("Aç") : tx("İndir")}</button>
                     {canDesign && (
                       <button className="btn small danger" disabled={busy}
                         onClick={() => {
                           const last = (q.data?.versions.length ?? 0) <= 1;
                           const msg = last
-                            ? `v${v.version_no} bu resmin son sürümü. Silinirse resim tamamen kaldırılır. Devam edilsin mi?`
-                            : `${d.filename} dosyasının v${v.version_no} sürümü silinsin mi?`;
+                            ? tx("v{0} bu resmin son sürümü. Silinirse resim tamamen kaldırılır. Devam edilsin mi?", v.version_no)
+                            : tx("{0} dosyasının v{1} sürümü silinsin mi?", d.filename, v.version_no);
                           if (window.confirm(msg)) delVersion.mutate(v.id);
-                        }}>Sil</button>
+                        }}>{tx("Sil")}</button>
                     )}
                   </div>
                 </td>
@@ -528,8 +529,8 @@ function DetailDrawer({ d0, partNos, canDesign, onClose, onOpen, onChanged }: {
       {canDesign && (
         <div className="row" style={{ marginTop: 16 }}>
           <button className="btn danger" disabled={busy}
-            onClick={() => { if (window.confirm(`${d.filename} ve tüm sürümleri silinsin mi? Bu işlem geri alınamaz.`)) delDrawing.mutate(); }}>
-            Resmi tüm sürümleriyle sil
+            onClick={() => { if (window.confirm(tx("{0} ve tüm sürümleri silinsin mi? Bu işlem geri alınamaz.", d.filename))) delDrawing.mutate(); }}>
+            {tx("Resmi tüm sürümleriyle sil")}
           </button>
         </div>
       )}
@@ -583,7 +584,7 @@ export default function Drawings() {
     for (const p of partsQ.data?.rows ?? []) if (!m.has(p.part_no)) m.set(p.part_no, p);
     return m;
   }, [partsQ.data]);
-  const partNos = useMemo(() => [...partMap.keys()].sort((a, b) => a.localeCompare(b, "tr-TR", { numeric: true })), [partMap]);
+  const partNos = useMemo(() => [...partMap.keys()].sort((a, b) => a.localeCompare(b, LOCALE, { numeric: true })), [partMap]);
 
   const refresh = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ["drawings", pid] });
@@ -601,7 +602,7 @@ export default function Drawings() {
         key: `d${d.id}`, kind, d,
         part_no: d.part_no ?? "", filename: d.filename, ext: d.ext.toUpperCase(), rev: d.rev ?? "",
         bom_rev: kind === "matched" ? d.bom_rev ?? p?.rev ?? "" : "",
-        rev_state: kind !== "matched" ? "" : d.rev_mismatch ? "Uyumsuz" : "Uyumlu",
+        rev_state: kind !== "matched" ? "" : d.rev_mismatch ? tx("Uyumsuz") : tx("Uyumlu"),
         versions: d.version_count, uploaded_by: d.uploaded_by, uploaded_at: d.uploaded_at ?? "",
         main_group: p?.main_group ?? "", via: viaLabel(d.match_via), suggestion: d.suggestions?.[0]?.part_no ?? "",
       };
@@ -627,8 +628,8 @@ export default function Drawings() {
     else if (filter === "unmatched") r = r.filter((x) => x.kind === "unmatched");
     else if (filter === "rev") r = r.filter((x) => x.kind === "matched" && x.d?.rev_mismatch);
     else r = r.filter((x) => x.kind === "no_drawing");
-    const s = search.trim().toLocaleLowerCase("tr-TR");
-    if (s) r = r.filter((x) => x.part_no.toLocaleLowerCase("tr-TR").includes(s) || x.filename.toLocaleLowerCase("tr-TR").includes(s));
+    const s = search.trim().toLocaleLowerCase(LOCALE);
+    if (s) r = r.filter((x) => x.part_no.toLocaleLowerCase(LOCALE).includes(s) || x.filename.toLocaleLowerCase(LOCALE).includes(s));
     return r;
   }, [allRows, filter, search]);
 
@@ -653,40 +654,40 @@ export default function Drawings() {
 
   const assignQuick = useMutation({
     mutationFn: ({ id, part_no }: { id: number; part_no: string }) => api.post(`/drawings/${id}/assign`, { part_no }),
-    onSuccess: (_r, v) => { toast(`Resim ${v.part_no} parçasına eşleştirildi`); refresh(); },
+    onSuccess: (_r, v) => { toast(tx("Resim {0} parçasına eşleştirildi", v.part_no)); refresh(); },
     onError: (e) => toast(errText(e), true),
   });
 
   const columns = useMemo<GridColumn<Row>[]>(() => [
     {
-      id: "thumb", header: "Önizleme", size: 74, enableSorting: false, noFilter: true,
+      id: "thumb", header: tx("Önizleme"), size: 74, enableSorting: false, noFilter: true,
       cell: ({ row }) => {
         const d = row.original.d;
-        if (!d) return <span className="badge warn">Resim yok</span>;
+        if (!d) return <span className="badge warn">{tx("Resim yok")}</span>;
         if (d.has_thumb) return <Thumb d={d} cache={cache} onOpen={() => openFile(d)} />;
         return <span className="dw-thumb dw-thumb-empty dw-ext">{d.ext.toUpperCase()}</span>;
       },
     },
-    { accessorKey: "part_no", header: "Parça No", size: 190,
-      cell: ({ row }) => row.original.part_no || <span className="badge warn">Eşleşmedi</span> },
-    { accessorKey: "filename", header: "Dosya", size: 260 },
-    { accessorKey: "ext", header: "Tür", size: 70 },
-    { accessorKey: "rev", header: "Resim Rev", size: 90 },
-    { accessorKey: "bom_rev", header: "BOM Rev", size: 85 },
+    { accessorKey: "part_no", header: tx("Parça No"), size: 190,
+      cell: ({ row }) => row.original.part_no || <span className="badge warn">{tx("Eşleşmedi")}</span> },
+    { accessorKey: "filename", header: tx("Dosya"), size: 260 },
+    { accessorKey: "ext", header: tx("Tür"), size: 70 },
+    { accessorKey: "rev", header: tx("Resim Rev"), size: 90 },
+    { accessorKey: "bom_rev", header: tx("BOM Rev"), size: 85 },
     {
-      accessorKey: "rev_state", header: "Rev kontrol", size: 110,
-      cell: ({ row }) => row.original.rev_state === "Uyumsuz" ? <span className="badge warn">Uyumsuz</span>
-        : row.original.rev_state ? <span className="muted">Uyumlu</span> : "",
+      accessorKey: "rev_state", header: tx("Rev kontrol"), size: 110,
+      cell: ({ row }) => row.original.rev_state === tx("Uyumsuz") ? <span className="badge warn">{tx("Uyumsuz")}</span>
+        : row.original.rev_state ? <span className="muted">{tx("Uyumlu")}</span> : "",
     },
-    { accessorKey: "versions", header: "Sürüm", size: 70,
-      cell: ({ row }) => row.original.versions == null ? "" : row.original.versions.toLocaleString("tr-TR") },
-    { accessorKey: "main_group", header: "Ana Grup", size: 140 },
-    { accessorKey: "via", header: "Eşleşme", size: 120 },
-    { accessorKey: "uploaded_by", header: "Yükleyen", size: 110 },
-    { accessorKey: "uploaded_at", header: "Yükleme tarihi", size: 130, noFilter: true,
+    { accessorKey: "versions", header: tx("Sürüm"), size: 70,
+      cell: ({ row }) => row.original.versions == null ? "" : row.original.versions.toLocaleString(LOCALE) },
+    { accessorKey: "main_group", header: tx("Ana Grup"), size: 140 },
+    { accessorKey: "via", header: tx("Eşleşme"), size: 120 },
+    { accessorKey: "uploaded_by", header: tx("Yükleyen"), size: 110 },
+    { accessorKey: "uploaded_at", header: tx("Yükleme tarihi"), size: 130, noFilter: true,
       cell: ({ row }) => fmtDate(row.original.uploaded_at) },
     {
-      accessorKey: "suggestion", header: "Öneri", size: 210,
+      accessorKey: "suggestion", header: tx("Öneri"), size: 210,
       cell: ({ row }) => {
         const r = row.original;
         if (r.kind !== "unmatched" || !r.suggestion || !r.d) return "";
@@ -695,8 +696,8 @@ export default function Drawings() {
         return (
           <span className="row" style={{ flexWrap: "nowrap", gap: 4 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.suggestion}</span>
-            <button className="btn small" title="Öneriyi ata" disabled={assignQuick.isPending}
-              onClick={(e) => { e.stopPropagation(); assignQuick.mutate({ id: d.id, part_no: r.suggestion }); }}>Ata</button>
+            <button className="btn small" title={tx("Öneriyi ata")} disabled={assignQuick.isPending}
+              onClick={(e) => { e.stopPropagation(); assignQuick.mutate({ id: d.id, part_no: r.suggestion }); }}>{tx("Ata")}</button>
           </span>
         );
       },
@@ -707,7 +708,7 @@ export default function Drawings() {
         const d = row.original.d;
         if (!d) return "";
         return (
-          <button className="btn small" onClick={(e) => { e.stopPropagation(); openFile(d); }}>{d.inline ? "Aç" : "İndir"}</button>
+          <button className="btn small" onClick={(e) => { e.stopPropagation(); openFile(d); }}>{d.inline ? tx("Aç") : tx("İndir")}</button>
         );
       },
     },
@@ -722,8 +723,8 @@ export default function Drawings() {
     no_drawing: L?.no_drawing.length ?? 0,
   };
   const TABS: { k: Filter; l: string }[] = [
-    { k: "all", l: "Tüm dosyalar" }, { k: "matched", l: "Eşleşen" }, { k: "unmatched", l: "Eşleşmeyen" },
-    { k: "rev", l: "Revizyon uyumsuz" }, { k: "no_drawing", l: "Resmi olmayan parçalar" },
+    { k: "all", l: tx("Tüm dosyalar") }, { k: "matched", l: tx("Eşleşen") }, { k: "unmatched", l: tx("Eşleşmeyen") },
+    { k: "rev", l: tx("Revizyon uyumsuz") }, { k: "no_drawing", l: tx("Resmi olmayan parçalar") },
   ];
 
   const zipParts = useMemo(() => {
@@ -738,14 +739,14 @@ export default function Drawings() {
   const delMany = useMutation({
     mutationFn: () => api.post<{ deleted: number }>("/drawings/delete", { ids: selIds }),
     onSuccess: (r) => {
-      toast(`${r.deleted.toLocaleString("tr-TR")} resim silindi`);
+      toast(tx("{0} resim silindi", r.deleted.toLocaleString(LOCALE)));
       setSelection({}); setAskDelete(false); refresh();
     },
     onError: (e) => toast(errText(e), true),
   });
 
   const downloadZip = async () => {
-    if (!zipParts.length) { toast("İndirilecek eşleşmiş resim yok", true); return; }
+    if (!zipParts.length) { toast(tx("İndirilecek eşleşmiş resim yok"), true); return; }
     setZipBusy(true);
     try {
       await postDownload(`/projects/${pid}/drawings/zip`, { part_nos: zipParts, mode: zipMode }, "resimler.zip");
@@ -761,17 +762,17 @@ export default function Drawings() {
     <>
       {filter !== "unmatched" && (
         <>
-          <select value={zipMode} onChange={(e) => setZipMode(e.target.value)} aria-label="ZIP içeriği">
+          <select value={zipMode} onChange={(e) => setZipMode(e.target.value)} aria-label={tx("ZIP içeriği")}>
             {ZIP_MODES.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
           <button className="btn small" disabled={zipBusy || !zipParts.length} onClick={() => void downloadZip()}
-            title={selCount ? "Seçili parçaların resimleri" : "Filtrelenen parçaların resimleri"}>
-            {zipBusy ? "Hazırlanıyor…" : `ZIP indir (${selCount ? "seçili" : "filtrelenen"} ${zipParts.length.toLocaleString("tr-TR")} parça)`}
+            title={selCount ? tx("Seçili parçaların resimleri") : tx("Filtrelenen parçaların resimleri")}>
+            {zipBusy ? tx("Hazırlanıyor…") : tx("ZIP indir ({0} {1} parça)", selCount ? tx("seçili") : tx("filtrelenen"), zipParts.length.toLocaleString(LOCALE))}
           </button>
         </>
       )}
       {canDesign && selIds.length > 0 && (
-        <button className="btn small danger" onClick={() => setAskDelete(true)}>Seçilenleri sil ({selIds.length.toLocaleString("tr-TR")})</button>
+        <button className="btn small danger" onClick={() => setAskDelete(true)}>{tx("Seçilenleri sil ({0})", selIds.length.toLocaleString(LOCALE))}</button>
       )}
     </>
   );
@@ -780,20 +781,20 @@ export default function Drawings() {
     <Page full>
       <div className="dw-head">
         <div className="row">
-          <h1 style={{ margin: 0 }}>Teknik Resimler</h1>
+          <h1 style={{ margin: 0 }}>{tx("Teknik Resimler")}</h1>
           {L && (
             <span className="muted">
-              {L.counts.parts_with_drawing.toLocaleString("tr-TR")} parçanın resmi var · {counts.no_drawing.toLocaleString("tr-TR")} imalat parçasının resmi yok
+              {tx("{0} parçanın resmi var · {1} imalat parçasının resmi yok", L.counts.parts_with_drawing.toLocaleString(LOCALE), counts.no_drawing.toLocaleString(LOCALE))}
             </span>
           )}
           <span className="spacer" style={{ flex: 1 }} />
-          <div className="seg" role="group" aria-label="Görünüm">
-            <button className={mode === "list" ? "on" : ""} onClick={() => setView("list")} title="Liste"><List size={15} /> Liste</button>
-            <button className={mode === "gallery" ? "on" : ""} onClick={() => setView("gallery")} title="Küçük resimler"><LayoutGrid size={15} /> Galeri</button>
+          <div className="seg" role="group" aria-label={tx("Görünüm")}>
+            <button className={mode === "list" ? "on" : ""} onClick={() => setView("list")} title={tx("Liste")}><List size={15} />{" "}{tx("Liste")}</button>
+            <button className={mode === "gallery" ? "on" : ""} onClick={() => setView("gallery")} title={tx("Küçük resimler")}><LayoutGrid size={15} />{" "}{tx("Galeri")}</button>
           </div>
           {canDesign && (
             <button className={"btn" + (showUpload ? "" : " primary")} onClick={() => setShowUpload((s) => !s)}>
-              {showUpload ? "Yükleme panelini gizle" : "Resim yükle"}
+              {showUpload ? tx("Yükleme panelini gizle") : tx("Resim yükle")}
             </button>
           )}
         </div>
@@ -801,44 +802,44 @@ export default function Drawings() {
         <div className="tabs" style={{ marginBottom: 0, marginTop: 8 }}>
           {TABS.map((t) => (
             <button key={t.k} className={filter === t.k ? "active" : ""} onClick={() => { setFilter(t.k); setSelection({}); }}>
-              {t.l} <span className={"badge" + (t.k === "rev" && counts.rev ? " warn" : t.k === "unmatched" && counts.unmatched ? " warn" : "")}>{counts[t.k].toLocaleString("tr-TR")}</span>
+              {t.l} <span className={"badge" + (t.k === "rev" && counts.rev ? " warn" : t.k === "unmatched" && counts.unmatched ? " warn" : "")}>{counts[t.k].toLocaleString(LOCALE)}</span>
             </button>
           ))}
         </div>
       </div>
 
       {listQ.isLoading ? (
-        <div className="muted" style={{ padding: 16 }}>Yükleniyor…</div>
+        <div className="muted" style={{ padding: 16 }}>{tx("Yükleniyor…")}</div>
       ) : listQ.isError ? (
         <div className="error" style={{ padding: 16 }}>
-          {errText(listQ.error)} <button className="btn small" onClick={() => void listQ.refetch()}>Tekrar dene</button>
+          {errText(listQ.error)} <button className="btn small" onClick={() => void listQ.refetch()}>{tx("Tekrar dene")}</button>
         </div>
       ) : mode === "gallery" ? (
         <div className="dw-gallery-wrap">
           <div className="row" style={{ marginBottom: 8 }}>
-            <input type="search" placeholder="Parça no veya dosya adı ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
+            <input type="search" placeholder={tx("Parça no veya dosya adı ara…")} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
             {filter !== "no_drawing" && pickable.length > 0 && (
               <label className="dw-pick-all">
                 <input type="checkbox" checked={allPicked}
                   ref={(el) => { if (el) el.indeterminate = selCount > 0 && !allPicked; }}
                   onChange={() => setSelection(allPicked ? {} : Object.fromEntries(pickable.map((r) => [r.key, true])))} />
-                Tümünü seç <span className="muted">({pickable.length.toLocaleString("tr-TR")})</span>
+                {tx("Tümünü seç")}{" "}<span className="muted">({pickable.length.toLocaleString(LOCALE)})</span>
               </label>
             )}
-            <span className="muted">{rows.length.toLocaleString("tr-TR")} kayıt · küçük resme tıklayınca büyür</span>
+            <span className="muted">{tx("{0} kayıt · küçük resme tıklayınca büyür", rows.length.toLocaleString(LOCALE))}</span>
             {bulkActions}
           </div>
-          {!rows.length && <div className="empty">{filter === "no_drawing" ? "Resmi olmayan imalat parçası yok." : "Resim yok."}</div>}
+          {!rows.length && <div className="empty">{filter === "no_drawing" ? tx("Resmi olmayan imalat parçası yok.") : tx("Resim yok.")}</div>}
           <div className="dw-gallery">
             {rows.map((r) => (
               <div key={r.key} className={`card dw-card${r.kind !== "matched" ? " warn-card" : ""}`}>
                 <div className="dw-card-img" onClick={() => (r.d ? openFile(r.d) : undefined)}
-                  title={r.d ? (r.d.inline ? "Büyütmek için tıklayın" : "İndir") : ""}>
+                  title={r.d ? (r.d.inline ? tx("Büyütmek için tıklayın") : tx("İndir")) : ""}>
                   {r.d ? <PreviewThumb path={r.d.has_thumb ? `/drawings/${r.d.id}/thumb` : null} label={r.d.filename} />
-                    : <span className="thumb-ph">Resim yok</span>}
-                  {r.d?.rev_mismatch && <span className="badge warn dw-card-badge">Rev farkı</span>}
+                    : <span className="thumb-ph">{tx("Resim yok")}</span>}
+                  {r.d?.rev_mismatch && <span className="badge warn dw-card-badge">{tx("Rev farkı")}</span>}
                   {r.d && filter !== "no_drawing" && (
-                    <input type="checkbox" className="dw-card-check" aria-label="Seç" checked={!!selection[r.key]}
+                    <input type="checkbox" className="dw-card-check" aria-label={tx("Seç")} checked={!!selection[r.key]}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
                         const on = e.target.checked;
@@ -847,9 +848,9 @@ export default function Drawings() {
                   )}
                 </div>
                 <div className="dw-card-body" onClick={() => r.d && setSelected(r.d)}>
-                  <b className="mono">{r.part_no || "Eşleşmedi"}</b>
+                  <b className="mono">{r.part_no || tx("Eşleşmedi")}</b>
                   <span className="muted" title={r.filename}>{r.filename || r.main_group}</span>
-                  {r.d && <span className="muted">Rev {r.rev || "—"} · {r.ext}{r.versions && r.versions > 1 ? ` · ${r.versions} sürüm` : ""}</span>}
+                  {r.d && <span className="muted">{tx("Rev")}{" "}{r.rev || "—"} · {r.ext}{r.versions && r.versions > 1 ? tx(" · {0} sürüm", r.versions) : ""}</span>}
                 </div>
               </div>
             ))}
@@ -857,7 +858,7 @@ export default function Drawings() {
         </div>
       ) : (
         <DataGrid<Row>
-          exportName="Teknik resimler"
+          stateKey="Teknik resimler" exportName={tx("Teknik resimler")}
           data={rows}
           columns={columns}
           getRowId={(r) => r.key}
@@ -869,10 +870,10 @@ export default function Drawings() {
           onRowClick={(r) => { if (r.d) setSelected(r.d); }}
           openOnClick
           rowStyle={(r) => (r.kind === "unmatched" || r.kind === "no_drawing" ? { background: "color-mix(in srgb, var(--warn) 10%, var(--surface))" } : undefined)}
-          emptyText={filter === "no_drawing" ? "Resmi olmayan imalat parçası yok." : "Resim yok."}
+          emptyText={filter === "no_drawing" ? tx("Resmi olmayan imalat parçası yok.") : tx("Resim yok.")}
           toolbar={
             <>
-              <input type="search" placeholder="Parça no veya dosya adı ara…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
+              <input type="search" placeholder={tx("Parça no veya dosya adı ara…")} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
               {bulkActions}
             </>
           }
@@ -891,12 +892,12 @@ export default function Drawings() {
       {askDelete && (
         <div className="modal-back" onClick={() => setAskDelete(false)}>
           <div className="modal" style={{ maxWidth: 520 }} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>{selIds.length.toLocaleString("tr-TR")} resim silinsin mi?</h3>
-            <p>Dosyalar tüm sürümleriyle <b>kalıcı olarak</b> silinir. Resimler parça numarasına bağlıdır; aynı parçayı kullanan diğer projelerden de kalkar.</p>
+            <h3 style={{ marginTop: 0 }}>{tx("{0} resim silinsin mi?", selIds.length.toLocaleString(LOCALE))}</h3>
+            <p>{tx("Dosyalar tüm sürümleriyle")}{" "}<b>{tx("kalıcı olarak")}</b>{" "}{tx("silinir. Resimler parça numarasına bağlıdır; aynı parçayı kullanan diğer projelerden de kalkar.")}</p>
             <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-              <button className="btn" onClick={() => setAskDelete(false)} disabled={delMany.isPending}>Vazgeç</button>
+              <button className="btn" onClick={() => setAskDelete(false)} disabled={delMany.isPending}>{tx("Vazgeç")}</button>
               <button className="btn danger" onClick={() => delMany.mutate()} disabled={delMany.isPending}>
-                {delMany.isPending ? "Siliniyor…" : "Kalıcı olarak sil"}
+                {delMany.isPending ? tx("Siliniyor…") : tx("Kalıcı olarak sil")}
               </button>
             </div>
           </div>

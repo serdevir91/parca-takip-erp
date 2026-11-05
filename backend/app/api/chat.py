@@ -21,6 +21,7 @@ from ..models import ChatHidden, ChatMember, ChatMessage, ChatReaction, ChatRoom
 from ..permissions import can, require
 from ..services import uploads
 from .deps import get_db
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -48,16 +49,16 @@ def _iso(t: datetime | None) -> str | None:
 def _member(db: Session, room_id: int, user: User) -> ChatMember:
     m = db.scalar(select(ChatMember).where(ChatMember.room_id == room_id, ChatMember.user_id == user.id))
     if m is None:
-        raise HTTPException(404, "Sohbet bulunamadı")
+        raise HTTPException(404, tx("Sohbet bulunamadı"))
     return m
 
 
 def _active_user(db: Session, user_id: int) -> User:
     u = db.get(User, user_id)
     if u is None or not u.active:
-        raise HTTPException(404, "Kullanıcı bulunamadı veya pasif")
+        raise HTTPException(404, tx("Kullanıcı bulunamadı veya pasif"))
     if not can(u, "chat", "view"):
-        raise HTTPException(400, f"{display(u)} sohbet modülünü kullanamıyor")
+        raise HTTPException(400, tx("{0} sohbet modülünü kullanamıyor", display(u)))
     return u
 
 
@@ -116,7 +117,7 @@ def _touch(db: Session, room_id: int) -> None:
 def _text_message(db: Session, message_id: int) -> ChatMessage:
     msg = db.get(ChatMessage, message_id)
     if msg is None or msg.kind != "text":
-        raise HTTPException(404, "Mesaj bulunamadı")
+        raise HTTPException(404, tx("Mesaj bulunamadı"))
     return msg
 
 
@@ -132,13 +133,13 @@ def room_out(db: Session, room: ChatRoom, me: User, unread: int = 0) -> dict[str
     members = sorted(room.members, key=lambda m: (m.user_id != me.id, display(m.user).casefold()))
     mine = next((m for m in members if m.user_id == me.id), None)
     others = [m for m in members if m.user_id != me.id]
-    name = room.name if room.kind == "group" else (display(others[0].user) if others else "Ben")
+    name = room.name if room.kind == "group" else (display(others[0].user) if others else tx("Ben"))
     last = db.scalar(select(ChatMessage).where(ChatMessage.room_id == room.id, ChatMessage.id.not_in(_hidden(me)))
                      .order_by(ChatMessage.id.desc()).limit(1))
     pinned = db.get(ChatMessage, room.pinned_id) if room.pinned_id else None
     preview = ""
     if last is not None:
-        preview = "Mesaj silindi" if last.deleted else _summary(last)
+        preview = tx("Mesaj silindi") if last.deleted else _summary(last)
         if last.kind == "text" and room.kind == "group":
             preview = f"{'Siz' if last.user_id == me.id else last.username}: {preview}"
     return {"id": room.id, "kind": room.kind, "name": name, "is_admin": bool(mine and mine.is_admin),
@@ -219,10 +220,10 @@ class DirectIn(BaseModel):
 def direct(body: DirectIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
     """Open (or create) the one-to-one conversation with a user."""
     if body.user_id == me.id:
-        raise HTTPException(400, "Kendinize mesaj gönderemezsiniz")
+        raise HTTPException(400, tx("Kendinize mesaj gönderemezsiniz"))
     other = _active_user(db, body.user_id)
     if not can(other, "chat", "view"):
-        raise HTTPException(400, f"{display(other)} sohbet modülünü kullanamıyor")
+        raise HTTPException(400, tx("{0} sohbet modülünü kullanamıyor", display(other)))
     key = f"{min(me.id, other.id)}:{max(me.id, other.id)}"
     room = db.scalar(select(ChatRoom).where(ChatRoom.dm_key == key))
     if room is None:
@@ -242,10 +243,10 @@ class GroupIn(BaseModel):
 def create_group(body: GroupIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Grup adı boş olamaz")
+        raise HTTPException(400, tx("Grup adı boş olamaz"))
     ids = [i for i in dict.fromkeys(body.member_ids) if i != me.id]
     if not ids:
-        raise HTTPException(400, "Gruba en az bir kişi ekleyin")
+        raise HTTPException(400, tx("Gruba en az bir kişi ekleyin"))
     added = [_active_user(db, i) for i in ids]
     room = ChatRoom(kind="group", name=name, created_by=me.username)
     room.members = [ChatMember(user_id=me.id, is_admin=True)] + [ChatMember(user_id=u.id) for u in added]
@@ -269,9 +270,9 @@ def edit_group(room_id: int, body: GroupPatch, db: Session = Depends(get_db),
     mine = _member(db, room_id, me)
     room = mine.room
     if room.kind != "group":
-        raise HTTPException(400, "Birebir sohbet düzenlenemez")
+        raise HTTPException(400, tx("Birebir sohbet düzenlenemez"))
     if not mine.is_admin:
-        raise HTTPException(403, "Grubu yalnızca grup yöneticileri düzenleyebilir")
+        raise HTTPException(403, tx("Grubu yalnızca grup yöneticileri düzenleyebilir"))
     if body.name is not None and body.name.strip() and body.name.strip() != room.name:
         room.name = body.name.strip()
         _system(db, room, me, f"{display(me)} grubun adını “{room.name}” yaptı")
@@ -287,7 +288,7 @@ def edit_group(room_id: int, body: GroupPatch, db: Session = Depends(get_db),
             _system(db, room, me, f"{display(me)}, {display(u)} kişisini ekledi")
     for uid in dict.fromkeys(body.remove):
         if uid == me.id:
-            raise HTTPException(400, "Kendinizi çıkarmak için “Gruptan ayrıl” kullanın")
+            raise HTTPException(400, tx("Kendinizi çıkarmak için “Gruptan ayrıl” kullanın"))
         m = current.pop(uid, None)
         if m is not None:
             name = display(m.user)
@@ -306,7 +307,7 @@ def leave(room_id: int, db: Session = Depends(get_db), me: User = Depends(chat_v
     mine = _member(db, room_id, me)
     room = mine.room
     if room.kind != "group":
-        raise HTTPException(400, "Birebir sohbetten ayrılınamaz")
+        raise HTTPException(400, tx("Birebir sohbetten ayrılınamaz"))
     room.members.remove(mine)
     db.flush()
     if room.members and not any(m.is_admin for m in room.members):
@@ -346,19 +347,18 @@ async def send(room_id: int, body: str = Form(""), reply_to: int | None = Form(N
     text = body.strip()
     has_file = file is not None and bool(file.filename)
     if not text and not has_file:
-        raise HTTPException(400, "Boş mesaj gönderilemez")
+        raise HTTPException(400, tx("Boş mesaj gönderilemez"))
     if len(text) > 10000:
-        raise HTTPException(400, "Mesaj çok uzun (en fazla 10.000 karakter)")
+        raise HTTPException(400, tx("Mesaj çok uzun (en fazla 10.000 karakter)"))
     if reply_to is not None:
         quoted = db.get(ChatMessage, reply_to)
         if quoted is None or quoted.room_id != room_id or quoted.kind != "text":
-            raise HTTPException(400, "Yanıtlanan mesaj bu sohbette yok")
+            raise HTTPException(400, tx("Yanıtlanan mesaj bu sohbette yok"))
     msg = ChatMessage(room_id=room_id, user_id=me.id, username=display(me), body=text, reply_to_id=reply_to)
     if has_file:
         assert file is not None
         if uploads.ext_of(uploads.safe_name(file.filename)) in BLOCKED_EXT:
-            raise HTTPException(415, "Bu dosya türü sohbette paylaşılamaz (program veya web sayfası). "
-                                     "Gerekirse sıkıştırıp gönderin.")
+            raise HTTPException(415, tx("Bu dosya türü sohbette paylaşılamaz (program veya web sayfası). Gerekirse sıkıştırıp gönderin."))
         folder = get_settings().chat_dir / str(room_id)
         try:
             path, size = await uploads.store(file, folder, MAX_FILE_MB)
@@ -400,16 +400,16 @@ def edit_message(message_id: int, body: EditIn, db: Session = Depends(get_db),
     msg = _text_message(db, message_id)
     _member(db, msg.room_id, me)
     if msg.user_id != me.id:
-        raise HTTPException(403, "Yalnızca kendi mesajınızı düzenleyebilirsiniz")
+        raise HTTPException(403, tx("Yalnızca kendi mesajınızı düzenleyebilirsiniz"))
     if msg.deleted:
-        raise HTTPException(400, "Silinmiş mesaj düzenlenemez")
+        raise HTTPException(400, tx("Silinmiş mesaj düzenlenemez"))
     if msg.forwarded_from:
-        raise HTTPException(400, "İletilen mesaj düzenlenemez")
+        raise HTTPException(400, tx("İletilen mesaj düzenlenemez"))
     if utcnow() - msg.created_at > timedelta(hours=EDIT_HOURS):
-        raise HTTPException(400, f"Mesaj yalnızca ilk {EDIT_HOURS} saat içinde düzenlenebilir")
+        raise HTTPException(400, tx("Mesaj yalnızca ilk {0} saat içinde düzenlenebilir", EDIT_HOURS))
     text = body.body.strip()
     if not text and not msg.file_name:
-        raise HTTPException(400, "Boş mesaj gönderilemez")
+        raise HTTPException(400, tx("Boş mesaj gönderilemez"))
     if text != msg.body:
         msg.body, msg.edited_at = text, utcnow()
         _touch(db, msg.room_id)
@@ -430,9 +430,9 @@ def delete_message(message_id: int, scope: str = Query("all", pattern="^(all|me)
             db.commit()
         return _one(db, msg, me)
     if not can(me, "chat", "edit"):
-        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+        raise HTTPException(403, tx("Bu işlem için yetkiniz yok"))
     if msg.user_id != me.id and not (mine.room.kind == "group" and mine.is_admin):
-        raise HTTPException(403, "Yalnızca kendi mesajınızı silebilirsiniz")
+        raise HTTPException(403, tx("Yalnızca kendi mesajınızı silebilirsiniz"))
     paths = (msg.file_path, msg.thumb_path)
     msg.deleted, msg.body, msg.file_path, msg.thumb_path = True, "", None, None
     if mine.room.pinned_id == msg.id:
@@ -456,7 +456,7 @@ def forward(body: ForwardIn, db: Session = Depends(get_db), me: User = Depends(c
         msg = _text_message(db, mid)
         _member(db, msg.room_id, me)
         if msg.deleted:
-            raise HTTPException(400, "Silinmiş mesaj iletilemez")
+            raise HTTPException(400, tx("Silinmiş mesaj iletilemez"))
         sources.append(msg)
     targets = [_member(db, rid, me) for rid in dict.fromkeys(body.room_ids)]
     sent = 0
@@ -471,7 +471,7 @@ def forward(body: ForwardIn, db: Session = Depends(get_db), me: User = Depends(c
                     if src.thumb_path:
                         copy.thumb_path = str(uploads.clone(src.thumb_path, folder / "thumbs"))
                 except OSError as e:
-                    raise HTTPException(404, f"{src.file_name}: dosya kopyalanamadı") from e
+                    raise HTTPException(404, tx("{0}: dosya kopyalanamadı", src.file_name)) from e
                 copy.file_name, copy.file_size, copy.file_type = src.file_name, src.file_size, src.file_type
             db.add(copy)
             db.flush()
@@ -490,11 +490,11 @@ class ReactIn(BaseModel):
 def react(message_id: int, body: ReactIn, db: Session = Depends(get_db), me: User = Depends(chat_edit)) -> dict[str, Any]:
     """The same emoji again, or an empty one, takes the reaction back."""
     if body.emoji and body.emoji not in REACTIONS:
-        raise HTTPException(400, "Bu tepki kullanılamıyor")
+        raise HTTPException(400, tx("Bu tepki kullanılamıyor"))
     msg = _text_message(db, message_id)
     _member(db, msg.room_id, me)
     if msg.deleted:
-        raise HTTPException(400, "Silinmiş mesaja tepki verilemez")
+        raise HTTPException(400, tx("Silinmiş mesaja tepki verilemez"))
     row = db.scalar(select(ChatReaction).where(ChatReaction.message_id == msg.id, ChatReaction.user_id == me.id))
     if row is not None and (not body.emoji or row.emoji == body.emoji):
         db.delete(row)
@@ -516,11 +516,11 @@ def pin(room_id: int, body: PinIn, db: Session = Depends(get_db), me: User = Dep
     """One pinned message per room. In a group only its admins pin."""
     mine = _member(db, room_id, me)
     if mine.room.kind == "group" and not mine.is_admin:
-        raise HTTPException(403, "Grupta mesajı yalnızca yöneticiler sabitler")
+        raise HTTPException(403, tx("Grupta mesajı yalnızca yöneticiler sabitler"))
     if body.message_id is not None:
         msg = _text_message(db, body.message_id)
         if msg.room_id != room_id or msg.deleted:
-            raise HTTPException(400, "Bu mesaj sabitlenemez")
+            raise HTTPException(400, tx("Bu mesaj sabitlenemez"))
     mine.room.pinned_id = body.message_id
     mine.room.updated_at = utcnow()
     db.commit()
@@ -530,14 +530,14 @@ def pin(room_id: int, body: PinIn, db: Session = Depends(get_db), me: User = Dep
 def _file_user(token: str | None = Depends(session_token), db: Session = Depends(get_db)) -> User:
     user = user_from_token(token, db)
     if not can(user, "chat", "view"):
-        raise HTTPException(403, "Bu işlem için yetkiniz yok")
+        raise HTTPException(403, tx("Bu işlem için yetkiniz yok"))
     return user
 
 
 def _attachment(db: Session, message_id: int, me: User) -> ChatMessage:
     msg = db.get(ChatMessage, message_id)
     if msg is None or msg.deleted or not msg.file_path:
-        raise HTTPException(404, "Dosya bulunamadı")
+        raise HTTPException(404, tx("Dosya bulunamadı"))
     _member(db, msg.room_id, me)
     return msg
 
@@ -547,7 +547,7 @@ def message_file(message_id: int, download: bool = False, db: Session = Depends(
                  me: User = Depends(_file_user)) -> FileResponse:
     msg = _attachment(db, message_id, me)
     if not Path(msg.file_path or "").is_file():
-        raise HTTPException(404, "Dosya bulunamadı")
+        raise HTTPException(404, tx("Dosya bulunamadı"))
     media, inline = uploads.media_for(msg.file_name or "")
     return FileResponse(msg.file_path or "", media_type=media, filename=msg.file_name,
                         content_disposition_type="inline" if inline and not download else "attachment")
@@ -558,7 +558,7 @@ def message_thumb(message_id: int, db: Session = Depends(get_db), me: User = Dep
     msg = _attachment(db, message_id, me)
     path = msg.thumb_path if msg.thumb_path and Path(msg.thumb_path).is_file() else msg.file_path
     if not path or not Path(path).is_file():
-        raise HTTPException(404, "Dosya bulunamadı")
+        raise HTTPException(404, tx("Dosya bulunamadı"))
     media = "image/jpeg" if path == msg.thumb_path else uploads.media_for(msg.file_name or "")[0]
     return FileResponse(path, media_type=media,
                         headers={"Cache-Control": "private, max-age=86400"})

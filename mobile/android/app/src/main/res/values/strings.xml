@@ -1,4 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LAB ERP</string>
+    <string name="notif_ch_run">Arka plan bağlantısı</string>
+    <string name="notif_ch_messages">Mesajlar</string>
+    <string name="notif_ch_items">Uyarılar</string>
+    <string name="notif_watching">Yeni mesajlar ve uyarılar izleniyor</string>
+    <string name="notif_items_summary">%1$d yeni uyarı</string>
+    <string name="pin_cert_changed">Sunucu sertifikası değişmiş</string>
+    <string name="cert_dialog_title">Sunucu sertifikası</string>
+    <string name="cert_dialog_msg">Bu sunucuya ilk kez güvenli bağlanılıyor. Parmak izi:\n\n%1$s\n\nSunucuda Yönetim &gt; HTTPS ekranındaki parmak izi ile aynı mı?</string>
+    <string name="cert_btn_trust">Aynı, güven</string>
+    <string name="btn_cancel">Vazgeç</string>
+    <string name="err_server_downgrade">Bu sunucu HTTPS kullanıyor, şifresiz bağlantı kurulmadı</string>
+    <string name="choose_file">Dosya seç</string>
+    <string name="err_no_file_chooser">Dosya seçici bulunamadı</string>
+    <string name="toast_downloading">İndiriliyor…</string>
+    <string name="err_server_response">Sunucu yanıtı %1$d</string>
+    <string name="downloaded_title">İndirildi</string>
+    <string name="downloaded_msg">%1$s\nİndirilenler klasörüne kaydedildi.</string>
+    <string name="btn_open">Aç</string>
+    <string name="btn_close">Kapat</string>
+    <string name="err_download_failed">İndirme başarısız: %1$s</string>
+    <string name="toast_preparing">Hazırlanıyor…</string>
+    <string name="err_share_failed">Paylaşılamadı: %1$s</string>
+    <string name="share_title">Paylaş: %1$s</string>
+    <string name="err_no_share_app">Paylaşacak uygulama bulunamadı</string>
+    <string name="err_file_create">Dosya oluşturulamadı</string>
+    <string name="err_no_app_for_file">Bu dosyayı açacak uygulama yok</string>
+    <string name="toast_checking_update">Güncelleme kontrol ediliyor…</string>
+    <string name="err_server_unreachable">Sunucuya ulaşılamadı</string>
+    <string name="update_dialog_title">Güncelleme var</string>
+    <string name="update_dialog_msg">LAB ERP %1$s yayınlandı (yüklü: %2$s).\nAPK indirilecek; kurulum için dosyayı açın.</string>
+    <string name="btn_download">İndir</string>
+    <string name="btn_later">Sonra</string>
+    <string name="toast_app_up_to_date">Uygulama güncel (%1$s)</string>
+    <string name="toast_update_check_failed">Güncelleme kontrol edilemedi</string>
+    <string name="err_open_link_failed">Bağlantı açılamadı</string>
+    <string name="setup_error_https_required">Bu sunucu HTTPS kullanıyor. https:// adresiyle bağlanın. Sunucuda HTTPS kapatıldıysa önce onu listeden silin</string>
 </resources>

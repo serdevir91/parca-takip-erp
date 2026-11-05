@@ -22,6 +22,7 @@ from ..services.system import system
 from .deps import any_user, get_db
 from .hr import _active_card, _lock_card, _my_card
 from .leave import KINDS, STATUS, DecideIn, attendance_on, leave_map, pending_count
+from app.core.i18n import tx
 
 att_view, att_edit = require("attendance", "view"), require("attendance", "edit")
 
@@ -101,7 +102,7 @@ def _month(month: str | None) -> tuple[date, date]:
     try:
         first = datetime.strptime(month, "%Y-%m").date() if month else date.today().replace(day=1)
     except ValueError:
-        raise HTTPException(400, "Ay YYYY-AA biçiminde olmalı") from None
+        raise HTTPException(400, tx("Ay YYYY-AA biçiminde olmalı")) from None
     return first, (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
 
@@ -158,7 +159,7 @@ def my_shifts(month: str | None = None, me: User = Depends(any_user), db: Sessio
 def clock_in(body: NoteIn, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     e = _self(db, me)
     if _open_shift(db, e.id):
-        raise HTTPException(409, "Zaten açık bir mesainiz var")
+        raise HTTPException(409, tx("Zaten açık bir mesainiz var"))
     now = datetime.now().replace(microsecond=0)
     a = Attendance(employee_id=e.id, work_date=now.date(), clock_in=now, note=body.note, created_by=me.username)
     db.add(a)
@@ -173,7 +174,7 @@ def clock_out(body: NoteIn, me: User = Depends(any_user), db: Session = Depends(
     e = _self(db, me)
     a = _open_shift(db, e.id)
     if a is None:
-        raise HTTPException(409, "Açık mesainiz yok")
+        raise HTTPException(409, tx("Açık mesainiz yok"))
     now = datetime.now().replace(microsecond=0)
     a.clock_out = now
     a.break_minutes = default_break(a.clock_in, now, _rules(db)[1])
@@ -190,7 +191,7 @@ def list_shifts(date_from: date | None = None, date_to: date | None = None, empl
     first, last = _month(None)
     first, last = date_from or first, date_to or last
     if first > last:
-        raise HTTPException(400, "Başlangıç tarihi bitişten sonra olamaz")
+        raise HTTPException(400, tx("Başlangıç tarihi bitişten sonra olamaz"))
     people = list(db.scalars(select(Employee).order_by(Employee.name)))
     names = {e.id: e.name for e in people}
     shifts = _load(db, first, last, employee_id)
@@ -218,16 +219,16 @@ def list_shifts(date_from: date | None = None, date_to: date | None = None, empl
 def _times(body: ShiftIn) -> tuple[datetime, datetime | None]:
     start = datetime.combine(body.work_date, body.start.replace(second=0, microsecond=0, tzinfo=None))
     if body.work_date > date.today():
-        raise HTTPException(400, "İleri tarihli mesai girilemez")
+        raise HTTPException(400, tx("İleri tarihli mesai girilemez"))
     if body.end is None:
         return start, None
     end = datetime.combine(body.work_date, body.end.replace(second=0, microsecond=0, tzinfo=None))
     if end == start:
-        raise HTTPException(400, "Giriş ve çıkış saati aynı olamaz")
+        raise HTTPException(400, tx("Giriş ve çıkış saati aynı olamaz"))
     if end < start:                                     # night shift: ends on the next day
         end += timedelta(days=1)
     if end - start > timedelta(hours=MAX_SHIFT_HOURS):
-        raise HTTPException(400, f"Bir mesai {MAX_SHIFT_HOURS} saatten uzun olamaz")
+        raise HTTPException(400, tx("Bir mesai {0} saatten uzun olamaz", MAX_SHIFT_HOURS))
     return start, end
 
 
@@ -239,7 +240,7 @@ def _check_overlap(db: Session, employee_id: int, start: datetime, end: datetime
     for a in near:
         other_end = a.clock_out or a.clock_in + timedelta(minutes=1)
         if a.clock_in < stop and start < other_end:
-            raise HTTPException(409, f"{a.clock_in:%d.%m.%Y %H:%M} mesaisi ile çakışıyor")
+            raise HTTPException(409, tx("{0} mesaisi ile çakışıyor", f"{a.clock_in:%d.%m.%Y %H:%M}"))
 
 
 def _pick_break(body: ShiftIn, start: datetime, end: datetime | None, standard: int) -> int:
@@ -247,7 +248,7 @@ def _pick_break(body: ShiftIn, start: datetime, end: datetime | None, standard: 
         return 0
     minutes = body.break_minutes if body.break_minutes is not None else default_break(start, end, standard)
     if minutes * 60 >= (end - start).total_seconds():
-        raise HTTPException(400, "Mola mesaiden uzun olamaz")
+        raise HTTPException(400, tx("Mola mesaiden uzun olamaz"))
     return minutes
 
 
@@ -287,7 +288,7 @@ def add_shift(body: ShiftNew, me: User = Depends(att_edit), db: Session = Depend
 def edit_shift(shift_id: int, body: ShiftIn, me: User = Depends(att_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     a = db.get(Attendance, shift_id)
     if a is None:
-        raise HTTPException(404, "Mesai bulunamadı")
+        raise HTTPException(404, tx("Mesai bulunamadı"))
     conflict.claim(db, a, body.rev, me)
     _save_shift(db, me, a.employee_id, body, a)
     db.commit()
@@ -298,7 +299,7 @@ def edit_shift(shift_id: int, body: ShiftIn, me: User = Depends(att_edit), db: S
 def delete_shift(shift_id: int, me: User = Depends(att_edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     a = db.get(Attendance, shift_id)
     if a is None:
-        raise HTTPException(404, "Mesai bulunamadı")
+        raise HTTPException(404, tx("Mesai bulunamadı"))
     _lock_card(db, a.employee_id)
     # Left open, a request about this shift would lose its link and bring the shift back as a new one when approved
     waiting = db.scalars(select(AttendanceRequest).where(AttendanceRequest.attendance_id == a.id,
@@ -364,14 +365,14 @@ def ask_fix(body: FixIn, me: User = Depends(any_user), db: Session = Depends(get
     e = _self(db, me)
     reason = body.reason.strip()
     if not reason:
-        raise HTTPException(400, "Gerekçe yazın")
+        raise HTTPException(400, tx("Gerekçe yazın"))
     a = None
     if body.attendance_id is not None:
         a = db.get(Attendance, body.attendance_id)
         if a is None or a.employee_id != e.id:
-            raise HTTPException(404, "Mesai bulunamadı")
+            raise HTTPException(404, tx("Mesai bulunamadı"))
     elif body.clock_out is None:
-        raise HTTPException(400, "Eksik mesai için çıkış saatini de yazın")
+        raise HTTPException(400, tx("Eksik mesai için çıkış saatini de yazın"))
     shift = _fix_body(body.work_date, body.clock_in, body.clock_out, a, reason)
     start, end = _times(shift)
     _check_overlap(db, e.id, start, end, a.id if a else 0)
@@ -392,9 +393,9 @@ def cancel_fix(request_id: int, me: User = Depends(any_user), db: Session = Depe
     e = _self(db, me)
     r = db.get(AttendanceRequest, request_id, populate_existing=True)
     if r is None or r.employee_id != e.id:
-        raise HTTPException(404, "Talep bulunamadı")
+        raise HTTPException(404, tx("Talep bulunamadı"))
     if r.status != "pending":
-        raise HTTPException(409, "Yalnızca bekleyen talep iptal edilebilir")
+        raise HTTPException(409, tx("Yalnızca bekleyen talep iptal edilebilir"))
     r.status = "cancelled"
     audit.record(db, me, "attendance_request", r.id, "status", "pending", r.status)
     db.commit()
@@ -419,11 +420,11 @@ def decide_fix(request_id: int, body: DecideIn, me: User = Depends(att_edit),
     """The rules are checked again here: the shifts may have changed since the worker asked."""
     emp_id = db.scalar(select(AttendanceRequest.employee_id).where(AttendanceRequest.id == request_id))
     if emp_id is None:
-        raise HTTPException(404, "Talep bulunamadı")
+        raise HTTPException(404, tx("Talep bulunamadı"))
     e = _lock_card(db, emp_id)
     r = db.get(AttendanceRequest, request_id, populate_existing=True)   # read after the lock: two managers, one answer
     if r.status != "pending":
-        raise HTTPException(409, "Bu talep zaten sonuçlanmış")
+        raise HTTPException(409, tx("Bu talep zaten sonuçlanmış"))
     a = None
     if body.approve:
         a = db.get(Attendance, r.attendance_id) if r.attendance_id else None

@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..models import User
 from ..services import excel_export
 from .deps import any_user
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/export", tags=["export"])
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -42,9 +43,9 @@ def _dir() -> Path:
 def grid(body: GridIn, me: User = Depends(any_user)) -> dict:
     """Builds the file and returns an id; the file is then fetched with GET, which every client can save."""
     if len(body.columns) * len(body.rows) > MAX_CELLS:
-        raise HTTPException(413, "Liste Excel için çok büyük. Filtreleyip daha az satır veya sütun indirin.")
+        raise HTTPException(413, tx("Liste Excel için çok büyük. Filtreleyip daha az satır veya sütun indirin."))
     if not _building.acquire(blocking=False):
-        raise HTTPException(429, "Başka Excel dosyaları hazırlanıyor, biraz sonra tekrar deneyin")
+        raise HTTPException(429, tx("Başka Excel dosyaları hazırlanıyor, biraz sonra tekrar deneyin"))
     try:
         return {"id": _write(body, me.id)}
     finally:
@@ -79,6 +80,6 @@ def _write(body: GridIn, owner: int) -> str:
 def grid_file(fid: str, name: str = "liste", me: User = Depends(any_user)) -> Response:
     path = _dir() / f"{me.id}_{fid}.xlsx"
     if not re.fullmatch(r"[0-9a-f]{32}", fid) or not path.is_file():
-        raise HTTPException(404, "Dosya bulunamadı, listeyi yeniden indirin")
+        raise HTTPException(404, tx("Dosya bulunamadı, listeyi yeniden indirin"))
     return Response(path.read_bytes(), media_type=XLSX,
                     headers={"Content-Disposition": excel_export.content_disposition(f"{name}.xlsx")})

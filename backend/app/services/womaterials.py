@@ -21,13 +21,14 @@ from sqlalchemy.orm import Session
 from ..core import numbers as num
 from ..models import Project, StockItem, User, WorkOrder, WorkOrderMaterial, WorkOrderOp, utcnow
 from . import audit, erp, system
+from app.core.i18n import tx
 
 OP_STATUS = {"pending": "Bekliyor", "in_progress": "Devam ediyor", "done": "Tamamlandı"}
 
 
 def _open_or_400(w: WorkOrder) -> None:
     if w.status in erp.WO_FINAL:
-        raise HTTPException(400, f"{erp.WO_STATUS[w.status]} durumundaki iş emri değiştirilemez")
+        raise HTTPException(400, tx("{0} durumundaki iş emri değiştirilemez", erp.WO_STATUS[w.status]))
 
 
 def materials(db: Session, w: WorkOrder) -> list[WorkOrderMaterial]:
@@ -66,15 +67,15 @@ def set_materials(db: Session, user: User, w: WorkOrder, rows: list[dict[str, An
     for seq, r in enumerate(rows, 1):
         code = r["code"].strip()
         if not code:
-            raise HTTPException(400, f"Satır {seq}: malzeme kodu gerekli")
+            raise HTTPException(400, tx("Satır {0}: malzeme kodu gerekli", seq))
         if code == w.part_no:
-            raise HTTPException(400, f"{code}: iş emrinin ürettiği parça kendi malzemesi olamaz")
+            raise HTTPException(400, tx("{0}: iş emrinin ürettiği parça kendi malzemesi olamaz", code))
         if code in seen:
-            raise HTTPException(400, f"{code}: aynı malzeme iki kez yazılmış")
+            raise HTTPException(400, tx("{0}: aynı malzeme iki kez yazılmış", code))
         seen.add(code)
         m = current.get(r["id"]) if r.get("id") is not None else None
         if r.get("id") is not None and m is None:
-            raise HTTPException(400, f"Satır {seq}: bu iş emrine ait değil")
+            raise HTTPException(400, tx("Satır {0}: bu iş emrine ait değil", seq))
         if m is None:
             card = db.scalar(select(StockItem).where(StockItem.code == code))
             m = WorkOrderMaterial(wo_id=w.id, code=code, issued_qty=0.0, issued_value=0.0, booked_value=0.0,
@@ -84,9 +85,9 @@ def set_materials(db: Session, user: User, w: WorkOrder, rows: list[dict[str, An
         else:
             kept.add(m.id)
             if m.issued_qty > erp.EPS and code != m.code:
-                raise HTTPException(400, f"{m.code}: çıkışı yapılmış malzemenin kodu değiştirilemez")
+                raise HTTPException(400, tx("{0}: çıkışı yapılmış malzemenin kodu değiştirilemez", m.code))
             if r["planned_qty"] + erp.EPS < m.issued_qty:
-                raise HTTPException(400, f"{m.code}: planlanan miktar çıkılan miktarın altına indirilemez")
+                raise HTTPException(400, tx("{0}: planlanan miktar çıkılan miktarın altına indirilemez", m.code))
             m.code = code
             m.description = (r.get("description") or "").strip() or m.description
             m.unit = (r.get("unit") or "").strip() or m.unit
@@ -94,7 +95,7 @@ def set_materials(db: Session, user: User, w: WorkOrder, rows: list[dict[str, An
     for mid, m in current.items():
         if mid not in kept:
             if m.issued_qty > erp.EPS:
-                raise HTTPException(400, f"{m.code}: çıkışı yapılmış malzeme silinemez; önce iade edin")
+                raise HTTPException(400, tx("{0}: çıkışı yapılmış malzeme silinemez; önce iade edin", m.code))
             db.delete(m)
     audit.record(db, user, "work_order", w.no, "malzemeler", len(current), len(rows), w.project_id)
 
@@ -126,7 +127,7 @@ def issue(db: Session, user: User, w: WorkOrder, m: WorkOrderMaterial, qty: floa
     db.refresh(m)
     item = _card(db, m.code)
     if item is None:
-        raise HTTPException(400, f"{m.code}: stok kartı yok")
+        raise HTTPException(400, tx("{0}: stok kartı yok", m.code))
     _book(db, user, w, m, item, qty, note)
     _sync(db, user, w, {m.code})
 
@@ -136,10 +137,10 @@ def give_back(db: Session, user: User, w: WorkOrder, m: WorkOrderMaterial, qty: 
     _open_or_400(w)
     db.refresh(m)
     if qty > m.issued_qty + erp.EPS:
-        raise HTTPException(400, f"{m.code}: iade çıkılan miktarı aşamaz (çıkılan {num.text(m.issued_qty)})")
+        raise HTTPException(400, tx("{0}: iade çıkılan miktarı aşamaz (çıkılan {1})", m.code, num.text(m.issued_qty)))
     item = _card(db, m.code)
     if item is None:
-        raise HTTPException(400, f"{m.code}: stok kartı yok")
+        raise HTTPException(400, tx("{0}: stok kartı yok", m.code))
     cost = m.issued_value / m.issued_qty if m.issued_value > 0 else None
     erp.move(db, user, item, "issue_return", qty, project_id=w.project_id, ref=_ref(w), note=note or f"{w.no} malzeme iadesi",
              unit_cost=cost)
@@ -174,7 +175,7 @@ def consume(db: Session, user: User, w: WorkOrder) -> tuple[list[dict[str, Any]]
             audit.record(db, user, "work_order", w.no, f"malzeme eksik {m.code}", None, short, w.project_id)
             reason = "stokta yeterli yok" if item is not None else "stok kartı yok"
             warnings.append({"code": m.code, "description": m.description, "unit": m.unit, "needed": need, "issued": take,
-                             "short": short, "message": f"{m.code}: {num.text(short)} {m.unit} çıkılamadı ({reason})"})
+                             "short": short, "message": tx("{0}: {1} {2} çıkılamadı ({3})", m.code, num.text(short), m.unit, reason)})
     _sync(db, user, w, codes)
     if w.project_id:
         return warnings, 0.0
@@ -195,10 +196,10 @@ def set_ops(db: Session, user: User, w: WorkOrder, rows: list[dict[str, Any]]) -
     for seq, r in enumerate(rows, 1):
         name = r["name"].strip()
         if not name:
-            raise HTTPException(400, f"Satır {seq}: operasyon adı gerekli")
+            raise HTTPException(400, tx("Satır {0}: operasyon adı gerekli", seq))
         o = current.get(r["id"]) if r.get("id") is not None else None
         if r.get("id") is not None and o is None:
-            raise HTTPException(400, f"Satır {seq}: bu iş emrine ait değil")
+            raise HTTPException(400, tx("Satır {0}: bu iş emrine ait değil", seq))
         if o is None:
             o = WorkOrderOp(wo_id=w.id, status="pending", done_by="")
             db.add(o)
@@ -208,14 +209,14 @@ def set_ops(db: Session, user: User, w: WorkOrder, rows: list[dict[str, Any]]) -
     for oid, o in current.items():
         if oid not in kept:
             if o.status != "pending":
-                raise HTTPException(400, f"{o.name}: başlamış operasyon silinemez")
+                raise HTTPException(400, tx("{0}: başlamış operasyon silinemez", o.name))
             db.delete(o)
     audit.record(db, user, "work_order", w.no, "operasyonlar", len(current), len(rows), w.project_id)
 
 
 def set_op_status(db: Session, user: User, w: WorkOrder, o: WorkOrderOp, status: str) -> None:
     if status not in OP_STATUS:
-        raise HTTPException(400, "Durum bekliyor, devam ediyor veya tamamlandı olabilir")
+        raise HTTPException(400, tx("Durum bekliyor, devam ediyor veya tamamlandı olabilir"))
     erp.lock_wo(db, w)
     _open_or_400(w)
     db.refresh(o)

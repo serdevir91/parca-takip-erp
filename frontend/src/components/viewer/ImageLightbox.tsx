@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Maximize, RotateCw, X, ZoomIn, Zoo
 import { blobUrl } from "../../api/client";
 import { errText } from "../Toast";
 import { useGestures } from "./gestures";
+import { LOCALE, tx } from "../../api/i18n";
 
 const MIN = 0.05;
 const MAX = 16;
@@ -115,33 +116,33 @@ export default function ImageLightbox({ src, title, caption, onClose, onDownload
           </div>
           <span style={{ flex: 1 }} />
           {nav && nav.count > 1 && <>
-            <button className="btn small" onClick={nav.prev} title="Önceki (←)"><ChevronLeft size={16} /></button>
+            <button className="btn small" onClick={nav.prev} title={tx("Önceki (←)")}><ChevronLeft size={16} /></button>
             <span className="muted">{nav.index + 1} / {nav.count}</span>
-            <button className="btn small" onClick={nav.next} title="Sonraki (→)"><ChevronRight size={16} /></button>
+            <button className="btn small" onClick={nav.next} title={tx("Sonraki (→)")}><ChevronRight size={16} /></button>
             <span className="muted">|</span>
           </>}
-          <button className="btn small" onClick={() => zoomCenter(1 / STEP)} title="Uzaklaştır (−)"><ZoomOut size={16} /></button>
-          <span className="muted pdfv-zoom">%{Math.round(view.s * 100).toLocaleString("tr-TR")}</span>
-          <button className="btn small" onClick={() => zoomCenter(STEP)} title="Yakınlaştır (+)"><ZoomIn size={16} /></button>
-          <button className={"btn small" + (fitted ? " primary" : "")} onClick={() => setFitted(true)} title="Ekrana sığdır (0)"><Maximize size={16} /></button>
+          <button className="btn small" onClick={() => zoomCenter(1 / STEP)} title={tx("Uzaklaştır (−)")}><ZoomOut size={16} /></button>
+          <span className="muted pdfv-zoom">%{Math.round(view.s * 100).toLocaleString(LOCALE)}</span>
+          <button className="btn small" onClick={() => zoomCenter(STEP)} title={tx("Yakınlaştır (+)")}><ZoomIn size={16} /></button>
+          <button className={"btn small" + (fitted ? " primary" : "")} onClick={() => setFitted(true)} title={tx("Ekrana sığdır (0)")}><Maximize size={16} /></button>
           <button className="btn small" onClick={actual}>%100</button>
-          <button className="btn small" onClick={() => { setRot((r) => (r + 1) % 4); setFitted(true); }} title="Döndür (R)"><RotateCw size={16} /></button>
+          <button className="btn small" onClick={() => { setRot((r) => (r + 1) % 4); setFitted(true); }} title={tx("Döndür (R)")}><RotateCw size={16} /></button>
           {actions}
-          {onDownload && <button className="btn small" onClick={onDownload} title="İndir"><Download size={16} /></button>}
-          <button className="btn small" onClick={onClose} title="Kapat (Esc)"><X size={16} /></button>
+          {onDownload && <button className="btn small" onClick={onDownload} title={tx("İndir")}><Download size={16} /></button>}
+          <button className="btn small" onClick={onClose} title={tx("Kapat (Esc)")}><X size={16} /></button>
         </div>
         <div className="viewer-stage" ref={boxRef}>
           {err ? <div className="error" style={{ padding: 16 }}>{err}</div>
-            : !url ? <div className="muted pdfv-loading">Yükleniyor…</div>
+            : !url ? <div className="muted pdfv-loading">{tx("Yükleniyor…")}</div>
             : <img src={url} alt={title} draggable={false} className="viewer-img"
                 style={{ transform, visibility: size ? "visible" : "hidden" }}
                 onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                onError={() => setErr("Resim açılamadı (biçim desteklenmiyor olabilir). İndirip açabilirsiniz.")} />}
+                onError={() => setErr(tx("Resim açılamadı (biçim desteklenmiyor olabilir). İndirip açabilirsiniz."))} />}
           {nav && nav.count > 1 && <>
-            <button className="viewer-arrow left" onClick={nav.prev} aria-label="Önceki"><ChevronLeft size={28} /></button>
-            <button className="viewer-arrow right" onClick={nav.next} aria-label="Sonraki"><ChevronRight size={28} /></button>
+            <button className="viewer-arrow left" onClick={nav.prev} aria-label={tx("Önceki")}><ChevronLeft size={28} /></button>
+            <button className="viewer-arrow right" onClick={nav.next} aria-label={tx("Sonraki")}><ChevronRight size={28} /></button>
           </>}
-          <div className="viewer-hint">Tekerlek veya iki parmak: yakınlaştır · Sürükle: kaydır · Çift tık: büyüt</div>
+          <div className="viewer-hint">{tx("Tekerlek veya iki parmak: yakınlaştır · Sürükle: kaydır · Çift tık: büyüt")}</div>
         </div>
         {footer}
       </div>

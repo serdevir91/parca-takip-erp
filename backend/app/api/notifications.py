@@ -23,6 +23,7 @@ from ..services.settings import signup_enabled
 from . import chat
 from .deps import any_user, get_db
 from .leave import KINDS
+from app.core.i18n import tx
 
 router = APIRouter(tags=["notifications"])
 
@@ -42,15 +43,15 @@ def _item(key: str, kind: str, title: str, detail: str, link: str, when: date | 
 def _purchasing(db: Session, today: date) -> list[dict[str, Any]]:
     orders = db.scalars(select(PurchaseOrder).where(PurchaseOrder.status.in_(("sent", "partial")),
                                                     PurchaseOrder.due_date < today))
-    return [_item(f"po:{p.id}:{p.due_date}", "Satın alma", f"Geciken sipariş {p.no}",
-                  f"{p.firm_name}, {(today - p.due_date).days} gün gecikti", "/purchasing", p.due_date, True)
+    return [_item(f"po:{p.id}:{p.due_date}", "Satın alma", tx("Geciken sipariş {0}", p.no),
+                  tx("{0}, {1} gün gecikti", p.firm_name, (today - p.due_date).days), "/purchasing", p.due_date, True)
             for p in orders]
 
 
 def _stock(db: Session) -> list[dict[str, Any]]:
     low = db.scalars(select(StockItem).where(StockItem.min_qty > 0, StockItem.qty < StockItem.min_qty))
-    return [_item(f"low:{i.id}:{i.qty:g}", "Stok", f"Düşük stok {i.code}",
-                  f"{i.name}: {num.text(i.qty)} kaldı, en az {num.text(i.min_qty)}", "/stock") for i in low]
+    return [_item(f"low:{i.id}:{i.qty:g}", "Stok", tx("Düşük stok {0}", i.code),
+                  tx("{0}: {1} kaldı, en az {2}", i.name, num.text(i.qty), num.text(i.min_qty)), "/stock") for i in low]
 
 
 def _finance(db: Session, today: date) -> list[dict[str, Any]]:
@@ -65,32 +66,32 @@ def _finance(db: Session, today: date) -> list[dict[str, Any]]:
             continue
         late = inv.due_date < today
         out.append(_item(f"inv:{inv.id}:{inv.due_date}:{late}", "Finans",
-                         f"{'Vadesi geçen' if late else 'Vadesi yaklaşan'} fatura {inv.no or inv.id}",
+                         tx("{0} fatura {1}", tx("Vadesi geçen") if late else tx("Vadesi yaklaşan"), inv.no or inv.id),
                          f"{inv.firm_name}: {num.text(r['remaining'])} {inv.currency}", "/finance", inv.due_date, late))
     return out
 
 
 def _sales(db: Session, today: date) -> list[dict[str, Any]]:
     orders = db.scalars(select(SalesOrder).where(SalesOrder.status.in_(commerce.SO_SHIPPING), SalesOrder.due_date < today))
-    return [_item(f"so:{s.id}:{s.due_date}", "Satış", f"Geciken teslimat {s.no}",
-                  f"{s.firm_name}, {(today - s.due_date).days} gün gecikti", "/sales", s.due_date, True)
+    return [_item(f"so:{s.id}:{s.due_date}", "Satış", tx("Geciken teslimat {0}", s.no),
+                  tx("{0}, {1} gün gecikti", s.firm_name, (today - s.due_date).days), "/sales", s.due_date, True)
             for s in orders]
 
 
 def _workorders(db: Session, today: date) -> list[dict[str, Any]]:
     orders = db.scalars(select(WorkOrder).where(WorkOrder.status.in_(erp.WO_OPEN), WorkOrder.due_date < today))
-    return [_item(f"wo:{w.id}:{w.due_date}", "İş emri", f"Geciken iş emri {w.no}",
-                  f"{w.part_no}, {(today - w.due_date).days} gün gecikti", "/work-orders", w.due_date, True)
+    return [_item(f"wo:{w.id}:{w.due_date}", "İş emri", tx("Geciken iş emri {0}", w.no),
+                  tx("{0}, {1} gün gecikti", w.part_no, (today - w.due_date).days), "/work-orders", w.due_date, True)
             for w in orders]
 
 
 def _approvals(db: Session) -> list[dict[str, Any]]:
     names = dict(db.execute(select(Employee.id, Employee.name)).all())
-    out = [_item(f"leave:{r.id}", "Onay bekliyor", f"İzin talebi: {names.get(r.employee_id, '')}",
+    out = [_item(f"leave:{r.id}", "Onay bekliyor", tx("İzin talebi: {0}", names.get(r.employee_id, '')),
                  f"{KINDS.get(r.kind, r.kind)}, {r.start_date:%d.%m.%Y} - {r.end_date:%d.%m.%Y}", "/attendance",
                  r.start_date)
            for r in db.scalars(select(LeaveRequest).where(LeaveRequest.status == "pending"))]
-    out += [_item(f"fix:{r.id}", "Onay bekliyor", f"Mesai düzeltme: {names.get(r.employee_id, '')}",
+    out += [_item(f"fix:{r.id}", "Onay bekliyor", tx("Mesai düzeltme: {0}", names.get(r.employee_id, '')),
                   f"{r.work_date:%d.%m.%Y}", "/attendance", r.work_date)
             for r in db.scalars(select(AttendanceRequest).where(AttendanceRequest.status == "pending"))]
     return out
@@ -100,7 +101,7 @@ def _boms(db: Session) -> list[dict[str, Any]]:
     rows = db.execute(select(BomVersion.id, BomVersion.project_id, Project.name)
                       .join(Project, Project.id == BomVersion.project_id)
                       .where(BomVersion.status == "pending", Project.archived.is_(False)))
-    return [_item(f"bom:{vid}", "Onay bekliyor", f"BOM onayı: {name}", "Yeni sürüm onay bekliyor", f"/p/{pid}/bom")
+    return [_item(f"bom:{vid}", "Onay bekliyor", tx("BOM onayı: {0}", name), tx("Yeni sürüm onay bekliyor"), f"/p/{pid}/bom")
             for vid, pid, name in rows]
 
 
@@ -114,7 +115,7 @@ def _mine(db: Session, me: User, today: date) -> list[dict[str, Any]]:
     for model, title in ((LeaveRequest, "İzin talebiniz"), (AttendanceRequest, "Mesai düzeltme talebiniz")):
         rows = db.scalars(select(model).where(model.employee_id.in_(ids), model.status.in_(tuple(DECISION)),
                                               model.decided_at >= since))
-        out += [_item(f"my:{model.__tablename__}:{r.id}:{r.status}", "Talebim", f"{title} {DECISION[r.status]}",
+        out += [_item(f"my:{model.__tablename__}:{r.id}:{r.status}", tx("Talebim"), f"{title} {DECISION[r.status]}",
                       r.decision_note or "", "/attendance", urgent=r.status == "rejected") for r in rows]
     return out
 
@@ -123,13 +124,12 @@ def _admin(db: Session, secure: bool) -> list[dict[str, Any]]:
     """Settings an admin should look at. Nothing here changes them. Their kind puts them on a banner as well."""
     out = []
     if not secure:
-        out.append(_item("admin:https-off", ADMIN_KIND, "HTTPS kapalı",
-                         "Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın.",
+        out.append(_item("admin:https-off", ADMIN_KIND, tx("HTTPS kapalı"),
+                         tx("Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın."),
                          "/admin?tab=https", urgent=True))
     if signup_enabled(db):
-        out.append(_item("admin:signup-on", ADMIN_KIND, "Hesap isteği açık",
-                         "Giriş ekranında herkes hesap isteyebilir. İstemiyorsanız Yönetim > Kullanıcılar sekmesinden "
-                         "kapatın.", "/admin?tab=users", urgent=True))
+        out.append(_item("admin:signup-on", ADMIN_KIND, tx("Hesap isteği açık"),
+                         tx("Giriş ekranında herkes hesap isteyebilir. İstemiyorsanız Yönetim > Kullanıcılar sekmesinden kapatın."), "/admin?tab=users", urgent=True))
     return out
 
 

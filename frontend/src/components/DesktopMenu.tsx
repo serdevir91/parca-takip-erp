@@ -2,6 +2,7 @@ import { AppWindow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { desktopShell, whenDesktopShell, type DesktopAction, type DesktopInfo } from "../api/desktop";
 import { useTheme } from "../theme/theme";
+import { tx } from "../api/i18n";
 
 /** "Uygulama" menu of the Windows desktop app, drawn in the app theme (replaces the white native menu bar).
  *  Also paints the window title bar in the theme colours. Renders nothing in a browser or on the phone. */
@@ -46,29 +47,29 @@ export function DesktopMenu() {
   };
   // In server mode the app itself asks before closing (the server stops with it)
   const run = (name: DesktopAction) => {
-    void s.app_action(name).then((r) => (r.ok ? setOpen(false) : setNote(r.error ?? "İşlem yapılamadı")));
+    void s.app_action(name).then((r) => (r.ok ? setOpen(false) : setNote(r.error ?? tx("İşlem yapılamadı"))));
   };
   return (
     <div className="dg-menu-wrap desk-menu" ref={wrap}>
-      <button className="icon-btn" onClick={toggle} aria-haspopup="menu" aria-expanded={open} title="Uygulama menüsü">
+      <button className="icon-btn" onClick={toggle} aria-haspopup="menu" aria-expanded={open} title={tx("Uygulama menüsü")}>
         <AppWindow size={17} />
-        <span className="icon-btn-text">Uygulama</span>
+        <span className="icon-btn-text">{tx("Uygulama")}</span>
       </button>
       {open && (
         <div className="dg-menu card desk-menu-pop" role="menu">
-          <button role="menuitem" className="btn small" onClick={() => run("reload")}>Yeniden yükle</button>
-          <button role="menuitem" className="btn small" onClick={() => run("settings")}>Bağlantı ayarları…</button>
+          <button role="menuitem" className="btn small" onClick={() => run("reload")}>{tx("Yeniden yükle")}</button>
+          <button role="menuitem" className="btn small" onClick={() => run("settings")}>{tx("Bağlantı ayarları…")}</button>
           {info?.mode === "server" && (
-            <button role="menuitem" className="btn small" onClick={() => run("open_data")}>Veri klasörünü aç</button>
+            <button role="menuitem" className="btn small" onClick={() => run("open_data")}>{tx("Veri klasörünü aç")}</button>
           )}
-          <button role="menuitem" className="btn small" onClick={() => run("update")}>Uygulama güncellemesini denetle</button>
+          <button role="menuitem" className="btn small" onClick={() => run("update")}>{tx("Uygulama güncellemesini denetle")}</button>
           <div className="desk-menu-info muted">
             {info ? (
               <>
-                <div>LAB ERP masaüstü {info.version}</div>
-                <div>{info.mode === "server" ? "Sunucu (veriler bu bilgisayarda)" : `İstemci: ${info.base || "-"}`}</div>
+                <div>{tx("LAB ERP masaüstü {0}", info.version)}</div>
+                <div>{info.mode === "server" ? tx("Sunucu (veriler bu bilgisayarda)") : tx("İstemci: {0}", info.base || "-")}</div>
                 {info.mode === "server" && (
-                  <div>Diğer cihazlar: {info.addresses.length ? info.addresses.join(", ") : "(ağ bağlantısı yok)"}</div>
+                  <div>{tx("Diğer cihazlar:")}{" "}{info.addresses.length ? info.addresses.join(", ") : tx("(ağ bağlantısı yok)")}</div>
                 )}
               </>
             ) : "…"}
@@ -76,11 +77,11 @@ export function DesktopMenu() {
           {note && <div className="error">{note}</div>}
           {info?.background ? (
             <>
-              <button role="menuitem" className="btn small" onClick={() => run("quit")}>Pencereyi kapat ({info.mode === "server" ? "sunucu çalışır" : "bildirimler gelir"})</button>
-              <div className="desk-menu-info muted">{info.mode === "server" ? "Sunucuyu durdurmak" : "Tamamen kapatmak"} için saatin yanındaki gizli simgelerden LAB ERP simgesine sağ tıklayın.</div>
+              <button role="menuitem" className="btn small" onClick={() => run("quit")}>{tx("Pencereyi kapat (")}{info.mode === "server" ? tx("sunucu çalışır") : tx("bildirimler gelir")})</button>
+              <div className="desk-menu-info muted">{info.mode === "server" ? tx("Sunucuyu durdurmak") : tx("Tamamen kapatmak")}{" "}{tx("için saatin yanındaki gizli simgelerden LAB ERP simgesine sağ tıklayın.")}</div>
             </>
           ) : (
-            <button role="menuitem" className="btn small danger" onClick={() => run("quit")}>Uygulamayı kapat</button>
+            <button role="menuitem" className="btn small danger" onClick={() => run("quit")}>{tx("Uygulamayı kapat")}</button>
           )}
         </div>
       )}

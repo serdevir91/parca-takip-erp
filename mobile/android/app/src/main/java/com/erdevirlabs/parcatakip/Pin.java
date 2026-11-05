@@ -1,5 +1,6 @@
 package com.erdevirlabs.parcatakip;
 
+import android.content.Context;
 import android.net.http.SslCertificate;
 import android.os.Build;
 import android.os.Bundle;
@@ -40,7 +41,7 @@ final class Pin {
     }
 
     /** expected null accepts any certificate: only for "is a server there", never with a token. */
-    static void apply(HttpURLConnection c, String expected) throws Exception {
+    static void apply(Context context, HttpURLConnection c, String expected) throws Exception {
         if (!(c instanceof HttpsURLConnection)) return;
         X509TrustManager tm = new X509TrustManager() {
             @Override
@@ -55,7 +56,7 @@ final class Pin {
                 } catch (Exception e) {
                     throw new CertificateException(e);
                 }
-                throw new CertificateException("Sunucu sertifikası değişmiş");
+                throw new CertificateException(context.getString(R.string.pin_cert_changed));
             }
 
             @Override
@@ -68,5 +69,9 @@ final class Pin {
         HttpsURLConnection https = (HttpsURLConnection) c;
         https.setSSLSocketFactory(ctx.getSocketFactory());
         https.setHostnameVerifier((host, session) -> true);   // the address may change, the certificate may not
+    }
+
+    static void apply(HttpURLConnection c, String expected) throws Exception {
+        apply(null, c, expected);
     }
 }

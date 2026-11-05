@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Holiday, User
 from . import audit
+from app.core.i18n import tx
 
 FIXED = [(1, 1, "Yılbaşı", False), (4, 23, "Ulusal Egemenlik ve Çocuk Bayramı", False),
          (5, 1, "Emek ve Dayanışma Günü", False), (5, 19, "Atatürk'ü Anma, Gençlik ve Spor Bayramı", False),
@@ -36,9 +37,9 @@ def add_range(db: Session, user: User, first: date, last: date | None, name: str
     """One row per day. Days that already exist are left as they are."""
     last = last or first
     if last < first:
-        raise HTTPException(400, "Bitiş tarihi başlangıçtan önce olamaz")
+        raise HTTPException(400, tx("Bitiş tarihi başlangıçtan önce olamaz"))
     if (last - first).days >= MAX_RANGE_DAYS:
-        raise HTTPException(400, f"Bir kerede en fazla {MAX_RANGE_DAYS} gün eklenir")
+        raise HTTPException(400, tx("Bir kerede en fazla {0} gün eklenir", MAX_RANGE_DAYS))
     have = set(off_days(db, first, last))
     made = []
     for i in range((last - first).days + 1):

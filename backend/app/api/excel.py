@@ -19,6 +19,7 @@ from ..services import excel_import as im
 from ..services.state import ProjectView
 from ..permissions import require
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 parts_view, parts_edit = require("parts", "view"), require("parts", "edit")
 
@@ -31,7 +32,7 @@ def _view(db: Session, project_id: int) -> tuple[Project, ProjectView]:
     p = project_or_404(db, project_id)
     v = ProjectView.load(db, p)
     if v.version is None:
-        raise HTTPException(400, "Projede onaylı BOM sürümü yok")
+        raise HTTPException(400, tx("Projede onaylı BOM sürümü yok"))
     return p, v
 
 
@@ -70,7 +71,7 @@ class VisibleIn(BaseModel):
 def gorunen(project_id: int, body: VisibleIn, db: Session = Depends(get_db), _: User = Depends(parts_view)):
     """Parça Takip limited to the part numbers currently shown (filtered) in the UI."""
     if not body.part_nos:
-        raise HTTPException(400, "Dışa aktarılacak parça seçilmedi")
+        raise HTTPException(400, tx("Dışa aktarılacak parça seçilmedi"))
     p, v = _view(db, project_id)
     return _send(p, "gorunen", ex.build_parca_takip(db, v, only=set(body.part_nos)))
 
@@ -78,7 +79,7 @@ def gorunen(project_id: int, body: VisibleIn, db: Session = Depends(get_db), _: 
 async def _save_upload(file: UploadFile) -> str:
     """Stream the upload to a temp file in 1 MB chunks, enforcing max_upload_mb."""
     if not (file.filename or "").lower().endswith(".xlsx"):
-        raise HTTPException(400, "Sadece .xlsx dosyası yüklenebilir")
+        raise HTTPException(400, tx("Sadece .xlsx dosyası yüklenebilir"))
     limit = get_settings().max_upload_mb << 20
     fd, path = tempfile.mkstemp(suffix=".xlsx", prefix="excel_import_")
     size = 0
@@ -90,14 +91,14 @@ async def _save_upload(file: UploadFile) -> str:
                     break
                 size += len(chunk)
                 if size > limit:
-                    raise HTTPException(413, f"Dosya çok büyük (en fazla {limit >> 20} MB).")
+                    raise HTTPException(413, tx("Dosya çok büyük (en fazla {0} MB).", limit >> 20))
                 out.write(chunk)
     except BaseException:
         os.unlink(path)
         raise
     if size == 0:
         os.unlink(path)
-        raise HTTPException(400, "Dosya boş")
+        raise HTTPException(400, tx("Dosya boş"))
     return path
 
 
@@ -133,9 +134,9 @@ def import_apply(project_id: int, body: ApplyIn, db: Session = Depends(get_db),
     """Apply the selected preview changes (each one audited); changes edited meanwhile are skipped."""
     p = project_or_404(db, project_id)
     if p.current_version_id is None:
-        raise HTTPException(400, "Projede onaylı BOM sürümü yok")
+        raise HTTPException(400, tx("Projede onaylı BOM sürümü yok"))
     if not body.changes:
-        raise HTTPException(400, "Uygulanacak değişiklik seçilmedi")
+        raise HTTPException(400, tx("Uygulanacak değişiklik seçilmedi"))
     res = im.apply(db, p, user, [c.model_dump(exclude_unset=True) for c in body.changes])
     db.commit()
     return res

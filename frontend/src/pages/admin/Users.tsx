@@ -5,6 +5,7 @@ import { sys } from "../../api/system";
 import { useAuth, type Level } from "../../api/auth";
 import { errText, useToast } from "../../components/Toast";
 import { Field, Loading, Modal, fmtDate, roleLabel } from "./shared";
+import { LOCALE, tx } from "../../api/i18n";
 
 export type AdminUser = {
   id: number; username: string; full_name: string; email: string; role: string; role_label: string;
@@ -44,7 +45,7 @@ export default function UsersTab() {
   const toggleActive = useMutation({
     mutationFn: (u: AdminUser) => api.put<AdminUser>(`/admin/users/${u.id}`, { active: !u.active }),
     onSuccess: (u) => {
-      toast(u.active ? `${u.username} etkinleştirildi` : `${u.username} pasif yapıldı`);
+      toast(u.active ? tx("{0} etkinleştirildi", u.username) : tx("{0} pasif yapıldı", u.username));
       refresh();
     },
     onError: (e) => toast(errText(e), true),
@@ -52,7 +53,7 @@ export default function UsersTab() {
   const reject = useMutation({
     mutationFn: (u: AdminUser) => api.del(`/admin/users/${u.id}/signup`),
     onSuccess: (_, u) => {
-      toast(`${u.username} isteği reddedildi`);
+      toast(tx("{0} isteği reddedildi", u.username));
       refresh();
     },
     onError: (e) => toast(errText(e), true),
@@ -73,7 +74,7 @@ export default function UsersTab() {
     <div className="card">
       {pending.length > 0 && (
         <div className="signup-box">
-          <b>Onay bekleyen hesap istekleri ({pending.length})</b>
+          <b>{tx("Onay bekleyen hesap istekleri ({0})", pending.length)}</b>
           {pending.map((u) => (
             <div key={u.id} className="ucard pending">
               <div className="ucard-main">
@@ -81,25 +82,25 @@ export default function UsersTab() {
                 <span className="muted">@{u.username}{u.email && ` · ${u.email}`} · {fmtDate(u.created_at)}</span>
               </div>
               <div className="ucard-actions">
-                <button className="btn primary small" onClick={() => setApproving(u)}>Onayla ve yetki ver</button>
+                <button className="btn primary small" onClick={() => setApproving(u)}>{tx("Onayla ve yetki ver")}</button>
                 <button className="btn danger small" disabled={reject.isPending}
-                  onClick={() => confirm(`${u.username} hesap isteği reddedilsin mi?`) && reject.mutate(u)}>Reddet</button>
+                  onClick={() => confirm(tx("{0} hesap isteği reddedilsin mi?", u.username)) && reject.mutate(u)}>{tx("Reddet")}</button>
               </div>
             </div>
           ))}
         </div>
       )}
       <div className="row" style={{ marginBottom: 10 }}>
-        <button className="btn primary" onClick={() => setCreating(true)}>+ Yeni kullanıcı</button>
-        <input className="grow" placeholder="Ara: ad, kullanıcı adı, e-posta" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 160 }} />
+        <button className="btn primary" onClick={() => setCreating(true)}>{tx("+ Yeni kullanıcı")}</button>
+        <input className="grow" placeholder={tx("Ara: ad, kullanıcı adı, e-posta")} value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 160 }} />
         <label className="row" style={{ gap: 4 }}>
-          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri göster
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{" "}{tx("Pasifleri göster")}
         </label>
-        <label className="row" style={{ gap: 4 }} title="Kapalıysa hesapları yalnızca yönetici açar">
+        <label className="row" style={{ gap: 4 }} title={tx("Kapalıysa hesapları yalnızca yönetici açar")}>
           <input type="checkbox" checked={signupOn} disabled={setSignup.isPending || !settings.data}
-            onChange={(e) => setSignup.mutate(e.target.checked)} /> Girişte “Hesap oluştur” göster
+            onChange={(e) => setSignup.mutate(e.target.checked)} />{" "}{tx("Girişte “Hesap oluştur” göster")}
         </label>
-        <span className="muted">{list.length.toLocaleString("tr-TR")} kullanıcı</span>
+        <span className="muted">{tx("{0} kullanıcı", list.length.toLocaleString(LOCALE))}</span>
       </div>
       <Loading error={users.error} loading={users.isLoading} />
       <div className="ulist">
@@ -110,31 +111,31 @@ export default function UsersTab() {
               <div className="ucard-main">
                 <b>
                   {u.full_name || u.username}
-                  {self && <span className="badge" style={{ marginLeft: 6 }}>siz</span>}
+                  {self && <span className="badge" style={{ marginLeft: 6 }}>{tx("siz")}</span>}
                 </b>
                 <span className="muted">@{u.username}{u.email && ` · ${u.email}`}</span>
               </div>
               <div className="ucard-meta">
                 <span className="badge">{roleLabel(u.role)}</span>
                 {!!Object.keys(u.overrides ?? {}).length && u.role !== "admin" && (
-                  <span className="badge" title="Bu kullanıcıya rol dışında özel yetki verilmiş">özel yetki</span>
+                  <span className="badge" title={tx("Bu kullanıcıya rol dışında özel yetki verilmiş")}>{tx("özel yetki")}</span>
                 )}
-                {u.active ? <span className="badge new">Aktif</span> : <span className="badge">Pasif</span>}
+                {u.active ? <span className="badge new">{tx("Aktif")}</span> : <span className="badge">{tx("Pasif")}</span>}
                 <span className="muted">{fmtDate(u.created_at)}</span>
               </div>
               <div className="ucard-actions">
-                <button className="btn small" onClick={() => setEditing(u)}>Düzenle / yetkiler</button>
-                <button className="btn small" onClick={() => setPwFor(u)}>Şifre sıfırla</button>
+                <button className="btn small" onClick={() => setEditing(u)}>{tx("Düzenle / yetkiler")}</button>
+                <button className="btn small" onClick={() => setPwFor(u)}>{tx("Şifre sıfırla")}</button>
                 <button className="btn small" disabled={self || toggleActive.isPending}
-                  title={self ? "Kendi hesabınızı pasif yapamazsınız" : undefined}
-                  onClick={() => toggleActive.mutate(u)}>{u.active ? "Pasif yap" : "Etkinleştir"}</button>
+                  title={self ? tx("Kendi hesabınızı pasif yapamazsınız") : undefined}
+                  onClick={() => toggleActive.mutate(u)}>{u.active ? tx("Pasif yap") : tx("Etkinleştir")}</button>
               </div>
             </div>
           );
         })}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>
-        Kullanıcılar silinmez; denetim kaydında adları korunur. Pasif kullanıcılar giriş yapamaz.
+        {tx("Kullanıcılar silinmez; denetim kaydında adları korunur. Pasif kullanıcılar giriş yapamaz.")}
       </p>
       {creating && <UserForm roles={roleValues} onClose={() => setCreating(false)} onSaved={refresh} />}
       {editing && <UserForm roles={roleValues} user={editing} self={me?.username === editing.username}
@@ -169,49 +170,49 @@ function UserForm({ user, roles, self, approve, onClose, onSaved }: {
         : api.post<AdminUser>("/admin/users", { username: username.trim(), password, full_name: fullName, email, role, permissions: overrides });
     },
     onSuccess: (u) => {
-      toast(approve ? `${u.username} onaylandı; artık giriş yapabilir` : user ? `${u.username} güncellendi` : `${u.username} oluşturuldu`);
+      toast(approve ? tx("{0} onaylandı; artık giriş yapabilir", u.username) : user ? tx("{0} güncellendi", u.username) : tx("{0} oluşturuldu", u.username));
       onSaved();
       onClose();
     },
     onError: (e) => toast(errText(e), true),
   });
 
-  const pwErr = !user && (password.length < sys.password_min ? `Şifre en az ${sys.password_min} karakter olmalı` : password !== password2 ? "Şifreler aynı değil" : null);
+  const pwErr = !user && (password.length < sys.password_min ? tx("Şifre en az {0} karakter olmalı", sys.password_min) : password !== password2 ? tx("Şifreler aynı değil") : null);
   const invalid = (!user && !username.trim()) || !!pwErr;
   return (
-    <Modal wide title={approve ? `Hesap isteğini onayla: ${user?.username}` : user ? `Kullanıcıyı düzenle: ${user.username}` : "Yeni kullanıcı"} onClose={onClose}
+    <Modal wide title={approve ? tx("Hesap isteğini onayla: {0}", user?.username) : user ? tx("Kullanıcıyı düzenle: {0}", user.username) : tx("Yeni kullanıcı")} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
         <button className="btn primary" disabled={invalid || save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Kaydediliyor…" : approve ? "Onayla" : "Kaydet"}
+          {save.isPending ? tx("Kaydediliyor…") : approve ? tx("Onayla") : tx("Kaydet")}
         </button>
       </>}>
       <div className="adm-form">
-        <Field label="Kullanıcı adı">
+        <Field label={tx("Kullanıcı adı")}>
           <input value={username} disabled={!!user} autoFocus={!user} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label="Ad Soyad">
+        <Field label={tx("Ad Soyad")}>
           <input value={fullName} autoFocus={!!user} onChange={(e) => setFullName(e.target.value)} />
         </Field>
-        <Field label="E-posta" hint="Listeler bu adrese gönderilebilir; hesap istekleri yöneticilere buradan bildirilir.">
+        <Field label={tx("E-posta")} hint={tx("Listeler bu adrese gönderilebilir; hesap istekleri yöneticilere buradan bildirilir.")}>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
         </Field>
-        <Field label="Rol" hint={self ? "Kendi rolünüzü değiştirirseniz yönetim ekranına erişiminizi kaybedebilirsiniz." : undefined}>
+        <Field label={tx("Rol")} hint={self ? tx("Kendi rolünüzü değiştirirseniz yönetim ekranına erişiminizi kaybedebilirsiniz.") : undefined}>
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             {roles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
           </select>
         </Field>
-        {approve && <p className="muted">Rolü ve modül yetkilerini seçip onaylayın; kullanıcı hemen giriş yapabilir.</p>}
+        {approve && <p className="muted">{tx("Rolü ve modül yetkilerini seçip onaylayın; kullanıcı hemen giriş yapabilir.")}</p>}
         {user && !approve && (
-          <label className="row" style={{ gap: 6 }} title={self ? "Kendi hesabınızı pasif yapamazsınız" : undefined}>
-            <input type="checkbox" checked={active} disabled={self} onChange={(e) => setActive(e.target.checked)} /> Aktif
-            {self && <span className="muted">(kendi hesabınız pasif yapılamaz)</span>}
+          <label className="row" style={{ gap: 6 }} title={self ? tx("Kendi hesabınızı pasif yapamazsınız") : undefined}>
+            <input type="checkbox" checked={active} disabled={self} onChange={(e) => setActive(e.target.checked)} />{" "}{tx("Aktif")}
+            {self && <span className="muted">{tx("(kendi hesabınız pasif yapılamaz)")}</span>}
           </label>
         )}
         {!user && (
           <>
-            <Field label="Şifre"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
-            <Field label="Şifre (tekrar)"><input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" /></Field>
+            <Field label={tx("Şifre")}><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
+            <Field label={tx("Şifre (tekrar)")}><input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" /></Field>
             {password && pwErr && <div className="error">{pwErr}</div>}
           </>
         )}
@@ -228,21 +229,21 @@ function PasswordForm({ user, onClose }: { user: AdminUser; onClose: () => void 
   const save = useMutation({
     mutationFn: () => api.post(`/admin/users/${user.id}/password`, { password: pw }),
     onSuccess: () => {
-      toast(`${user.username} için şifre sıfırlandı`);
+      toast(tx("{0} için şifre sıfırlandı", user.username));
       onClose();
     },
     onError: (e) => toast(errText(e), true),
   });
-  const err = pw.length < sys.password_min ? `Şifre en az ${sys.password_min} karakter olmalı` : pw !== pw2 ? "Şifreler aynı değil" : null;
+  const err = pw.length < sys.password_min ? tx("Şifre en az {0} karakter olmalı", sys.password_min) : pw !== pw2 ? tx("Şifreler aynı değil") : null;
   return (
-    <Modal title={`Şifre sıfırla: ${user.username}`} onClose={onClose}
+    <Modal title={tx("Şifre sıfırla: {0}", user.username)} onClose={onClose}
       footer={<>
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={!!err || save.isPending} onClick={() => save.mutate()}>Şifreyi kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={!!err || save.isPending} onClick={() => save.mutate()}>{tx("Şifreyi kaydet")}</button>
       </>}>
       <div className="adm-form">
-        <Field label="Yeni şifre"><input type="password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>
-        <Field label="Yeni şifre (tekrar)"><input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" /></Field>
+        <Field label={tx("Yeni şifre")}><input type="password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>
+        <Field label={tx("Yeni şifre (tekrar)")}><input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" /></Field>
         {pw && err && <div className="error">{err}</div>}
       </div>
     </Modal>
@@ -255,7 +256,7 @@ function PermissionMatrix({ role, value, onChange }: { role: string; value: Reco
   if (!cat.data) return <Loading error={cat.error} loading={cat.isLoading} />;
   const { modules, levels, role_defaults } = cat.data;
   const defaults = role_defaults[role] ?? {};
-  const label = (lv: Level | undefined) => levels.find((l) => l.key === lv)?.label ?? "Yok";
+  const label = (lv: Level | undefined) => levels.find((l) => l.key === lv)?.label ?? tx("Yok");
   const set = (key: string, lv: string) => {
     const next = { ...value };
     if (lv === "") delete next[key];
@@ -265,17 +266,17 @@ function PermissionMatrix({ role, value, onChange }: { role: string; value: Reco
   const setAll = (lv: Level | "") => onChange(lv === "" ? {} : Object.fromEntries(modules.filter((m) => m.key !== "admin").map((m) => [m.key, lv])));
   const groups = [...new Set(modules.map((m) => m.group))];
   if (role === "admin") {
-    return <p className="muted perm-note">Admin rolü tüm modüllere tam erişir; ayrı yetki gerekmez.</p>;
+    return <p className="muted perm-note">{tx("Admin rolü tüm modüllere tam erişir; ayrı yetki gerekmez.")}</p>;
   }
   return (
     <div className="perm">
       <div className="row" style={{ justifyContent: "space-between", margin: "16px 0 6px" }}>
-        <b>Modül yetkileri</b>
+        <b>{tx("Modül yetkileri")}</b>
         <div className="row" style={{ gap: 4 }}>
-          <span className="muted">Hepsini:</span>
-          <button className="btn small" type="button" onClick={() => setAll("")}>Rol varsayılanı</button>
-          <button className="btn small" type="button" onClick={() => setAll("view")}>Görüntüle</button>
-          <button className="btn small" type="button" onClick={() => setAll("edit")}>Düzenle</button>
+          <span className="muted">{tx("Hepsini:")}</span>
+          <button className="btn small" type="button" onClick={() => setAll("")}>{tx("Rol varsayılanı")}</button>
+          <button className="btn small" type="button" onClick={() => setAll("view")}>{tx("Görüntüle")}</button>
+          <button className="btn small" type="button" onClick={() => setAll("edit")}>{tx("Düzenle")}</button>
         </div>
       </div>
       <div className="perm-grid">
@@ -290,7 +291,7 @@ function PermissionMatrix({ role, value, onChange }: { role: string; value: Reco
                   <span>{m.label}</span>
                   <div className="seg small" role="radiogroup" aria-label={m.label}>
                     <button type="button" className={own === undefined ? "on" : ""} onClick={() => set(m.key, "")}
-                      title="Rolün varsayılan yetkisi">Rol ({label(defaults[m.key])})</button>
+                      title={tx("Rolün varsayılan yetkisi")}>{tx("Rol ({0})", label(defaults[m.key]))}</button>
                     {levels.map((l) => (
                       <button key={l.key} type="button" className={own === l.key ? `on lv-${l.key}` : ""} onClick={() => set(m.key, l.key)}>{l.label}</button>
                     ))}
@@ -302,7 +303,7 @@ function PermissionMatrix({ role, value, onChange }: { role: string; value: Reco
           </div>
         ))}
       </div>
-      <p className="muted">Değişiklik kullanıcının açık ekranına birkaç saniye içinde yansır; yeniden giriş gerekmez.</p>
+      <p className="muted">{tx("Değişiklik kullanıcının açık ekranına birkaç saniye içinde yansır; yeniden giriş gerekmez.")}</p>
     </div>
   );
 }

@@ -14,6 +14,7 @@ from ..permissions import require
 from ..services import audit
 from .bomtree import _named
 from .deps import get_db, project_or_404
+from app.core.i18n import tx
 
 router = APIRouter(prefix="/project-templates", tags=["templates"])
 view = require("projects", "view")
@@ -52,12 +53,12 @@ def list_templates(_: User = Depends(view), db: Session = Depends(get_db)) -> li
 def create_template(body: TemplateIn, me: User = Depends(edit), db: Session = Depends(get_db)) -> dict[str, Any]:
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Şablon adı boş olamaz")
+        raise HTTPException(400, tx("Şablon adı boş olamaz"))
     if db.scalar(select(ProjectTemplate.id).where(ProjectTemplate.name == name)):
-        raise HTTPException(400, f"Bu isimde bir şablon zaten var: {name}")
+        raise HTTPException(400, tx("Bu isimde bir şablon zaten var: {0}", name))
     tree = _tree_of(db, project_or_404(db, body.project_id))
     if not tree:
-        raise HTTPException(400, "Bu projede şablona alınacak ürün ağacı yok")
+        raise HTTPException(400, tx("Bu projede şablona alınacak ürün ağacı yok"))
     t = ProjectTemplate(name=name, note=body.note.strip(), payload=tree, created_by=me.username)
     db.add(t)
     db.flush()
@@ -70,7 +71,7 @@ def create_template(body: TemplateIn, me: User = Depends(edit), db: Session = De
 def delete_template(template_id: int, me: User = Depends(edit), db: Session = Depends(get_db)) -> dict[str, bool]:
     t = db.get(ProjectTemplate, template_id)
     if t is None:
-        raise HTTPException(404, "Şablon bulunamadı")
+        raise HTTPException(404, tx("Şablon bulunamadı"))
     audit.record(db, me, "project_template", t.id, "name", t.name, None, action="delete")
     db.delete(t)
     db.commit()

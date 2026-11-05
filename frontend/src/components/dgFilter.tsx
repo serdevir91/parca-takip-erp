@@ -1,6 +1,7 @@
 import type { Column, ColumnFilter, FilterFn, Row, Table } from "@tanstack/react-table";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { autofit, freezeTo, headerText, isEmpty, type GridColumn } from "./dgTypes";
+import { LOCALE, tx } from "../api/i18n";
 
 export type Join = "and" | "or";
 export type CondOp = "contains" | "notContains" | "eq" | "ne" | "starts" | "ends" | "in" | "notIn"
@@ -15,27 +16,27 @@ export type AdvValue = { join: Join; groups: AdvGroup[] };
 export const ADV = "_adv";
 
 export const OPS: { op: CondOp; label: string; args: 0 | 1 | 2 }[] = [
-  { op: "contains", label: "içerir", args: 1 },
-  { op: "notContains", label: "içermez", args: 1 },
-  { op: "eq", label: "eşittir", args: 1 },
-  { op: "ne", label: "eşit değil", args: 1 },
-  { op: "starts", label: "ile başlar", args: 1 },
-  { op: "ends", label: "ile biter", args: 1 },
-  { op: "in", label: "listede (virgülle ayırın)", args: 1 },
-  { op: "notIn", label: "listede değil", args: 1 },
-  { op: "gt", label: "büyüktür", args: 1 },
-  { op: "gte", label: "büyük veya eşit", args: 1 },
-  { op: "lt", label: "küçüktür", args: 1 },
-  { op: "lte", label: "küçük veya eşit", args: 1 },
-  { op: "between", label: "arasında", args: 2 },
-  { op: "empty", label: "boş", args: 0 },
-  { op: "notEmpty", label: "dolu", args: 0 },
+  { op: "contains", label: tx("içerir"), args: 1 },
+  { op: "notContains", label: tx("içermez"), args: 1 },
+  { op: "eq", label: tx("eşittir"), args: 1 },
+  { op: "ne", label: tx("eşit değil"), args: 1 },
+  { op: "starts", label: tx("ile başlar"), args: 1 },
+  { op: "ends", label: tx("ile biter"), args: 1 },
+  { op: "in", label: tx("listede (virgülle ayırın)"), args: 1 },
+  { op: "notIn", label: tx("listede değil"), args: 1 },
+  { op: "gt", label: tx("büyüktür"), args: 1 },
+  { op: "gte", label: tx("büyük veya eşit"), args: 1 },
+  { op: "lt", label: tx("küçüktür"), args: 1 },
+  { op: "lte", label: tx("küçük veya eşit"), args: 1 },
+  { op: "between", label: tx("arasında"), args: 2 },
+  { op: "empty", label: tx("boş"), args: 0 },
+  { op: "notEmpty", label: tx("dolu"), args: 0 },
 ];
 const argsOf = (op: CondOp) => OPS.find((o) => o.op === op)?.args ?? 1;
 const condUsed = (c: Cond) => argsOf(c.op) === 0 || !!(c.a ?? "").trim();
 
-export const norm = (s: string) => s.toLocaleLowerCase("tr-TR");
-export const cellText = (v: unknown): string => (isEmpty(v) ? "(Boş)" : String(v));
+export const norm = (s: string) => s.toLocaleLowerCase(LOCALE);
+export const cellText = (v: unknown): string => (isEmpty(v) ? tx("(Boş)") : tx(String(v)));
 
 /** "1.250,5", "1250.5" and "1,5" read as numbers; anything else is null. */
 export function parseNum(v: unknown): number | null {
@@ -52,7 +53,7 @@ const compare = (v: unknown, w: string): number => {
   const x = parseNum(v);
   const y = parseNum(w);
   if (x !== null && y !== null) return x - y;
-  return String(v).localeCompare(w, "tr-TR", { numeric: true, sensitivity: "base" });
+  return String(v).localeCompare(w, LOCALE, { numeric: true, sensitivity: "base" });
 };
 
 export function matchCond(v: unknown, c: Cond): boolean {
@@ -111,13 +112,13 @@ export function filterSummary(f: ColFilter): string {
   const parts: string[] = [];
   if (f.text) parts.push(`"${f.text}"`);
   if (f.conds?.length) parts.push(f.conds.map(condText).join(f.join === "or" ? " veya " : " ve "));
-  if (f.values) parts.push(f.values.length === 1 ? f.values[0] || "(boş)" : `${f.values.length.toLocaleString("tr-TR")} değer`);
+  if (f.values) parts.push(f.values.length === 1 ? f.values[0] || tx("(boş)") : tx("{0} değer", f.values.length.toLocaleString(LOCALE)));
   return parts.join(" + ");
 }
 
 export const advSummary = (f: AdvValue) => {
   const n = f.groups.reduce((s, g) => s + g.rules.length, 0);
-  return `${n.toLocaleString("tr-TR")} kural`;
+  return `${n.toLocaleString(LOCALE)} kural`;
 };
 
 const ICONS = {
@@ -154,22 +155,22 @@ export function FilterSheet<T>({ table, initialCol, onClose, onAdvanced }: { tab
   return (
     <>
       <div className="fs-backdrop" onClick={onClose} />
-      <div className={`fs card${col ? " has-col" : ""}`} role="dialog" aria-label="Filtreler">
+      <div className={`fs card${col ? " has-col" : ""}`} role="dialog" aria-label={tx("Filtreler")}>
         <div className="fs-head">
-          {col && <button className="fs-back" onClick={() => setCol(null)} aria-label="Sütunlara dön">‹</button>}
-          <b>{col ? headerText(table.getColumn(col)!.columnDef as GridColumn<T>) : "Filtreler"}</b>
+          {col && <button className="fs-back" onClick={() => setCol(null)} aria-label={tx("Sütunlara dön")}>‹</button>}
+          <b>{col ? headerText(table.getColumn(col)!.columnDef as GridColumn<T>) : tx("Filtreler")}</b>
           {active > 0 && <span className="dg-count-badge">{active}</span>}
           <span className="dg-spacer" />
-          <button className="dg-link" onClick={onAdvanced}>Gelişmiş filtre</button>
-          {active > 0 && <button className="dg-link" onClick={() => table.resetColumnFilters()}>Tümünü temizle</button>}
-          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
+          <button className="dg-link" onClick={onAdvanced}>{tx("Gelişmiş filtre")}</button>
+          {active > 0 && <button className="dg-link" onClick={() => table.resetColumnFilters()}>{tx("Tümünü temizle")}</button>}
+          <button className="fs-close" onClick={onClose} aria-label={tx("Kapat")}><Icon name="x" /></button>
         </div>
         <div className="fs-body">
           <div className="fs-cols">
             {cols.length > 8 && (
               <label className="dg-search fs-colsearch">
                 <Icon name="search" size={14} />
-                <input type="search" placeholder="Sütun ara…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Sütun ara" />
+                <input type="search" placeholder={tx("Sütun ara…")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tx("Sütun ara")} />
               </label>
             )}
             {shownCols.map((c) => {
@@ -186,7 +187,7 @@ export function FilterSheet<T>({ table, initialCol, onClose, onAdvanced }: { tab
             {col ? (
               <FilterPopup key={col} table={table} colId={col} inline onClose={() => setCol(null)} />
             ) : (
-              <div className="fs-hint muted">Filtrelemek için soldan bir sütun seçin.</div>
+              <div className="fs-hint muted">{tx("Filtrelemek için soldan bir sütun seçin.")}</div>
             )}
           </div>
         </div>
@@ -198,25 +199,25 @@ export function FilterSheet<T>({ table, initialCol, onClose, onAdvanced }: { tab
 function CondEdit({ c, onChange, onEnter, autoFocus, list }: { c: Cond; onChange: (c: Cond) => void; onEnter?: () => void; autoFocus?: boolean; list?: string }) {
   const n = argsOf(c.op);
   const input = (k: "a" | "b", placeholder: string) => (
-    <input value={c[k] ?? ""} placeholder={placeholder} list={list} autoFocus={autoFocus && k === "a"} aria-label="Filtre değeri"
+    <input value={c[k] ?? ""} placeholder={placeholder} list={list} autoFocus={autoFocus && k === "a"} aria-label={tx("Filtre değeri")}
       onChange={(e) => onChange({ ...c, [k]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && onEnter?.()} />
   );
   return (
     <div className="fp-cond">
-      <select value={c.op} aria-label="Koşul" onChange={(e) => onChange({ ...c, op: e.target.value as CondOp })}>
+      <select value={c.op} aria-label={tx("Koşul")} onChange={(e) => onChange({ ...c, op: e.target.value as CondOp })}>
         {OPS.map((o) => <option key={o.op} value={o.op}>{o.label}</option>)}
       </select>
-      {n >= 1 && input("a", n === 2 ? "en az" : "değer")}
-      {n === 2 && input("b", "en çok")}
+      {n >= 1 && input("a", n === 2 ? tx("en az") : tx("değer"))}
+      {n === 2 && input("b", tx("en çok"))}
     </div>
   );
 }
 
 function JoinPick({ value, onChange, label }: { value: Join; onChange: (j: Join) => void; label?: string }) {
   return (
-    <div className="seg small" role="radiogroup" aria-label={label ?? "Bağlaç"}>
-      <button type="button" className={value === "and" ? "on" : ""} onClick={() => onChange("and")}>VE</button>
-      <button type="button" className={value === "or" ? "on" : ""} onClick={() => onChange("or")}>VEYA</button>
+    <div className="seg small" role="radiogroup" aria-label={label ?? tx("Bağlaç")}>
+      <button type="button" className={value === "and" ? "on" : ""} onClick={() => onChange("and")}>{tx("VE")}</button>
+      <button type="button" className={value === "or" ? "on" : ""} onClick={() => onChange("or")}>{tx("VEYA")}</button>
     </div>
   );
 }
@@ -241,7 +242,7 @@ export function FilterPopup<T>({ table, colId, onClose, inline }: { table: Table
       const t = cellText(r.getValue(colId));
       m.set(t, (m.get(t) ?? 0) + 1);
     }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "tr-TR", { numeric: true }));
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], LOCALE, { numeric: true }));
   }, [table, colId]);
   const [sel, setSel] = useState<Set<string>>(new Set(cur.values ?? counts.map((c) => c[0])));
   const shown = counts.filter(([k]) => !search || norm(k).includes(norm(search)));
@@ -268,41 +269,41 @@ export function FilterPopup<T>({ table, colId, onClose, inline }: { table: Table
         <div className="fp-actions">
           {column.getCanSort() && (
             <>
-              <button className="btn small" onClick={act(() => column.toggleSorting(false))}>A → Z</button>
-              <button className="btn small" onClick={act(() => column.toggleSorting(true))}>Z → A</button>
+              <button className="btn small" onClick={act(() => column.toggleSorting(false))}>{tx("A → Z")}</button>
+              <button className="btn small" onClick={act(() => column.toggleSorting(true))}>{tx("Z → A")}</button>
             </>
           )}
-          <button className="btn small" onClick={act(() => autofit(table, colId))}>Sığdır</button>
+          <button className="btn small" onClick={act(() => autofit(table, colId))}>{tx("Sığdır")}</button>
           <button className="btn small" onClick={act(() => freezeTo(table, colId))}>
-            {(table.getState().columnPinning.left ?? []).slice(-1)[0] === colId ? "Sabitlemeyi kaldır" : "Buraya kadar sabitle"}
+            {(table.getState().columnPinning.left ?? []).slice(-1)[0] === colId ? tx("Sabitlemeyi kaldır") : tx("Buraya kadar sabitle")}
           </button>
-          <button className="btn small" onClick={act(() => column.toggleVisibility(false))}>Sütunu gizle</button>
+          <button className="btn small" onClick={act(() => column.toggleVisibility(false))}>{tx("Sütunu gizle")}</button>
         </div>
       )}
       <div className="fp-sec fp-conds">
-        <span className="fp-label">Koşul</span>
+        <span className="fp-label">{tx("Koşul")}</span>
         <CondEdit c={c1} onChange={setC1} onEnter={apply} autoFocus={!inline || matchMedia("(pointer: fine)").matches} />
         {two ? (
           <>
             <JoinPick value={join} onChange={setJoin} />
             <CondEdit c={c2} onChange={setC2} onEnter={apply} />
-            <button className="dg-link fp-more" onClick={() => setTwo(false)}>İkinci koşulu kaldır</button>
+            <button className="dg-link fp-more" onClick={() => setTwo(false)}>{tx("İkinci koşulu kaldır")}</button>
           </>
-        ) : <button className="dg-link fp-more" onClick={() => setTwo(true)}>+ İkinci koşul</button>}
+        ) : <button className="dg-link fp-more" onClick={() => setTwo(true)}>{tx("+ İkinci koşul")}</button>}
       </div>
       <div className="fp-sec fp-values">
         <div className="fp-row">
-          <span className="fp-label">Değerler <span className="muted">({sel.size.toLocaleString("tr-TR")} / {counts.length.toLocaleString("tr-TR")} seçili)</span></span>
+          <span className="fp-label">{tx("Değerler")}{" "}<span className="muted">{tx("({0} / {1} seçili)", sel.size.toLocaleString(LOCALE), counts.length.toLocaleString(LOCALE))}</span></span>
           <button className="dg-link" onClick={() => {
             const n = new Set(sel);
             shown.forEach(([k]) => (allOn ? n.delete(k) : n.add(k)));
             setSel(n);
-          }}>{allOn ? "Hiçbirini seçme" : "Tümünü seç"}</button>
+          }}>{allOn ? tx("Hiçbirini seçme") : tx("Tümünü seç")}</button>
         </div>
         {counts.length > 6 && (
           <label className="dg-search">
             <Icon name="search" size={14} />
-            <input type="search" placeholder="Değer ara…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="search" placeholder={tx("Değer ara…")} value={search} onChange={(e) => setSearch(e.target.value)} />
           </label>
         )}
         <div className="fp-list">
@@ -310,15 +311,15 @@ export function FilterPopup<T>({ table, colId, onClose, inline }: { table: Table
             <label key={k} className={`fp-opt${sel.has(k) ? " on" : ""}`}>
               <input type="checkbox" checked={sel.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
               <span className="fp-opt-k" title={k}>{k}</span>
-              <span className="fp-opt-n" style={{ "--w": `${Math.round((n / max) * 100)}%` } as CSSProperties}>{n.toLocaleString("tr-TR")}</span>
+              <span className="fp-opt-n" style={{ "--w": `${Math.round((n / max) * 100)}%` } as CSSProperties}>{n.toLocaleString(LOCALE)}</span>
             </label>
           ))}
-          {shown.length === 0 && <div className="muted fp-empty">Eşleşen değer yok</div>}
+          {shown.length === 0 && <div className="muted fp-empty">{tx("Eşleşen değer yok")}</div>}
         </div>
       </div>
       <div className="fp-foot">
-        <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>Temizle</button>
-        <button className="btn primary" onClick={apply}>Uygula</button>
+        <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>{tx("Temizle")}</button>
+        <button className="btn primary" onClick={apply}>{tx("Uygula")}</button>
       </div>
     </div>
   );
@@ -358,39 +359,39 @@ export function AdvancedFilter<T>({ table, onClose }: { table: Table<T>; onClose
   return (
     <>
       <div className="fs-backdrop" onClick={onClose} />
-      <div className="fs adv card" role="dialog" aria-label="Gelişmiş filtre">
+      <div className="fs adv card" role="dialog" aria-label={tx("Gelişmiş filtre")}>
         <div className="fs-head">
-          <b>Gelişmiş filtre</b>
+          <b>{tx("Gelişmiş filtre")}</b>
           <span className="dg-spacer" />
-          <button className="fs-close" onClick={onClose} aria-label="Kapat"><Icon name="x" /></button>
+          <button className="fs-close" onClick={onClose} aria-label={tx("Kapat")}><Icon name="x" /></button>
         </div>
         <div className="adv-body">
           {used.map((id) => <datalist key={id} id={`adv-${id}`}>{valuesOf(id).map((v) => <option key={v} value={v} />)}</datalist>)}
           {f.groups.length > 1 && (
-            <div className="adv-top"><span>Gruplar arasında</span><JoinPick value={f.join} onChange={(join) => setF((s) => ({ ...s, join }))} label="Gruplar arası bağlaç" /></div>
+            <div className="adv-top"><span>{tx("Gruplar arasında")}</span><JoinPick value={f.join} onChange={(join) => setF((s) => ({ ...s, join }))} label={tx("Gruplar arası bağlaç")} /></div>
           )}
           {f.groups.map((g, gi) => (
             <div key={gi} className="adv-group">
-              <div className="adv-top"><b>Grup {gi + 1}</b><JoinPick value={g.join} onChange={(join) => group(gi, (x) => ({ ...x, join }))} label="Kurallar arası bağlaç" /></div>
+              <div className="adv-top"><b>{tx("Grup")}{" "}{gi + 1}</b><JoinPick value={g.join} onChange={(join) => group(gi, (x) => ({ ...x, join }))} label={tx("Kurallar arası bağlaç")} /></div>
               {g.rules.map((r, ri) => (
                 <div key={ri} className="adv-rule">
-                  <select value={r.col} aria-label="Sütun" onChange={(e) => setRule(gi, ri, { ...r, col: e.target.value })}>
+                  <select value={r.col} aria-label={tx("Sütun")} onChange={(e) => setRule(gi, ri, { ...r, col: e.target.value })}>
                     {cols.map((c) => <option key={c.id} value={c.id}>{headerText(c.columnDef as GridColumn<T>)}</option>)}
                   </select>
                   <CondEdit c={r} list={`adv-${r.col}`} onChange={(c) => setRule(gi, ri, { ...r, ...c })} />
-                  <button className="fs-close" onClick={() => dropRule(gi, ri)} aria-label="Kuralı sil"><Icon name="x" size={14} /></button>
+                  <button className="fs-close" onClick={() => dropRule(gi, ri)} aria-label={tx("Kuralı sil")}><Icon name="x" size={14} /></button>
                 </div>
               ))}
-              <button className="dg-link" onClick={() => group(gi, (x) => ({ ...x, rules: [...x.rules, rule()] }))}>+ Kural</button>
+              <button className="dg-link" onClick={() => group(gi, (x) => ({ ...x, rules: [...x.rules, rule()] }))}>{tx("+ Kural")}</button>
             </div>
           ))}
-          <button className="dg-link" onClick={() => setF((s) => ({ ...s, groups: [...s.groups, { join: "and", rules: [rule()] }] }))}>+ Grup</button>
+          <button className="dg-link" onClick={() => setF((s) => ({ ...s, groups: [...s.groups, { join: "and", rules: [rule()] }] }))}>{tx("+ Grup")}</button>
         </div>
         <div className="fp-foot adv-foot">
-          <span className="muted"><b>{hits.toLocaleString("tr-TR")}</b> kayıt eşleşiyor</span>
+          <span className="muted"><b>{hits.toLocaleString(LOCALE)}</b>{" "}{tx("kayıt eşleşiyor")}</span>
           <span className="dg-spacer" />
-          <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>Temizle</button>
-          <button className="btn primary" onClick={() => { column.setFilterValue(clean.groups.length ? clean : undefined); onClose(); }}>Uygula</button>
+          <button className="btn" onClick={() => { column.setFilterValue(undefined); onClose(); }}>{tx("Temizle")}</button>
+          <button className="btn primary" onClick={() => { column.setFilterValue(clean.groups.length ? clean : undefined); onClose(); }}>{tx("Uygula")}</button>
         </div>
       </div>
     </>

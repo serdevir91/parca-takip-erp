@@ -12,6 +12,7 @@ import { fmtDay, numOrNull, today } from "./erp/common";
 import { Stat } from "./erp/commerce";
 import { FixQueue, LeaveQueue, usePeople } from "./AttendanceQueues";
 import { MyFixes, MyHours, MyLeaves, fmtH, useAttRefresh as useRefresh } from "./SelfService";
+import { LOCALE, tx } from "../api/i18n";
 
 type Shift = {
   rev?: number;
@@ -30,7 +31,7 @@ type AllResp = { rows: Shift[]; people: Person[]; total: Summary; inside: number
 type GridRow = Shift & { leave?: string };
 type Tab = "all" | "leave" | "fixes" | "me" | "my-leave" | "my-fixes" | "my-hours";
 
-const STATUS: Record<Shift["status"], string> = { open: "İçeride", forgot: "Çıkış unutuldu", done: "Tamam" };
+const STATUS: Record<Shift["status"], string> = { open: tx("İçeride"), forgot: tx("Çıkış unutuldu"), done: tx("Tamam") };
 const thisMonth = () => today().slice(0, 7);
 const monthEnd = (m: string) => {
   const [y, mo] = m.split("-").map(Number);
@@ -52,13 +53,13 @@ export default function Attendance() {
   const queue = useQuery({ queryKey: ["attendance", "queue"], enabled: manager, queryFn: () => api.get<{ leave: number; shifts: number }>("/attendance/queue") });
   const mine = useQuery({ queryKey: ["attendance-me", thisMonth()], queryFn: () => api.get<MyResp>(`/attendance/me?month=${thisMonth()}`) });
   const tabs: [Tab, string, number?][] = [
-    ...(manager ? [["all", "Tüm personel"], ["leave", "İzin talepleri", queue.data?.leave], ["fixes", "Düzeltme talepleri", queue.data?.shifts]] as [Tab, string, number?][] : []),
-    ["me", manager ? "Benim mesaim" : "Mesaim"],
-    ...(mine.data?.employee ? [["my-leave", "İzinlerim"], ["my-fixes", "Düzeltme taleplerim"], ["my-hours", "Saat dağıtımı"]] as [Tab, string][] : []),
+    ...(manager ? [["all", tx("Tüm personel")], ["leave", tx("İzin talepleri"), queue.data?.leave], ["fixes", tx("Düzeltme talepleri"), queue.data?.shifts]] as [Tab, string, number?][] : []),
+    ["me", manager ? tx("Benim mesaim") : tx("Mesaim")],
+    ...(mine.data?.employee ? [["my-leave", tx("İzinlerim")], ["my-fixes", tx("Düzeltme taleplerim")], ["my-hours", tx("Saat dağıtımı")]] as [Tab, string][] : []),
   ];
   return (
     <Page>
-      <PageHeader icon={Timer} title="Mesai takibi" sub={manager ? "Giriş ve çıkış saatleri, izinler ve talepler" : "Yalnızca size ait kayıtlar"} />
+      <PageHeader icon={Timer} title={tx("Mesai takibi")} sub={manager ? tx("Giriş ve çıkış saatleri, izinler ve talepler") : tx("Yalnızca size ait kayıtlar")} />
       {tabs.length > 1 && (
         <div className="tabs" role="tablist">
           {tabs.map(([k, label, n]) => (
@@ -86,7 +87,7 @@ function Elapsed({ since }: { since: string }) {
     return () => window.clearInterval(t);
   }, []);
   const min = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
-  return <>{Math.floor(min / 60)} sa {min % 60} dk</>;
+  return <>{tx("{0} sa", Math.floor(min / 60))}{" "}{min % 60}{" "}{tx("dk")}</>;
 }
 
 function MyTab() {
@@ -98,7 +99,7 @@ function MyTab() {
     mutationFn: (way: "in" | "out") => api.post<{ hours?: number; break_minutes?: number }>(`/attendance/clock-${way}`, {}),
     onSuccess: (r, way) => {
       refresh();
-      toast(way === "in" ? "Giriş kaydedildi" : `Çıkış kaydedildi: ${fmtH(r.hours ?? 0)}${r.break_minutes ? `, ${r.break_minutes} dk mola düşüldü` : ""}`);
+      toast(way === "in" ? tx("Giriş kaydedildi") : tx("Çıkış kaydedildi: {0}{1}", fmtH(r.hours ?? 0), r.break_minutes ? tx(", {0} dk mola düşüldü", r.break_minutes) : ""));
     },
     onError: (e) => { refresh(); toast(errText(e), true); },
   });
@@ -111,7 +112,7 @@ function MyTab() {
     <>
       <Loading error={q.error} loading={q.isLoading} />
       {d && !d.employee && (
-        <div className="card empty">Hesabınıza bağlı bir personel kartı yok. Kartınızın hesabınıza bağlanması için yöneticinize başvurun.</div>
+        <div className="card empty">{tx("Hesabınıza bağlı bir personel kartı yok. Kartınızın hesabınıza bağlanması için yöneticinize başvurun.")}</div>
       )}
       {d?.employee && (
         <>
@@ -120,30 +121,30 @@ function MyTab() {
               <b>{d.employee.name}</b>
               <div className="muted">
                 {d.open
-                  ? <>Giriş {new Date(d.open.clock_in).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}, <Elapsed since={d.open.clock_in} /> geçti</>
-                  : "Şu an mesaide değilsiniz"}
+                  ? <>{tx("Giriş {0},", new Date(d.open.clock_in).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }))}{" "}<Elapsed since={d.open.clock_in} />{" "}{tx("geçti")}</>
+                  : tx("Şu an mesaide değilsiniz")}
               </div>
             </div>
             <button className={`btn att-btn${d.open ? "" : " primary"}`} disabled={clock.isPending} onClick={() => clock.mutate(d.open ? "out" : "in")}>
-              {d.open ? <LogOut size={18} /> : <LogIn size={18} />}{d.open ? "Çıkış yap" : "Giriş yap"}
+              {d.open ? <LogOut size={18} /> : <LogIn size={18} />}{d.open ? tx("Çıkış yap") : tx("Giriş yap")}
             </button>
           </div>
           <div className="row" style={{ margin: "10px 0" }}>
-            <label className="row">Ay <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></label>
+            <label className="row">{tx("Ay")}{" "}<input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></label>
           </div>
           <div className="grid stats">
-            <Stat label="Çalışılan saat" value={fmtH(d.summary.hours)} />
-            <Stat label="Fazla mesai" value={fmtH(d.summary.overtime)} sub={d.week_hours ? `Haftalık ${d.week_hours} saatin üstü` : undefined} />
-            <Stat label="Çalışılan gün" value={d.summary.days} />
-            <Stat label="Beklenen saat" value={fmtH(d.summary.expected)} sub={d.summary.covered ? `${fmtH(d.summary.covered)} izinle karşılandı` : "Geçen iş günleri"} />
-            {d.leave_days.length > 0 && <Stat label="İzinli gün" value={d.leave_days.length} />}
-            {d.summary.missing_days > 0 && <Stat label="Eksik gün" value={d.summary.missing_days} tone="warn" sub="Mesai veya izin kaydı yok" />}
-            {d.summary.forgot > 0 && <Stat label="Çıkış unutuldu" value={d.summary.forgot} tone="warn" sub="Düzeltme talebi açın" />}
+            <Stat label={tx("Çalışılan saat")} value={fmtH(d.summary.hours)} />
+            <Stat label={tx("Fazla mesai")} value={fmtH(d.summary.overtime)} sub={d.week_hours ? tx("Haftalık {0} saatin üstü", d.week_hours) : undefined} />
+            <Stat label={tx("Çalışılan gün")} value={d.summary.days} />
+            <Stat label={tx("Beklenen saat")} value={fmtH(d.summary.expected)} sub={d.summary.covered ? tx("{0} izinle karşılandı", fmtH(d.summary.covered)) : tx("Geçen iş günleri")} />
+            {d.leave_days.length > 0 && <Stat label={tx("İzinli gün")} value={d.leave_days.length} />}
+            {d.summary.missing_days > 0 && <Stat label={tx("Eksik gün")} value={d.summary.missing_days} tone="warn" sub={tx("Mesai veya izin kaydı yok")} />}
+            {d.summary.forgot > 0 && <Stat label={tx("Çıkış unutuldu")} value={d.summary.forgot} tone="warn" sub={tx("Düzeltme talebi açın")} />}
           </div>
           <div className="card">
             <div className="adm-scroll">
               <table className="simple erp-table">
-                <thead><tr><th>Tarih</th><th>Giriş</th><th>Çıkış</th><th className="num">Mola</th><th className="num">Saat</th><th className="num">Fazla</th><th>Durum</th><th>Not</th></tr></thead>
+                <thead><tr><th>{tx("Tarih")}</th><th>{tx("Giriş")}</th><th>{tx("Çıkış")}</th><th className="num">{tx("Mola")}</th><th className="num">{tx("Saat")}</th><th className="num">{tx("Fazla")}</th><th>{tx("Durum")}</th><th>{tx("Not")}</th></tr></thead>
                 <tbody>
                   {days.map(({ s, l }) => (l ? (
                     <tr key={`l${l.work_date}`}>
@@ -155,11 +156,11 @@ function MyTab() {
                       <td className="num">{s.break_minutes ? `${s.break_minutes} dk` : ""}</td>
                       <td className="num">{s.end ? fmtH(s.hours) : ""}</td>
                       <td className="num">{s.overtime ? fmtH(s.overtime) : ""}</td>
-                      <td className={s.status === "forgot" ? "error" : ""}>{STATUS[s.status]}{s.corrected_by ? <span className="muted"> · düzeltildi</span> : null}</td>
+                      <td className={s.status === "forgot" ? "error" : ""}>{STATUS[s.status]}{s.corrected_by ? <span className="muted">{" "}{tx("· düzeltildi")}</span> : null}</td>
                       <td className="muted">{s.note}</td>
                     </tr>
                   )))}
-                  {!days.length && <tr><td colSpan={8} className="muted empty">Bu ay kayıt yok.</td></tr>}
+                  {!days.length && <tr><td colSpan={8} className="muted empty">{tx("Bu ay kayıt yok.")}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -183,48 +184,48 @@ function AllTab() {
   const grid = useMemo(() => [...(d?.rows ?? []) as GridRow[], ...(d?.leave_days ?? []).map(leaveRow)]
     .sort((a, b) => b.work_date.localeCompare(a.work_date)), [d]);
   const columns = useMemo<GridColumn<GridRow>[]>(() => [
-    { accessorKey: "employee_name", header: "Personel", size: 170, card: "title" },
-    { id: "day", header: "Tarih", size: 105, card: "sub", accessorFn: (s) => fmtDay(s.work_date) },
-    { accessorKey: "start", header: "Giriş", size: 75, card: "field" },
-    { id: "end", header: "Çıkış", size: 85, card: "field", accessorFn: endText },
-    { accessorKey: "break_minutes", header: "Mola (dk)", size: 85, card: "field" },
-    { accessorKey: "hours", header: "Saat", size: 75, card: "field" },
-    { accessorKey: "overtime", header: "Fazla Mesai", size: 95, card: "field" },
-    { id: "status", header: "Durum", size: 130, card: "badge", accessorFn: (s) => s.leave ?? STATUS[s.status] },
-    { accessorKey: "note", header: "Not", size: 200, card: "field" },
-    { accessorKey: "corrected_by", header: "Düzelten", size: 110, card: "hide" },
+    { accessorKey: "employee_name", header: tx("Personel"), size: 170, card: "title" },
+    { id: "day", header: tx("Tarih"), size: 105, card: "sub", accessorFn: (s) => fmtDay(s.work_date) },
+    { accessorKey: "start", header: tx("Giriş"), size: 75, card: "field" },
+    { id: "end", header: tx("Çıkış"), size: 85, card: "field", accessorFn: endText },
+    { accessorKey: "break_minutes", header: tx("Mola (dk)"), size: 85, card: "field" },
+    { accessorKey: "hours", header: tx("Saat"), size: 75, card: "field" },
+    { accessorKey: "overtime", header: tx("Fazla Mesai"), size: 95, card: "field" },
+    { id: "status", header: tx("Durum"), size: 130, card: "badge", accessorFn: (s) => s.leave ?? STATUS[s.status] },
+    { accessorKey: "note", header: tx("Not"), size: 200, card: "field" },
+    { accessorKey: "corrected_by", header: tx("Düzelten"), size: 110, card: "hide" },
   ], []);
   return (
     <>
       <div className="row" style={{ margin: "10px 0", flexWrap: "wrap" }}>
-        <label className="row">Başlangıç <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="row">Bitiş <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        <select aria-label="Personel" value={emp} onChange={(e) => setEmp(numOrNull(e.target.value) ?? "")}>
-          <option value="">Tüm personel</option>
+        <label className="row">{tx("Başlangıç")}{" "}<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="row">{tx("Bitiş")}{" "}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <select aria-label={tx("Personel")} value={emp} onChange={(e) => setEmp(numOrNull(e.target.value) ?? "")}>
+          <option value="">{tx("Tüm personel")}</option>
           {people.data?.map((p) => <option key={p.employee_id} value={p.employee_id}>{p.name}</option>)}
         </select>
-        {canEdit && <button className="btn primary" onClick={() => setEdit("new")}>Mesai ekle</button>}
+        {canEdit && <button className="btn primary" onClick={() => setEdit("new")}>{tx("Mesai ekle")}</button>}
       </div>
       <Loading error={q.error} loading={q.isLoading} />
       {d && (
         <>
           <div className="grid stats">
-            <Stat label="Şu an içeride" value={d.inside} />
-            <Stat label="Toplam saat" value={fmtH(d.total.hours)} />
-            <Stat label="Fazla mesai" value={fmtH(d.total.overtime)} />
-            <Stat label="Beklenen saat" value={fmtH(d.total.expected)} sub={d.total.covered ? `${fmtH(d.total.covered)} izinle karşılandı` : "Geçen iş günleri"} />
-            <Stat label="Eksik gün" value={d.total.missing_days} tone={d.total.missing_days ? "warn" : undefined} sub="Mesai veya izin kaydı yok" />
-            <Stat label="Çıkış unutulan" value={d.total.forgot} tone={d.total.forgot ? "warn" : undefined} />
+            <Stat label={tx("Şu an içeride")} value={d.inside} />
+            <Stat label={tx("Toplam saat")} value={fmtH(d.total.hours)} />
+            <Stat label={tx("Fazla mesai")} value={fmtH(d.total.overtime)} />
+            <Stat label={tx("Beklenen saat")} value={fmtH(d.total.expected)} sub={d.total.covered ? tx("{0} izinle karşılandı", fmtH(d.total.covered)) : tx("Geçen iş günleri")} />
+            <Stat label={tx("Eksik gün")} value={d.total.missing_days} tone={d.total.missing_days ? "warn" : undefined} sub={tx("Mesai veya izin kaydı yok")} />
+            <Stat label={tx("Çıkış unutulan")} value={d.total.forgot} tone={d.total.forgot ? "warn" : undefined} />
           </div>
           <div className="card">
             <div className="adm-scroll">
               <table className="simple erp-table">
-                <thead><tr><th>Personel</th><th>Bölüm</th><th>Şimdi</th><th className="num">Gün</th><th className="num">Saat</th><th className="num">Beklenen</th><th className="num">İzin karşılığı</th><th className="num">Eksik saat</th><th className="num">İzinli gün</th><th className="num">Eksik gün</th><th className="num">Fazla mesai</th><th className="num">Çıkış yok</th></tr></thead>
+                <thead><tr><th>{tx("Personel")}</th><th>{tx("Bölüm")}</th><th>{tx("Şimdi")}</th><th className="num">{tx("Gün")}</th><th className="num">{tx("Saat")}</th><th className="num">{tx("Beklenen")}</th><th className="num">{tx("İzin karşılığı")}</th><th className="num">{tx("Eksik saat")}</th><th className="num">{tx("İzinli gün")}</th><th className="num">{tx("Eksik gün")}</th><th className="num">{tx("Fazla mesai")}</th><th className="num">{tx("Çıkış yok")}</th></tr></thead>
                 <tbody>
                   {d.people.map((p) => (
                     <tr key={p.employee_id}>
                       <td><b>{p.name}</b></td><td className="muted">{p.department}</td>
-                      <td>{p.inside ? "İçeride" : <span className="muted">Dışarıda</span>}</td>
+                      <td>{p.inside ? tx("İçeride") : <span className="muted">{tx("Dışarıda")}</span>}</td>
                       <td className="num">{p.days}</td><td className="num">{fmtH(p.hours)}</td>
                       <td className="num">{fmtH(p.expected)}</td>
                       <td className="num">{p.covered ? fmtH(p.covered) : ""}</td>
@@ -235,13 +236,13 @@ function AllTab() {
                       <td className={`num${p.forgot ? " error" : ""}`}>{p.forgot || ""}</td>
                     </tr>
                   ))}
-                  {!d.people.length && <tr><td colSpan={12} className="muted empty">Personel kartı yok.</td></tr>}
+                  {!d.people.length && <tr><td colSpan={12} className="muted empty">{tx("Personel kartı yok.")}</td></tr>}
                 </tbody>
               </table>
             </div>
           </div>
           <DataGrid data={grid} columns={columns} getRowId={(s) => (s.leave ? `l${s.employee_id}-${s.work_date}` : String(s.id))} exportName={`mesai_${from}_${to}`} stateKey="attendance"
-            emptyText="Bu aralıkta mesai kaydı yok." onRowClick={canEdit ? (s) => { if (!s.leave) setEdit(s); } : undefined} openOnClick />
+            emptyText={tx("Bu aralıkta mesai kaydı yok.")} onRowClick={canEdit ? (s) => { if (!s.leave) setEdit(s); } : undefined} openOnClick />
         </>
       )}
       {edit && <ShiftModal shift={edit === "new" ? null : edit} onClose={() => setEdit(null)} />}
@@ -266,42 +267,42 @@ function ShiftModal({ shift, onClose }: { shift: Shift | null; onClose: () => vo
       const body = { work_date: day, start, end: end || null, break_minutes: numOrNull(pause), note };
       return shift ? saveRev(shift.rev, (rev) => api.put(`/attendance/${shift.id}`, { ...body, rev })) : api.post("/attendance", { ...body, employee_id: emp });
     },
-    onSuccess: () => done("Mesai kaydedildi"),
+    onSuccess: () => done(tx("Mesai kaydedildi")),
     onError: (e) => toast(errText(e), true),
   });
   const del = useMutation({
     mutationFn: () => api.del(`/attendance/${shift!.id}`),
-    onSuccess: () => done("Mesai silindi"),
+    onSuccess: () => done(tx("Mesai silindi")),
     onError: (e) => toast(errText(e), true),
   });
   return (
-    <Modal title={shift ? `${shift.employee_name} mesaisi` : "Mesai ekle"} onClose={onClose} footer={
+    <Modal title={shift ? `${shift.employee_name} mesaisi` : tx("Mesai ekle")} onClose={onClose} footer={
       <>
         {shift && (
           <button className="btn" style={{ marginRight: "auto" }} disabled={del.isPending} onClick={() => (sure ? del.mutate() : setSure(true))}>
-            {sure ? "Silmeyi onayla" : "Sil"}
+            {sure ? tx("Silmeyi onayla") : tx("Sil")}
           </button>
         )}
-        <button className="btn" onClick={onClose}>Vazgeç</button>
-        <button className="btn primary" disabled={save.isPending || !day || !start || (!shift && !emp)} onClick={() => save.mutate()}>Kaydet</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+        <button className="btn primary" disabled={save.isPending || !day || !start || (!shift && !emp)} onClick={() => save.mutate()}>{tx("Kaydet")}</button>
       </>
     }>
       <div className="adm-form two">
         {!shift && (
-          <Field label="Personel">
+          <Field label={tx("Personel")}>
             <select value={emp} onChange={(e) => setEmp(numOrNull(e.target.value) ?? "")}>
-              <option value="">Seçin</option>
+              <option value="">{tx("Seçin")}</option>
               {people.data?.map((p) => <option key={p.employee_id} value={p.employee_id}>{p.name}</option>)}
             </select>
           </Field>
         )}
-        <Field label="Tarih"><input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></Field>
-        <Field label="Giriş"><input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-        <Field label="Çıkış"><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
-        <Field label="Mola (dk)"><input type="number" min={0} value={pause} placeholder="Boşsa ayardan gelir" onChange={(e) => setPause(e.target.value)} /></Field>
-        <Field label="Not"><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label={tx("Tarih")}><input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></Field>
+        <Field label={tx("Giriş")}><input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
+        <Field label={tx("Çıkış")}><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+        <Field label={tx("Mola (dk)")}><input type="number" min={0} value={pause} placeholder={tx("Boşsa ayardan gelir")} onChange={(e) => setPause(e.target.value)} /></Field>
+        <Field label={tx("Not")}><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
-      <p className="muted">Çıkış girişten küçükse gece vardiyası sayılır ve ertesi güne yazılır.</p>
+      <p className="muted">{tx("Çıkış girişten küçükse gece vardiyası sayılır ve ertesi güne yazılır.")}</p>
     </Modal>
   );
 }
