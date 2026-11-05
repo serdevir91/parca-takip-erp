@@ -247,7 +247,7 @@ def test_purge_failed_backup_explains_and_can_be_skipped(client, admin_headers, 
     assert client.get(f"/api/projects/{pid}", headers=h).status_code == 404
     with SessionLocal() as db:
         row = db.scalar(select(AuditLog).where(AuditLog.entity == "project", AuditLog.entity_id == str(pid),
-                                               AuditLog.action == "delete"))
+                                               AuditLog.action == "delete").order_by(AuditLog.id.desc()))
         assert row is not None and row.new == "yedeksiz"
 
 
