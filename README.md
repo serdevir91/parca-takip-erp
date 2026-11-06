@@ -430,6 +430,10 @@ are covered from stock, by a purchase order or by a work order, and the cost is 
   Heat Treatment, Purchased, Subcontracted manufacturing, Standard part, From stock, Customer-supplied and Unspecified. New ones
   are added in Administration > System Settings, or by an administrator during an Excel comparison. Each type behaves like Manufacturing
   or Purchased, and drawings and order suggestions are turned on or off separately.
+- **Product tree Excel:** The product tree can be built from a file, matched with any Excel or CSV file and exported.
+- **Control list fixes:** Issues that need a value have a Fix button, for one row or several selected rows.
+- **Export:** Every table exports to Excel. Administrators can export all data, except users, settings and chat messages.
+- **Project pictures:** A project can have a picture on its card.
 - **Compare with Excel:** Any `.xlsx`, `.xlsm`, `.xls` or `.csv` file can be compared with the part list. Part number, status,
   order and procurement columns are found automatically and can be corrected. Changes are saved only after review.
 - **Table:** Cell selection, ranges, copy and paste, fill handle, undo, find and replace, column

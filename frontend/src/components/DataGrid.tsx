@@ -154,8 +154,9 @@ export default function DataGrid<T>(p: GridProps<T>) {
   const canMail = useAuth().can("mail", "edit");
   const toast = useToast();
   const stateKey = p.stateKey ?? (p.exportName || null);
-  const layoutKey = stateKey ? `dg.layout.${stateKey}` : null;
-  const viewsKey = stateKey ? `dg.views.${stateKey}` : null;
+  const prefKey = stateKey?.replace(/\s+/g, "_");   // the server refuses spaces in setting names
+  const layoutKey = prefKey ? `dg.layout.${prefKey}` : null;
+  const viewsKey = prefKey ? `dg.views.${prefKey}` : null;
   const [layout, setLayout] = useState<Layout>(() => loadJson(layoutKey, { visibility: {}, order: [], pinning: { left: [] }, sizing: {} }));
   const [views, setViews] = useState<SavedView[]>(() => loadJson(viewsKey, { list: [] as SavedView[] }).list);
   const [viewName, setViewName] = useState("");

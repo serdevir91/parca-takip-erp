@@ -191,6 +191,8 @@ Example: `ornek_veriler/T-35_Guncel_Durumu.xlsx`. Columns: No, Dosya Adı, Refer
 
 ## 9. Excel outputs
 
+Every table can be exported. Grids export all filtered rows, plain tables export what the page shows, and administrators can export all data except users, settings and chat messages, one sheet per table. Paged plain tables export the page on screen.
+
 The two files in `referans_ciktilar/` are the target format. Produce the same structure with openpyxl:
 
 1. **Tracking List (full):** Summary, Parts List (assemblies included, indented), Fasteners, Fastener Summary.

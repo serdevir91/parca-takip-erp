@@ -5,6 +5,7 @@ import socket
 import ssl
 import sys
 import threading
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -123,3 +124,51 @@ def test_foreign_page_cannot_use_app_actions(desk):
         a.app_action("quit")
     a._window.url = "http://10.0.0.5:8000/parts"
     assert a._app_only() is None
+
+
+def test_an_address_without_a_port_tries_the_server_port(desk):
+    assert desk.server_candidates("192.168.1.5") == [
+        "http://192.168.1.5:8000", "http://192.168.1.5", "https://192.168.1.5:8000", "https://192.168.1.5"]
+    assert desk.server_candidates("http://192.168.1.5/") == ["http://192.168.1.5:8000", "http://192.168.1.5"]
+    assert desk.server_candidates("192.168.1.5:9000") == ["http://192.168.1.5:9000"]
+    assert desk.server_candidates("https://erp.example.com/lab") == ["https://erp.example.com/lab"]
+    assert desk.server_candidates("  ") == []
+
+
+def test_local_addresses_skip_the_proxy(desk):
+    for url in ("http://192.168.1.5:8000", "http://10.0.0.2", "http://[fd00::1]:8000", "http://server",
+                "http://server.local:8000", "http://127.0.0.1:8000"):
+        assert desk.is_direct(url), url
+    for url in ("https://github.com/x", "http://8.8.8.8"):
+        assert not desk.is_direct(url), url
+
+
+def test_probe_tells_why_a_server_cannot_be_reached(desk, monkeypatch):
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        closed = s.getsockname()[1]
+    assert desk.probe(f"http://127.0.0.1:{closed}", 1) == "refused"
+
+    answers = {"http://a": {"status": "ok"}, "http://b": {"hello": "world"}}
+    monkeypatch.setattr(desk, "http_json", lambda url, *a, **k: answers[url.removesuffix("/api/health")])
+    assert desk.probe("http://a") == "ok" and desk.is_erp("http://a")
+    assert desk.probe("http://b") == "other" and not desk.is_erp("http://b")
+
+    def fails(error):
+        def call(*_a, **_k):
+            raise error
+        monkeypatch.setattr(desk, "http_json", call)
+        return desk.probe("http://a")
+
+    assert fails(urllib.error.URLError(socket.gaierror(8, "no name"))) == "name"
+    assert fails(urllib.error.URLError(TimeoutError())) == "timeout"
+    assert fails(TimeoutError()) == "timeout"
+    assert fails(urllib.error.HTTPError("u", 404, "no", None, None)) == "other"
+
+
+def test_another_network_is_named_only_when_no_address_shares_it(desk):
+    assert desk.other_network("http://192.168.1.5:8000", ["10.20.30.40"])
+    assert not desk.other_network("http://192.168.1.5:8000", ["192.168.1.77"])
+    assert not desk.other_network("https://erp.example.com", ["10.20.30.40"])
+    message = desk.why_unreachable("http://192.168.1.5", "timeout", ["10.20.30.40"])
+    assert "192.168.1.5" in message and ("ağda" in message or "network" in message or "red" in message or "Netzwerk" in message)

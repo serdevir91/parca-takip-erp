@@ -4,7 +4,7 @@ import { copyText } from "../api/clipboard";
 import { tx } from "../api/i18n";
 import { errText, useToast } from "./Toast";
 
-type Connection = { ips: string[]; hostname: string };
+type Connection = { ips: string[]; hostname: string; problems?: string[] };
 
 /** The address another computer or phone types to reach this server. */
 export default function ServerAddress() {
@@ -26,6 +26,7 @@ export default function ServerAddress() {
           <button type="button" className="btn small" onClick={() => copy(a)}>{tx("Kopyala")}</button>
         </div>
       ))}
+      {q.data?.problems?.map((p) => <p key={p} className="error">{p}</p>)}
       {!list.length && !q.isLoading && <p className="muted">{tx("Adres bulunamadı. Sunucu bilgisayarının ağ bağlantısını kontrol edin.")}</p>}
     </div>
   );

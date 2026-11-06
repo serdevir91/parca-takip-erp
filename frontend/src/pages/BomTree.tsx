@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowDown, ArrowUp, Box, Boxes, ChevronDown, ChevronRight, Copy, IndentDecrease, IndentIncrease, Network, Plus,
-  Trash2, Undo2,
+  ArrowDown, ArrowUp, Box, Boxes, ChevronDown, ChevronRight, Copy, FileSpreadsheet, IndentDecrease, IndentIncrease,
+  Network, Plus, Trash2, Undo2,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../api/auth";
 import { PageHeader, useProject } from "../components/Layout";
+import TreeExcelModal, { type TreeExcelApply } from "../components/TreeExcelModal";
+import { exportSheet } from "../api/exportFile";
 import { errText, useToast } from "../components/Toast";
 import { LOCALE, tx } from "../api/i18n";
 
@@ -92,6 +94,7 @@ export default function BomTree() {
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
+  const [excel, setExcel] = useState(false);
 
   const loaded = useRef(false);
   const rev = useRef<number>(0);
@@ -178,6 +181,39 @@ export default function BomTree() {
   };
 
   const hit = root ? locate(root, sel) : null;
+
+  /** What the user selected from a spreadsheet. One change, so one undo takes all of it back. */
+  const applyExcel = (a: TreeExcelApply) => change((r) => {
+    const nodes = (no: string): TreeNode[] => {
+      const out: TreeNode[] = [];
+      const walk = (n: TreeNode) => { if (n.part_no === no) out.push(n); n.children.forEach(walk); };
+      walk(r);
+      return out;
+    };
+    if (a.root) Object.assign(r, a.root);
+    for (const c of a.changes) {
+      const where = c.parent_no ? nodes(c.parent_no).flatMap((p) => p.children.filter((n) => n.part_no === c.part_no)) : nodes(c.part_no);
+      for (const n of where) Object.assign(n, { [c.field]: c.new });
+    }
+    const picked = locate(r, sel)?.node;
+    const fallback = picked?.assembly ? picked : r;
+    for (const { id: _id, parent_no, ...item } of a.add) {
+      const parents = nodes(parent_no);
+      for (const p of parents) p.assembly = true;
+      (parents[0] ?? fallback).children.push({ ...blank(item.assembly, temin[0] ?? ""), ...item, procurement: item.procurement || temin[0] || "" });
+    }
+  });
+  const exportTree = async () => {
+    if (!root) return;
+    const rows = flatten(root, new Set()).map(({ node: n, level, total }) => [
+      level, n.part_no, n.name ?? "", n.assembly ? tx("Montaj") : tx("Parça"), n.qty, total, n.material, n.weight, n.rev, n.procurement, n.coating]);
+    try {
+      await exportSheet(tx("Ürün ağacı"), [tx("Seviye"), tx("Parça No"), tx("Parça Adı"), tx("Tip"), tx("Adet"), tx("Toplam"), tx("Malzeme"),
+        tx("Ağırlık (g)"), tx("Rev"), tx("Temin Şekli"), tx("Kaplama")], rows);
+    } catch (e) {
+      toast(errText(e), true);
+    }
+  };
   const node = hit?.node ?? null;
   const parent = hit?.parent ?? null;
   const index = parent && node ? parent.children.findIndex((c) => c.key === node.key) : -1;
@@ -292,6 +328,13 @@ export default function BomTree() {
       toast(errText(e), true);
     }
   };
+  // With a BOM there is already a tree: the file is matched against the current one, not an empty draft
+  const startExcel = async () => {
+    const base = project?.current_version_id ?? versionsQ.data?.[0]?.id;
+    if (base) await startFrom(String(base));
+    else startEmpty();
+    setExcel(true);
+  };
   const discard = async () => {
     setAskDelete(false);
     setDirty(false);
@@ -365,6 +408,7 @@ export default function BomTree() {
           {canEdit ? (
             <div className="row" style={{ alignItems: "center" }}>
               <button className="btn primary" disabled={!draftQ.data} onClick={startEmpty}><Plus size={16} />{" "}{tx("Boş ağaçla başla")}</button>
+              <button className="btn" disabled={!draftQ.data} onClick={() => void startExcel()}><FileSpreadsheet size={16} />{" "}{versions.length ? tx("Excel ile eşleştir") : tx("Excel'den başla")}</button>
               {versions.length > 0 && (
                 <select aria-label={tx("Başlangıç sürümü")} value="" onChange={(e) => void startFrom(e.target.value)}>
                   <option value="">{tx("Bir BOM sürümünden başla…")}</option>
@@ -402,8 +446,10 @@ export default function BomTree() {
                 <button className="btn small" onClick={() => setAskDelete(false)}>{tx("Vazgeç")}</button>
               </>
             ) : <button className="btn small" onClick={() => setAskDelete(true)}>{tx("Taslağı sil")}</button>}
+            <button className="btn small" onClick={() => setExcel(true)}><FileSpreadsheet size={14} />{" "}{tx("Excel ile eşleştir")}</button>
           </>
         )}
+        <button className="btn small" onClick={() => void exportTree()}>{tx("Excel'e aktar")}</button>
         <span className="muted">{tx("{0} satır · {1} farklı kalem", total?.rows.toLocaleString(LOCALE), total?.unique.toLocaleString(LOCALE))}</span>
         <span className={saveError ? "error" : "muted"}>{saveText}</span>
         <span style={{ flex: 1 }} />
@@ -516,6 +562,9 @@ export default function BomTree() {
           </fieldset>
         )}
       </div>
+      {excel && root && (
+        <TreeExcelModal pid={pid} tree={root} target={(node?.assembly ? node : root).part_no} onApply={applyExcel} onClose={() => setExcel(false)} />
+      )}
     </div>
   );
 }

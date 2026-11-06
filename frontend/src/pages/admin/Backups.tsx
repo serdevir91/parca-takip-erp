@@ -70,6 +70,15 @@ export default function BackupsTab() {
     }
   };
 
+  const all = useMutation({
+    mutationFn: async () => {
+      const { id } = await api.post<{ id: string }>("/export/all");
+      const name = tx("Tüm veriler");
+      await download(`/export/grid/${id}?name=${encodeURIComponent(name)}`, `${name}.xlsx`);
+    },
+    onError: (e) => toast(errText(e), true),
+  });
+
   const d = st.data;
   const running = now.isPending || !!d?.running;
   return (
@@ -83,6 +92,9 @@ export default function BackupsTab() {
         </button>
         <input ref={picker} type="file" accept=".tar" hidden onChange={(e) => e.target.files?.[0] && void send(e.target.files[0])} />
         <button className="btn" disabled={st.isFetching} onClick={() => void st.refetch()}>{tx("Yenile")}</button>
+        <button className="btn" disabled={all.isPending} title={tx("Her tablo ayrı sayfada. Kullanıcılar, ayarlar ve sohbet mesajları dahil değildir.")} onClick={() => all.mutate()}>
+          {all.isPending ? tx("Hazırlanıyor…") : tx("Tüm verileri Excel'e aktar")}
+        </button>
       </div>
       <Loading error={st.error} loading={st.isLoading} />
       {d && (

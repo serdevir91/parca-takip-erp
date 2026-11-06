@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 import uuid
+
+from openpyxl import Workbook
 
 from app.core import bomtree
 from app.core.bomparse import parse_bom
 from app.core.status import DEFAULT_TEMIN_TYPES
+from app.services import tree_excel
 
 
 def _node(part_no: str, qty: int = 1, assembly: bool = False, *children: dict, **extra) -> dict:
@@ -156,3 +160,85 @@ def test_tree_names_are_saved_and_come_back(client, admin_headers):
     assert tree["children"][0]["name"] == "Yan sac"
     found = client.get(f"/api/projects/{pid}/bom/items", params={"q": "yan sac"}, headers=admin_headers).json()
     assert f"{tag}_P" in [i["part_no"] for i in found]
+
+
+def _book(tmp_path, rows, name="liste.xlsx"):
+    wb = Workbook()
+    for r in rows:
+        wb.active.append(r)
+    p = tmp_path / name
+    wb.save(p)
+    return p
+
+
+def _item(no, *children, **kw):
+    return {"part_no": no, "name": "", "assembly": bool(children), "qty": 1, "material": "", "weight": None, "rev": "",
+            "procurement": "", "coating": "", "children": list(children), **kw}
+
+
+TEMINS = ["Lazer Kesim", "Talaşlı İmalat", "Montaj"]
+
+
+def test_excel_changes_new_rows_and_absent_parts(tmp_path):
+    tree = _item("KOK", _item("M-1", _item("P-1", qty=2, material="S235"), _item("P-2")), _item("P-3"))
+    p = _book(tmp_path, [
+        ["Parça No", "Parça Adı", "Adet", "Malzeme", "Ağırlık (kg)", "Temin Şekli", "Üst Montaj"],
+        ["p 1.SLDPRT", "Mil", 3, "S355", 1.5, "lazer", "M-1"],
+        ["P-9", "Yeni", 2, "", "", "Talaşlı İmalat", "M-1"],
+        ["P-9", "", 1, "", "", "", "M-1"],
+        ["P-2", "", "bir", "", "", "Bilinmeyen", "M-1"],
+    ])
+    r = tree_excel.compare(p, tree, {}, TEMINS)
+    got = {(c["part_no"], c["field"]): (c["old"], c["new"]) for c in r["changes"]}
+    assert got == {("P-1", "name"): ("", "Mil"), ("P-1", "material"): ("S235", "S355"), ("P-1", "weight"): (None, 1500.0),
+                   ("P-1", "procurement"): ("", "Lazer Kesim"), ("P-1", "qty"): (2, 3)}
+    assert [(a["part_no"], a["qty"], a["parent_no"], a["procurement"]) for a in r["add"]] == [("P-9", 3, "M-1", "Talaşlı İmalat")]
+    assert {a["part_no"] for a in r["absent"]} == {"M-1", "P-3"}
+    assert sorted(i["field"] for i in r["invalid"]) == ["qty", "temin"]
+    assert r["layouts"][0]["cols"]["part_no"] == 1 and r["placed"]
+
+
+def test_excel_level_column_builds_an_empty_tree(tmp_path):
+    p = _book(tmp_path, [
+        ["Seviye", "Parça No", "Tip", "Adet"],
+        [0, "MAKINE", "Montaj", 1],
+        [1, "GOVDE", "Montaj", 1],
+        ["1.1", "SAC", "Parça", 4],
+        [1, "KAPAK", "Parça", 2],
+    ])
+    r = tree_excel.compare(p, _item(""), {}, TEMINS)
+    assert r["root"]["part_no"] == "MAKINE"
+    assert {(a["part_no"], a["parent_no"], a["assembly"]) for a in r["add"]} == {
+        ("GOVDE", "MAKINE", True), ("KAPAK", "MAKINE", False), ("SAC", "GOVDE", False)}
+    names = [a["part_no"] for a in r["add"]]
+    assert names.index("GOVDE") < names.index("SAC")
+
+
+def test_excel_without_places_keeps_a_shared_quantity(tmp_path):
+    tree = _item("KOK", _item("A", _item("P", qty=2)), _item("B", _item("P", qty=5)))
+    p = _book(tmp_path, [["Parça No", "Adet", "Malzeme"], ["P", 9, "S235"]])
+    r = tree_excel.compare(p, tree, {}, TEMINS)
+    assert [(c["field"], c["new"]) for c in r["changes"]] == [("material", "S235")]
+    assert not r["placed"] and not r["add"]
+
+
+def test_excel_column_correction_and_api(client, admin_headers, tmp_path):
+    h = admin_headers
+    pid = client.post("/api/projects", headers=h, json={"name": f"Excel ağacı {uuid.uuid4().hex[:6]}"}).json()["id"]
+    p = _book(tmp_path, [["X-1", "Sac"], ["X-2", "Mil"], ["X-3", "Pim"]])
+    tree = json.dumps(_item("KOK", _item("X-1"), _item("X-2")))
+
+    def send(config=None):
+        with open(p, "rb") as f:
+            return client.post(f"/api/projects/{pid}/bom/tree/excel", headers=h, data={"tree": tree, **config},
+                               files={"file": ("l.xlsx", f, "application/octet-stream")})
+
+    r = send({}).json()
+    assert r["layouts"][0]["cols"] == {"part_no": 1} and [a["part_no"] for a in r["add"]] == ["X-3"]
+    cfg = {"sheets": {r["layouts"][0]["name"]: {"use": True, "cols": {"part_no": 1, "name": 2, "unknown": 2, "qty": 99}}}}
+    r = send({"config": json.dumps(cfg)}).json()
+    assert r["layouts"][0]["cols"] == {"part_no": 1, "name": 2}
+    assert {(c["part_no"], c["new"]) for c in r["changes"]} == {("X-1", "Sac"), ("X-2", "Mil")}
+    assert send({"config": "["}).status_code == 400
+    assert client.post(f"/api/projects/{pid}/bom/tree/excel", headers=h, data={"tree": "{"},
+                       files={"file": ("l.xlsx", b"x", "application/octet-stream")}).status_code == 400

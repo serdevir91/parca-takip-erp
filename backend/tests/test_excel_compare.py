@@ -185,4 +185,4 @@ def test_own_export_keeps_the_exact_path(client, admin_headers, pid):
 def test_connection_needs_login_and_lists_the_server(client, admin_headers):
     assert client.get("/api/connection").status_code == 401
     body = client.get("/api/connection", headers=admin_headers).json()
-    assert set(body) == {"ips", "hostname"}
+    assert set(body) == {"ips", "hostname", "problems"}

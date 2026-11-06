@@ -9,16 +9,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.control import AutoIssue, check_bom
+from ..core.control import (KIND_EMPTY_MATERIAL, KIND_EMPTY_TEMIN, KIND_MATERIAL_MISMATCH, KIND_NO_DRAWING, KIND_REV,
+                            AutoIssue, check_bom)
 from ..core.status import PROG_DONE
 from ..models import ControlIssue, User
 from ..services import audit
+from ..services.settings import temin_choices
 from ..services.state import ProjectView
+from ..services.tracking import apply_changes, clean_changes, tracking_of
 from ..permissions import require
 from .deps import get_db, project_or_404
 from app.core.i18n import tx
 
 control_view, control_edit = require("control", "view"), require("control", "edit")
+parts_edit = require("parts", "edit")
 
 router = APIRouter(tags=["control"])
 
@@ -26,11 +30,20 @@ OPEN, RESOLVED = "Açık", "Çözüldü"
 KIND_DRAWING_REV = "Resim revizyonu uyuşmuyor"
 KIND_MANUAL = "Manuel"
 SEVERITIES = ("error", "warning", "info")
+# What the list can settle by itself, and which value it asks for
+FIX_FIELD = {KIND_EMPTY_MATERIAL: "material", KIND_MATERIAL_MISMATCH: "material", KIND_EMPTY_TEMIN: "procurement",
+             KIND_NO_DRAWING: "procurement", KIND_REV: "rev", KIND_DRAWING_REV: "rev"}
+FIELD_LIMIT = {"material": 200, "rev": 32}
 
 
 class ResolveIn(BaseModel):
     key: str
     note: str = ""
+
+
+class FixIn(BaseModel):
+    keys: list[str] = Field(min_length=1, max_length=20000)
+    value: str = Field(min_length=1, max_length=200)
 
 
 class ManualIn(BaseModel):
@@ -53,7 +66,7 @@ def detect(view: ProjectView) -> list[AutoIssue]:
         if p.get("drawing_rev_mismatch"):
             issues.append(AutoIssue(KIND_DRAWING_REV, p["part_no"],
                                     f"BOM revizyonu {p['rev'] or '-'}, resim revizyonu {p['drawing_rev'] or '-'}.",
-                                    list(p["levels"])))
+                                    list(p["levels"]), choices=[p["drawing_rev"]] if p["drawing_rev"] else []))
     return issues
 
 
@@ -68,7 +81,7 @@ def _out(key: str, kind: str, part_no: str, message: str, levels: list, severity
         "levels": levels, "severity": severity, "manual": manual, "present": present,
         "status": row.status if row else OPEN, "note": row.note if row else "",
         "resolved_by": row.resolved_by if row else "", "resolved_at": _iso(row.resolved_at) if row else None,
-        "created_by": row.created_by if row else "",
+        "created_by": row.created_by if row else "", "fix": None,
     }
 
 
@@ -88,7 +101,8 @@ def control_list(pid: int, status: str | None = Query(None, description="Açık 
         if i.key in seen:
             continue
         seen.add(i.key)
-        items.append(_out(i.key, i.kind, i.part_no, i.message, i.levels, i.severity, stored.get(i.key)))
+        items.append({**_out(i.key, i.kind, i.part_no, i.message, i.levels, i.severity, stored.get(i.key)),
+                      "fix": {"field": FIX_FIELD[i.kind], "choices": i.choices} if i.kind in FIX_FIELD else None})
     stale = []
     for key, c in stored.items():
         if c.manual:
@@ -102,6 +116,7 @@ def control_list(pid: int, status: str | None = Query(None, description="Açık 
         kinds[i["kind"]] = kinds.get(i["kind"], 0) + 1
     return {
         "items": items, "stale": stale, "kinds": kinds,
+        "materials": sorted({r.material for r in view.rows if r.material}), "temin": list(view.temin),
         "counts": {"total": len(items), "open": sum(1 for i in items if i["status"] == OPEN),
                    "resolved": sum(1 for i in items if i["status"] == RESOLVED),
                    "error": sum(1 for i in items if i["severity"] == "error" and i["status"] == OPEN)},
@@ -136,6 +151,47 @@ def resolve(pid: int, body: ResolveIn, db: Session = Depends(get_db), user: User
     row.resolved_by, row.resolved_at = user.username, datetime.now(timezone.utc)
     db.commit()
     return _out(row.key, row.kind, row.part_no, row.message, row.levels or [], row.severity, row, row.manual)
+
+
+@router.post("/projects/{pid}/control/fix")
+def fix(pid: int, body: FixIn, db: Session = Depends(get_db), user: User = Depends(control_edit),
+        _: User = Depends(parts_edit)) -> dict[str, Any]:
+    """Changes the data behind the selected issues. Once the data is right the check stops reporting them.
+    Material and revision are written to the rows of the current BOM version, temin to the part's tracking."""
+    project = project_or_404(db, pid)
+    view = ProjectView.load(db, project)
+    found = {i.key: i for i in detect(view)}
+    value = body.value.strip()
+    if not value:
+        raise HTTPException(400, tx("Değer boş olamaz"))
+    fixed = 0
+    for key in dict.fromkeys(body.keys):
+        issue = found.get(key)
+        if issue is None:
+            continue                # already gone, for example fixed by the same part in this selection
+        target = FIX_FIELD.get(issue.kind)
+        if target is None:
+            raise HTTPException(400, tx("Bu kontrol maddesi burada düzeltilemez"))
+        if target == "procurement":
+            if value not in temin_choices(db):
+                raise HTTPException(400, tx("Temin şekli tanımlı değil. Önce sistem ayarlarından ekleyin."))
+            t = tracking_of(db, pid, issue.part_no)
+            if t is None:
+                raise HTTPException(404, tx("Kontrol maddesi bulunamadı"))
+            apply_changes(db, user, t, clean_changes(db, {"procurement_override": value}))
+        else:
+            if len(value) > FIELD_LIMIT[target]:
+                raise HTTPException(400, tx("Değer çok uzun"))
+            if issue.kind == KIND_MATERIAL_MISMATCH and value not in issue.choices:
+                raise HTTPException(400, tx("Listeden bir değer seçin"))
+            for r in view.rows:
+                hit = r.material in issue.choices if issue.kind == KIND_MATERIAL_MISMATCH else r.part_no == issue.part_no
+                if hit and getattr(r, target) != value:
+                    audit.record(db, user, "bom", r.part_no, target, getattr(r, target), value, pid)
+                    setattr(r, target, value)
+        fixed += 1
+    db.commit()
+    return {"fixed": fixed}
 
 
 @router.post("/projects/{pid}/control/unresolve")

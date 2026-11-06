@@ -260,11 +260,11 @@ def _title_field(title: str) -> str | None:
     return next((TITLE_FIELD[t] for t in TITLES_LONGEST if title.startswith(t + " ")), None)
 
 
-def _find_header(t: Table) -> int:
+def _find_header(t: Table, known: Any = _title_field) -> int:
     """The row with the most known titles; 0 when the sheet has no title row."""
     best, score = 0, 0
     for i, row in enumerate(t.rows[:HEADER_SCAN_ROWS], 1):
-        n = sum(1 for v in row if _title_field(norm(v)))
+        n = sum(1 for v in row if known(norm(v)))
         if n > score:
             best, score = i, n
     return best
@@ -319,14 +319,14 @@ def _detect(t: Table, m: Matcher, ctx: _Ctx) -> dict[str, Any]:
             "headers": [{"col": c, "title": _txt(t.at(header, c)) if header else ""} for c in range(1, width + 1)]}
 
 
-def _merge(layout: dict[str, Any], given: Any) -> dict[str, Any]:
+def _merge(layout: dict[str, Any], given: Any, known: dict[str, Any] = HEADERS) -> dict[str, Any]:
     """The user's corrections over the guess. Column numbers outside the sheet count as not used."""
     if not isinstance(given, dict):
         return layout
     width = len(layout["headers"])
     if isinstance(given.get("cols"), dict):
         layout["cols"] = {f: c for f, c in given["cols"].items()
-                          if (f in HEADERS) and isinstance(c, int) and 0 < c <= width}
+                          if (f in known) and isinstance(c, int) and 0 < c <= width}
     if isinstance(given.get("use"), bool):
         layout["use"] = given["use"]
     return layout

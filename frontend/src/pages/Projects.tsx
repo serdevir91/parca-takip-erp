@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, api } from "../api/client";
+import { ApiError, api, upload } from "../api/client";
+import { makeThumb } from "../api/images";
 import { saveRev } from "../api/conflict";
 import { useAuth } from "../api/auth";
 import { FolderKanban } from "lucide-react";
 import { Page, PageHeader } from "../components/Layout";
 import { Modal } from "./admin/shared";
+import Thumb, { forgetThumb } from "../components/viewer/Thumb";
 import { errText, useToast } from "../components/Toast";
+import { exportSheet } from "../api/exportFile";
 import type { Project } from "../types";
 import { LOCALE, tx } from "../api/i18n";
 
@@ -24,6 +27,7 @@ export default function Projects() {
   const [form, setForm] = useState<{ id?: number; rev?: number; name: string; root_part_no: string; description: string; template_id?: number } | null>(null);
   const [asTemplate, setAsTemplate] = useState<{ project_id: number; name: string; note: string } | null>(null);
   const [dropping, setDropping] = useState(false);
+  const [picture, setPicture] = useState<File | null | undefined>(undefined);   // undefined: no change, null: remove
   const go = useNavigate();
   const templates = useQuery({ queryKey: ["project-templates"], queryFn: () => api.get<Template[]>("/project-templates"), enabled: canEdit });
   const [purge, setPurge] = useState<Project | null>(null);
@@ -32,12 +36,36 @@ export default function Projects() {
     queryFn: () => api.get<Project[]>(`/projects?include_archived=${showArchived}`),
   });
   const done = () => qc.invalidateQueries({ queryKey: ["projects"] });
+  const current = q.data?.find((p) => p.id === form?.id);
+  const preview = useMemo(() => (picture ? URL.createObjectURL(picture) : null), [picture]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const openForm = (f: NonNullable<typeof form>) => { setPicture(undefined); setForm(f); };
+  const savePicture = async (p: Project) => {
+    if (picture === undefined) return;
+    if (p.photo_id) forgetThumb(`/photos/${p.photo_id}/thumb`);
+    if (picture === null) {
+      if (p.photo_id) await api.del(`/photos/${p.photo_id}`);
+      return;
+    }
+    const data = new FormData();
+    data.append("entity", "project");
+    data.append("key", String(p.id));
+    data.append("file", picture);
+    const t = await makeThumb(picture, 960);
+    if (t) data.append("thumb", t, "t.jpg");
+    await upload("/photos", data);
+  };
   const save = useMutation({
     mutationFn: (f: NonNullable<typeof form>) =>
       f.id ? saveRev(f.rev, (rev) => api.patch<Project>(`/projects/${f.id}`, { ...f, rev })) : api.post<Project>("/projects", f),
-    onSuccess: (p, f) => {
+    onSuccess: async (p, f) => {
       toast(tx("Proje kaydedildi"));
       setForm(null);
+      try {
+        await savePicture(p);
+      } catch (e) {
+        toast(errText(e), true);
+      }
       done();
       if (f.template_id) go(`/p/${p.id}/tree`);
     },
@@ -71,7 +99,11 @@ export default function Projects() {
     <Page>
       <PageHeader icon={FolderKanban} title={tx("Projeler")} sub={tx("Makine projeleri, BOM sürümleri ve parça takibi")}>
         <label className="row"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />{" "}{tx("Arşivdekileri göster")}</label>
-        {canEdit && <button className="btn primary" onClick={() => setForm({ name: "", root_part_no: "", description: "" })}>{tx("Yeni proje")}</button>}
+        <button className="btn" disabled={!q.data?.length} onClick={() => exportSheet(tx("Projeler"),
+          [tx("Proje"), tx("Kök parça"), tx("Açıklama"), tx("Takip edilen parça"), tx("Oluşturma"), tx("Arşivde")],
+          (q.data ?? []).map((p) => [p.name, p.root_part_no, p.description, p.tracked_parts, p.created_at?.slice(0, 10) ?? "", p.archived ? tx("Evet") : tx("Hayır")]),
+        ).catch((e) => toast(errText(e), true))}>{tx("Excel'e aktar")}</button>
+        {canEdit && <button className="btn primary" onClick={() => openForm({ name: "", root_part_no: "", description: "" })}>{tx("Yeni proje")}</button>}
       </PageHeader>
       {q.isLoading && <div className="muted">{tx("Yükleniyor…")}</div>}
       {q.error && <div className="error">{errText(q.error)}</div>}
@@ -79,6 +111,7 @@ export default function Projects() {
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
         {q.data?.map((p) => (
           <div key={p.id} className="card" style={{ opacity: p.archived ? 0.6 : 1 }}>
+            {p.photo_id != null && <Link to={`/p/${p.id}`} tabIndex={-1}><Thumb path={`/photos/${p.photo_id}/thumb`} label={p.name} className="project-photo" /></Link>}
             <div className="row">
               <Link to={`/p/${p.id}`} style={{ fontSize: 16, fontWeight: 600 }}>{p.name}</Link>
               {p.archived && <span className="badge">{tx("Arşiv")}</span>}
@@ -93,7 +126,7 @@ export default function Projects() {
             <div className="row" style={{ marginTop: 10 }}>
               <Link className="btn small" to={`/p/${p.id}`}>{tx("Özet")}</Link>
               <Link className="btn small" to={`/p/${p.id}/parts`}>{tx("Parçalar")}</Link>
-              {canEdit && <button className="btn small" onClick={() => setForm({ id: p.id, rev: p.rev, name: p.name, root_part_no: p.root_part_no, description: p.description })}>{tx("Düzenle")}</button>}
+              {canEdit && <button className="btn small" onClick={() => openForm({ id: p.id, rev: p.rev, name: p.name, root_part_no: p.root_part_no, description: p.description })}>{tx("Düzenle")}</button>}
               {canEdit && <button className="btn small" onClick={() => setAsTemplate({ project_id: p.id, name: p.name, note: "" })}>{tx("Şablon yap")}</button>}
               {isAdmin && (
                 <button className="btn small" onClick={() => (p.archived || confirm(tx("“{0}” arşivlensin mi?", p.name))) && archive.mutate(p)}>
@@ -115,6 +148,18 @@ export default function Projects() {
               <label>{tx("Proje adı")}<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={{ width: "100%" }} /></label>
               <label>{tx("Kök parça no (boş bırakılırsa ilk BOM'dan alınır)")}<input value={form.root_part_no} onChange={(e) => setForm({ ...form, root_part_no: e.target.value })} style={{ width: "100%" }} /></label>
               <label>{tx("Açıklama")}<textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ width: "100%" }} /></label>
+              <div>
+                {tx("Proje resmi")}
+                <div className="row" style={{ marginTop: 4 }}>
+                  {preview ? <img className="project-photo-pick" src={preview} alt="" />
+                    : picture === undefined && current?.photo_id != null && <Thumb path={`/photos/${current.photo_id}/thumb`} label={current.name} className="project-photo-pick" />}
+                  <label className="btn small">
+                    {tx("Resim seç")}
+                    <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) setPicture(f); e.target.value = ""; }} />
+                  </label>
+                  {(picture || (picture === undefined && current?.photo_id != null)) && <button type="button" className="btn small" onClick={() => setPicture(null)}>{tx("Resmi kaldır")}</button>}
+                </div>
+              </div>
               {!form.id && !!templates.data?.length && (
                 <label>{tx("Şablon (ürün ağacı buradan başlar)")}
                   <select value={form.template_id ?? ""} style={{ width: "100%" }}

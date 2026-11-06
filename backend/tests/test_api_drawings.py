@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 import uuid
 import zipfile
 
@@ -149,3 +150,30 @@ def test_drawing_delete_many(client, admin_headers, data_file):
     assert client.get(f"/api/drawings/{ids[0]}", headers=h).status_code == 404
     assert client.get(f"/api/drawings/{ids[2]}", headers=h).status_code == 200
     assert client.post("/api/drawings/delete", json={"ids": []}, headers=h).status_code == 422
+
+
+def test_thumbnails_of_one_page_do_not_run_side_by_side(tmp_path, monkeypatch):
+    """PDFium crashes the server when two threads render at once, which a drawings page always asks for."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Lock
+    from app.services import thumbs
+
+    running, peak, guard = [0], [0], Lock()
+
+    def render(_src):
+        with guard:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+        time.sleep(0.01)
+        with guard:
+            running[0] -= 1
+        return b"png"
+
+    monkeypatch.setattr(thumbs, "_render_pdfium", render)
+    monkeypatch.setattr(thumbs, "_render_fitz", render)
+    src = tmp_path / "a.pdf"
+    src.write_bytes(b"%PDF-1.4")
+    with ThreadPoolExecutor(8) as pool:
+        done = list(pool.map(lambda i: thumbs.make_thumb(src, tmp_path / f"{i}.png"), range(16)))
+    assert all(done) and peak[0] == 1
+    assert (tmp_path / "3.png").read_bytes() == b"png" and not list(tmp_path.glob("*.tmp"))

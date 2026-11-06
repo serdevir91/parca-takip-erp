@@ -71,6 +71,33 @@ def people(client, admin_headers):
     return [_user(client, admin_headers) for _ in range(3)]
 
 
+def test_project_picture(client, admin_headers):
+    h = admin_headers
+    pid = client.post("/api/projects", headers=h, json={"name": _uid("Resimli ")}).json()["id"]
+
+    def send(name):
+        return client.post("/api/photos", headers=h, data={"entity": "project", "key": str(pid)},
+                           files={"file": (name, PNG, "image/png")})
+
+    def project():
+        return next(p for p in client.get("/api/projects", headers=h).json() if p["id"] == pid)
+
+    assert project()["photo_id"] is None
+    first = send("a.png").json()["id"]
+    assert project()["photo_id"] == first
+    second = send("b.png").json()["id"]     # a project has one picture: the new one replaces it
+    assert project()["photo_id"] == second
+    assert client.get(f"/api/photos/{first}/file", headers=h).status_code == 404
+    assert client.get(f"/api/photos/{second}/file", headers=h).status_code == 200
+
+    missing = client.post("/api/photos", headers=h, data={"entity": "project", "key": "999999"},
+                          files={"file": ("c.png", PNG, "image/png")})
+    assert missing.status_code == 404
+
+    assert client.delete(f"/api/photos/{second}", headers=h).status_code == 200
+    assert project()["photo_id"] is None
+
+
 def test_direct_messages_and_unread(client, people):
     (a, ah), (b, bh), _ = people
     r = client.post("/api/chat/direct", headers=ah, json={"user_id": b})

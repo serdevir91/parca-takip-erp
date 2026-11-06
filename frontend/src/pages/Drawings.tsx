@@ -121,7 +121,7 @@ class ThumbCache {
             this.urls.set(key, u);
             resolve(u);
           })
-          .catch(() => { this.urls.set(key, null); resolve(null); })
+          .catch(() => resolve(null))   // not remembered: the row asks again the next time it is shown
           .finally(() => {
             this.active--;
             this.pending.delete(key);

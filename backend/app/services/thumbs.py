@@ -7,13 +7,18 @@ Pillow is not needed.
 from __future__ import annotations
 
 import logging
+import os
 import struct
+import threading
 import zlib
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 THUMB_WIDTH = 480          # px, longest side target for the list and gallery preview
+# PDFium is not thread-safe: a drawings page asks for several thumbnails at once, and two renders side by side
+# crash the whole server process
+_render_lock = threading.Lock()
 
 try:  # pragma: no cover - import guard
     import pypdfium2 as _pdfium
@@ -85,12 +90,15 @@ def make_thumb(src: Path, dst: Path) -> bool:
     if not available() or not src.is_file():
         return False
     try:
-        png = _render_pdfium(src) if _pdfium is not None else _render_fitz(src)
+        with _render_lock:
+            png = _render_pdfium(src) if _pdfium is not None else _render_fitz(src)
     except Exception as e:  # noqa: BLE001 - broken/encrypted PDFs simply get no preview
         log.warning("Thumbnail failed for %s: %s", src, e)
         return False
     if not png:
         return False
     dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_bytes(png)
+    part = dst.with_name(f"{dst.name}.{threading.get_ident()}.tmp")   # a reader never sees half a file
+    part.write_bytes(png)
+    os.replace(part, dst)
     return True

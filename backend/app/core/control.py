@@ -29,6 +29,7 @@ class AutoIssue:
     message: str
     levels: list[str] = field(default_factory=list)
     severity: str = "warning"   # warning | error | info
+    choices: list[str] = field(default_factory=list)    # values that would settle it, when the check knows them
 
     @property
     def key(self) -> str:
@@ -94,7 +95,7 @@ def check_bom(bom: ParsedBom, drawing_parts: set[str] | None = None,
         if len(revs) > 1:
             issues.append(AutoIssue(KIND_REV, pno,
                                     "Farklı satırlarda farklı revizyon: " + ", ".join(sorted(x or "(boş)" for x in revs)),
-                                    levels))
+                                    levels, choices=sorted(x for x in revs if x)))
         if drawing_parts is not None and not is_asm and temin in drawing_temins and pno not in drawing_parts:
             issues.append(AutoIssue(KIND_NO_DRAWING, pno, "İmalat parçasının teknik resmi yok.", levels))
 
@@ -132,7 +133,8 @@ def check_bom(bom: ParsedBom, drawing_parts: set[str] | None = None,
                     nb = sum(1 for r in rows if r.material == b)
                     issues.append(AutoIssue(
                         KIND_MATERIAL_MISMATCH, f"{a} / {b}",
-                        f"Benzer malzeme adları: '{a}' ({na} satır) ve '{b}' ({nb} satır). Yazım hatası olabilir."))
+                        f"Benzer malzeme adları: '{a}' ({na} satır) ve '{b}' ({nb} satır). Yazım hatası olabilir.",
+                        choices=[a, b]))
 
     if produced_parts:
         pass  # revision-after-production warnings come from BOM compare (see compare.py)

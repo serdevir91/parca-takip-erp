@@ -12,7 +12,8 @@ function load(path: string): Promise<string | null> {
     p = new Promise<string | null>((resolve) => {
       const run = () => {
         active++;
-        blobUrl(path).then(resolve, () => resolve(null)).finally(() => { active--; queue.shift()?.(); });
+        blobUrl(path).then(resolve, () => { cache.delete(path); resolve(null); })   // a failure is not kept: the next view asks again
+          .finally(() => { active--; queue.shift()?.(); });
       };
       if (active < 6) run(); else queue.push(run);
     });

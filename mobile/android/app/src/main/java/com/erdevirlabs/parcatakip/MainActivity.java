@@ -815,10 +815,15 @@ public class MainActivity extends Activity {
             if (!setupPage()) return;
             String base = normalize(url);
             new Thread(() -> {
-                JSONObject r = base.isEmpty() ? null : Discovery.check(base, 4000);
-                if (r == null && !base.isEmpty() && !url.trim().matches("(?i)^https?://.*")) {
-                    r = Discovery.check("https" + base.substring(4), 4000);
+                boolean bare = !url.trim().matches("(?i)^https?://.*");
+                JSONObject r = null;
+                // The server listens on 8000, while an address without a port means 80
+                if (!base.isEmpty() && Uri.parse(base).getPort() < 0) {
+                    r = Discovery.check(base + ":8000", 3000);
+                    if (r == null && bare) r = Discovery.check("https" + base.substring(4) + ":8000", 3000);
                 }
+                if (r == null && !base.isEmpty()) r = Discovery.check(base, 3000);
+                if (r == null && !base.isEmpty() && bare) r = Discovery.check("https" + base.substring(4), 3000);
                 JSONObject found = r;
                 callback(cb, found == null ? "null" : found.toString());
             }).start();

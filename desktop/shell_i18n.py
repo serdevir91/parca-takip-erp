@@ -6,6 +6,11 @@ import sys
 
 TEXT: dict[str, dict[str, str]] = {
     "en": {
+        "{0} adresindeki bilgisayara ulaşıldı ama LAB ERP yanıt vermedi. Sunucu kapalı ya da port yanlış.": "{0} was reached, but LAB ERP did not answer. The server is off or the port is wrong.",
+        "{0} adı bulunamadı. Sunucunun IP adresini yazın.": "Name {0} was not found. Enter the server's IP address.",
+        "{0} adresinde başka bir program yanıt veriyor. Portu kontrol edin.": "Another program answers at {0}. Check the port.",
+        "{0} yanıt vermiyor. Sunucu kapalı, güvenlik duvarı engelliyor ya da bu bilgisayar aynı ağda değil.": "{0} does not respond. The server is off, a firewall blocks it, or this computer is not on the same network.",
+        "Sunucu başka bir ağda olabilir. Yerel adresler yalnızca aynı ağdan çalışır.": "The server may be on another network. Local addresses only work from the same network.",
         "Sunucu {0} portunda başlatılamadı": "Server could not be started on port {0}",
         "Bu işlem yalnızca ayarlar ekranından yapılabilir": "This operation can only be performed from the settings screen",
         "Bu sayfa uygulama işlemlerini kullanamaz": "This page cannot use application actions",
@@ -76,6 +81,11 @@ TEXT: dict[str, dict[str, str]] = {
             "Closing the application will also stop the server and disconnect other network users. Close anyway?",
     },
     "es": {
+        "{0} adresindeki bilgisayara ulaşıldı ama LAB ERP yanıt vermedi. Sunucu kapalı ya da port yanlış.": "Se alcanzó {0}, pero LAB ERP no respondió. El servidor está apagado o el puerto es incorrecto.",
+        "{0} adı bulunamadı. Sunucunun IP adresini yazın.": "No se encontró el nombre {0}. Escriba la dirección IP del servidor.",
+        "{0} adresinde başka bir program yanıt veriyor. Portu kontrol edin.": "Otro programa responde en {0}. Compruebe el puerto.",
+        "{0} yanıt vermiyor. Sunucu kapalı, güvenlik duvarı engelliyor ya da bu bilgisayar aynı ağda değil.": "{0} no responde. El servidor está apagado, un firewall lo bloquea o este equipo no está en la misma red.",
+        "Sunucu başka bir ağda olabilir. Yerel adresler yalnızca aynı ağdan çalışır.": "El servidor puede estar en otra red. Las direcciones locales solo funcionan desde la misma red.",
         "Sunucu {0} portunda başlatılamadı": "No se pudo iniciar el servidor en el puerto {0}",
         "Bu işlem yalnızca ayarlar ekranından yapılabilir": "Esta operación solo se puede realizar desde la pantalla de ajustes",
         "Bu sayfa uygulama işlemlerini kullanamaz": "Esta página no puede utilizar acciones de la aplicación",
@@ -146,6 +156,11 @@ TEXT: dict[str, dict[str, str]] = {
             "Al cerrar la aplicación, el servidor se detendrá y se desconectará a los demás usuarios de la red. ¿Cerrar?",
     },
     "de": {
+        "{0} adresindeki bilgisayara ulaşıldı ama LAB ERP yanıt vermedi. Sunucu kapalı ya da port yanlış.": "{0} wurde erreicht, aber LAB ERP antwortete nicht. Der Server ist aus oder der Port ist falsch.",
+        "{0} adı bulunamadı. Sunucunun IP adresini yazın.": "Name {0} wurde nicht gefunden. Geben Sie die IP-Adresse des Servers ein.",
+        "{0} adresinde başka bir program yanıt veriyor. Portu kontrol edin.": "Unter {0} antwortet ein anderes Programm. Prüfen Sie den Port.",
+        "{0} yanıt vermiyor. Sunucu kapalı, güvenlik duvarı engelliyor ya da bu bilgisayar aynı ağda değil.": "{0} antwortet nicht. Der Server ist aus, eine Firewall blockiert ihn oder dieser Computer ist nicht im selben Netzwerk.",
+        "Sunucu başka bir ağda olabilir. Yerel adresler yalnızca aynı ağdan çalışır.": "Der Server ist möglicherweise in einem anderen Netzwerk. Lokale Adressen funktionieren nur aus demselben Netzwerk.",
         "Sunucu {0} portunda başlatılamadı": "Server konnte auf Port {0} nicht gestartet werden",
         "Bu işlem yalnızca ayarlar ekranından yapılabilir": "Dieser Vorgang kann nur über die Einstellungen ausgeführt werden",
         "Bu sayfa uygulama işlemlerini kullanamaz": "Diese Seite kann keine Anwendungsaktionen verwenden",

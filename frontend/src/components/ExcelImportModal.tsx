@@ -4,6 +4,7 @@ import type { RowSelectionState } from "@tanstack/react-table";
 import { api, upload } from "../api/client";
 import { useAuth } from "../api/auth";
 import { errText, useToast } from "./Toast";
+import ColumnMapping, { type SheetLayout } from "./ColumnMapping";
 import DataGrid, { type GridColumn } from "./DataGrid";
 import { statusStyle } from "../theme/theme";
 import { LOCALE, tx } from "../api/i18n";
@@ -27,16 +28,6 @@ type Change = {
   row: number;
 };
 
-type Layout = {
-  name: string;
-  header: number;
-  use: boolean;
-  rows: number;
-  matched: number;
-  cols: Record<string, number>;
-  headers: { col: number; title: string }[];
-};
-
 type NewTemin = { raw: string; name: string; kind: string; count: number };
 
 type Preview = {
@@ -48,7 +39,7 @@ type Preview = {
   unknown: { sheet: string; row: number; part_no: string }[];
   invalid: { sheet: string; row: number; key: string; field: string; value: string; message: string }[];
   not_in_file: { part_no: string; name: string; status: string; procurement: string }[];
-  layouts: Layout[];
+  layouts: SheetLayout[];
   unresolved: { value: string; count: number }[];
   new_temins: NewTemin[];
   version_id: number;
@@ -73,8 +64,6 @@ const mapFields = (): [string, string][] => [
   ["part_no", tx("Parça No")], ["status", tx("Durum (üretim)")], ["order", tx("Sipariş Durumu")], ["temin", tx("Temin Şekli")],
   ["manufacturer", tx("Üretici")], ["material_status", tx("Malzeme Durumu")], ["t35_note", tx("Durum Notu")], ["note", tx("Not")],
 ];
-
-const columnName = (n: number): string => (n > 26 ? columnName(Math.floor((n - 1) / 26)) : "") + String.fromCharCode(65 + ((n - 1) % 26));
 
 type Tab = "changes" | "unknown" | "invalid" | "absent";
 type Props = { pid: number; open: boolean; onClose: () => void };
@@ -165,18 +154,11 @@ function Inner({ pid, onClose }: Props) {
   const busy = pv.isPending || ap.isPending;
 
   /** Read the same file again with the corrected columns and values. */
-  const rerun = (layouts: Layout[], next: Values) => {
+  const rerun = (layouts: SheetLayout[], next: Values) => {
     setValues(next);
     if (file) pv.mutate({ f: file, config: { values: next, sheets: Object.fromEntries(layouts.map((l) => [l.name, { use: l.use, cols: l.cols }])) } });
   };
   const layouts = preview?.layouts ?? [];
-  const setLayout = (name: string, ch: Partial<Layout>) => rerun(layouts.map((l) => (l.name === name ? { ...l, ...ch } : l)), values);
-  const setColumn = (l: Layout, field: string, col: number) => {
-    const cols = { ...l.cols };
-    if (col) cols[field] = col;
-    else delete cols[field];
-    setLayout(l.name, { cols, use: l.use || field === "part_no" });
-  };
   const pickFile = (f: File) => {
     setFile(f);
     setValues(NO_VALUES);
@@ -222,29 +204,7 @@ function Inner({ pid, onClose }: Props) {
                   {preview.invalid.length > 0 && <span className="badge err">{tx("{0} geçersiz değer", fmt(preview.invalid.length))}</span>}
                 </div>
                 {preview.mode === "any" && (
-                  <details className="imp-map" open={preview.matched === 0} key={preview.matched === 0 ? "open" : "closed"}>
-                    <summary>{tx("Sütun eşleştirme")}</summary>
-                    {layouts.map((l) => (
-                      <div className="imp-map-sheet" key={l.name}>
-                        <label className="row" style={{ gap: 8 }}>
-                          <input type="checkbox" checked={l.use} disabled={busy} onChange={(e) => setLayout(l.name, { use: e.target.checked })} />
-                          <b>{l.name}</b>
-                          <span className="muted">{tx("{0} parça eşleşti", fmt(l.matched))}</span>
-                        </label>
-                        <div className="imp-map-fields">
-                          {mapFields().map(([field, label]) => (
-                            <label key={field}>
-                              <span className="muted">{label}</span>
-                              <select value={l.cols[field] ?? 0} disabled={busy} onChange={(e) => setColumn(l, field, Number(e.target.value))}>
-                                <option value={0}>{tx("Kullanma")}</option>
-                                {l.headers.map((h) => <option key={h.col} value={h.col}>{columnName(h.col)}{h.title ? `: ${h.title}` : ""}</option>)}
-                              </select>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </details>
+                  <ColumnMapping layouts={layouts} fields={mapFields()} busy={busy} open={preview.matched === 0} onChange={(l) => rerun(l, values)} />
                 )}
                 {(preview.unresolved.length > 0 || preview.new_temins.length > 0) && (
                   <div className="card imp-values" style={{ marginTop: 10, maxHeight: 200, overflow: "auto" }}>
@@ -343,7 +303,7 @@ function Inner({ pid, onClose }: Props) {
 }
 
 /** Warning list for side tabs; capped to keep the DOM small. */
-function WarnList({ head, rows, empty, note }: { head: string[]; rows: (string | number)[][]; empty: string; note: string }) {
+export function WarnList({ head, rows, empty, note }: { head: string[]; rows: (string | number)[][]; empty: string; note: string }) {
   if (!rows.length) return <div className="muted" style={{ padding: 12 }}>{empty}</div>;
   const LIMIT = 500;
   return (

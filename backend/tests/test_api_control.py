@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import select
 
-from app.models import Part, Project
+from app.models import BomRow, Part, Project
 from app.services import bomimport
 
 F_1102 = "BOM_T01_0000_0000_2026-11-02.csv"
@@ -85,3 +85,50 @@ def test_control_manual_issue(client, admin_headers, data_file):
     assert client.delete(f"/api/projects/{pid}/control/issues/{issue['id']}", headers=h).status_code == 200
     assert not any(i["key"] == issue["key"] for i in _list(client, h, pid)["items"])
     assert client.delete(f"/api/projects/{pid}/control/issues/{issue['id']}", headers=h).status_code == 404
+
+
+def _kind(data: dict, kind: str) -> list[dict]:
+    return [i for i in data["items"] if i["kind"] == kind]
+
+
+def _rows(pid: int, part_no: str) -> list[BomRow]:
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        version = db.scalar(select(Project).where(Project.id == pid)).current_version_id
+        return list(db.scalars(select(BomRow).where(BomRow.version_id == version, BomRow.part_no == part_no)))
+
+
+def test_fix_from_the_list_changes_the_data_and_clears_the_issue(client, admin_headers, data_file):
+    pid = _project_1102(data_file, "Fix")
+    data = _list(client, admin_headers, pid)
+    fixable = [i for i in data["items"] if i["fix"]]
+    assert fixable, "the sample has issues the list can fix"
+    assert "temin" in data and "materials" in data
+
+    empty = [i for i in fixable if i["fix"]["field"] == "material"]
+    if empty:
+        issue = empty[0]
+        r = client.post(f"/api/projects/{pid}/control/fix", json={"keys": [issue["key"]], "value": "S235"}, headers=admin_headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["fixed"] >= 1
+        assert issue["key"] not in {i["key"] for i in _list(client, admin_headers, pid)["items"]}
+
+    temin = [i for i in _list(client, admin_headers, pid)["items"] if i["fix"] and i["fix"]["field"] == "procurement"]
+    if temin:
+        keys = [i["key"] for i in temin[:2]]
+        bad = client.post(f"/api/projects/{pid}/control/fix", json={"keys": keys, "value": "Uydurma"}, headers=admin_headers)
+        assert bad.status_code == 400
+        good = data["temin"][0]
+        assert client.post(f"/api/projects/{pid}/control/fix", json={"keys": keys, "value": good}, headers=admin_headers).status_code == 200
+
+
+def test_fix_refuses_what_it_cannot_do(client, admin_headers, data_file):
+    pid = _project_1102(data_file, "NoFix")
+    data = _list(client, admin_headers, pid)
+    other = next((i for i in data["items"] if not i["fix"]), None)
+    url = f"/api/projects/{pid}/control/fix"
+    first = next(i for i in data["items"] if i["fix"])
+    assert client.post(url, json={"keys": [first["key"]], "value": "   "}, headers=admin_headers).status_code == 400
+    assert client.post(url, json={"keys": [first["key"]], "value": "x"}).status_code == 401
+    if other:
+        assert client.post(url, json={"keys": [other["key"]], "value": "x"}, headers=admin_headers).status_code == 400

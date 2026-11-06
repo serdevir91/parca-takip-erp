@@ -1,20 +1,26 @@
 """Ürün ağacı: build a BOM by hand, keep a draft on the project and send it as a pending BOM version."""
 from __future__ import annotations
 
+import json
+import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core import bomtree
 from ..models import BomRow, BomVersion, PartName, User, utcnow
-from ..services import bomimport
+from ..services import bomimport, tree_excel
+from ..services.excel_compare import FILE_TYPES
+from ..services.excel_import import ImportError_
 from ..services.settings import temin_choices
 from ..services.tracking import set_names
 from .bom import projects_edit, projects_view, version_out
 from .deps import get_db, project_or_404
+from .excel import _save_upload
 from app.core.i18n import tx
 
 router = APIRouter(prefix="/projects", tags=["bomtree"])
@@ -111,6 +117,27 @@ def _named(db: Session, tree: dict[str, Any] | None) -> dict[str, Any] | None:
     if tree:
         walk(tree)
     return tree
+
+
+@router.post("/{pid}/bom/tree/excel")
+async def compare_excel(pid: int, file: UploadFile = File(...), tree: str = Form(...), config: str | None = Form(None),
+                        db: Session = Depends(get_db), _: User = Depends(projects_edit)) -> dict[str, Any]:
+    """Any spreadsheet against the tree on screen. Writes nothing; the page applies what the user selects."""
+    _editable(db, pid)
+    try:
+        root = TreeNode.model_validate_json(tree).model_dump()
+        cfg = json.loads(config) if config else {}
+    except (ValidationError, ValueError):
+        cfg = None
+    if not isinstance(cfg, dict):
+        raise HTTPException(400, tx("Sütun eşleştirmesi okunamadı"))
+    path = await _save_upload(file, FILE_TYPES)
+    try:
+        return await run_in_threadpool(tree_excel.compare, path, root, cfg, temin_choices(db))
+    except ImportError_ as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        os.unlink(path)
 
 
 @router.get("/{pid}/bom/versions/{vid}/tree")

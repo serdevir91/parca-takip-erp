@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -136,10 +137,45 @@ def normalize_url(u: str) -> str:
     return u
 
 
+def server_candidates(raw: str) -> list[str]:
+    """What to try for a typed address. The server listens on 8000, while a plain address means port 80."""
+    u = normalize_url(raw)
+    if not u:
+        return []
+    parts = urllib.parse.urlsplit(u)
+    try:
+        if parts.port or parts.path:
+            return [u]
+    except ValueError:
+        return [u]
+    tried = [f"{u}:{DEFAULT_PORT}", u]
+    if not re.match(r"^\s*https?://", raw, re.I):    # the scheme was not typed either, so https counts too
+        tried += ["https" + t[4:] for t in tried]
+    return tried
+
+
+def is_direct(url: str) -> bool:
+    """True for an address inside the network. A company proxy cannot reach those, so they skip it."""
+    host = urllib.parse.urlsplit(url).hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return "." not in host or host.endswith(".local")
+
+
+def open_url(req: urllib.request.Request, timeout: float, context: ssl.SSLContext | None = None):
+    if not is_direct(req.full_url):
+        return urllib.request.urlopen(req, timeout=timeout, context=context)
+    handlers: list = [urllib.request.ProxyHandler({})]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    return urllib.request.build_opener(*handlers).open(req, timeout=timeout)
+
+
 def http_json(url: str, timeout: float = 5, context: ssl.SSLContext | None = None, **kw) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": f"ParcaTakipERP/{VERSION}",
                                                **kw.pop("headers", {})}, **kw)
-    with urllib.request.urlopen(req, timeout=timeout, context=context) as r:
+    with open_url(req, timeout, context) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
@@ -203,13 +239,47 @@ def peer_certificate(url: str, timeout: float = 6) -> bytes:
             return s.getpeercert(True)
 
 
-def is_erp(base: str, timeout: float = 3) -> bool:
-    """Only "is something there": no credentials travel on this call, so the certificate does not matter yet."""
+def probe(base: str, timeout: float = 3) -> str:
+    """ok, refused, timeout, name or other. No credentials travel on this call, so the certificate does not matter yet."""
     ctx = unverified_context() if base.startswith("https://") else None
     try:
-        return http_json(f"{base}/api/health", timeout, ctx).get("status") == "ok"
-    except (OSError, ValueError):
+        return "ok" if http_json(f"{base}/api/health", timeout, ctx).get("status") == "ok" else "other"
+    except (urllib.error.HTTPError, ValueError):
+        return "other"
+    except urllib.error.URLError as e:
+        reason = e.reason
+    except OSError as e:
+        reason = e
+    if isinstance(reason, ConnectionRefusedError):
+        return "refused"
+    if isinstance(reason, socket.gaierror):
+        return "name"
+    return "other" if isinstance(reason, ssl.SSLError) else "timeout"
+
+
+def is_erp(base: str, timeout: float = 3) -> bool:
+    return probe(base, timeout) == "ok"
+
+
+def other_network(url: str, own: list[str]) -> bool:
+    """A private server address that shares no /24 with this computer. Company networks can be wider, so only a hint."""
+    try:
+        host = ipaddress.ip_address(urllib.parse.urlsplit(url).hostname or "")
+        return host.is_private and not host.is_loopback and not any(
+            host in ipaddress.ip_network(f"{ip}/24", strict=False) for ip in own)
+    except ValueError:
         return False
+
+
+def why_unreachable(url: str, result: str, own: list[str]) -> str:
+    text = {
+        "refused": st("{0} adresindeki bilgisayara ulaşıldı ama LAB ERP yanıt vermedi. Sunucu kapalı ya da port yanlış.", url),
+        "name": st("{0} adı bulunamadı. Sunucunun IP adresini yazın.", url),
+        "other": st("{0} adresinde başka bir program yanıt veriyor. Portu kontrol edin.", url),
+    }.get(result) or st("{0} yanıt vermiyor. Sunucu kapalı, güvenlik duvarı engelliyor ya da bu bilgisayar aynı ağda değil.", url)
+    if other_network(url, own):
+        text += " " + st("Sunucu başka bir ağda olabilir. Yerel adresler yalnızca aynı ağdan çalışır.")
+    return text
 
 
 def port_free(port: int) -> bool:
@@ -448,11 +518,16 @@ class DesktopApp:
 
     def test_server(self, url: str) -> dict:
         self._setup_only()
-        u = normalize_url(url)
-        if not u:
+        tried = server_candidates(url)
+        if not tried:
             return {"ok": False, "error": st("Sunucu adresini yazın")}
-        return {"ok": True, "url": u, "https": u.startswith("https://")} if is_erp(u, 5) else {
-            "ok": False, "error": st("{0} adresinde LAB ERP sunucusu bulunamadı", u)}
+        worst = ""
+        for u in tried:
+            r = probe(u)
+            if r == "ok":
+                return {"ok": True, "url": u, "https": u.startswith("https://")}
+            worst = "other" if r == "other" else worst or r    # the default port says most about what went wrong
+        return {"ok": False, "error": why_unreachable(normalize_url(url), worst, lan_addresses())}
 
     def discover(self) -> list[dict]:
         self._setup_only()
@@ -571,7 +646,7 @@ class DesktopApp:
         r = urllib.request.Request(f"{self._base}/api{path}", data=data, headers=headers,
                                    method=str(req.get("method") or ("POST" if data else "GET")))
         try:
-            resp = urllib.request.urlopen(r, timeout=600, context=self._context())
+            resp = open_url(r, 600, self._context())
         except urllib.error.HTTPError as e:
             detail = ""
             try:
@@ -1162,6 +1237,9 @@ class DesktopApp:
             threading.Thread(target=self._tray_self_test, name="tray-test", daemon=True).start()
         if PIN_TEST is not None:
             threading.Thread(target=self._pin_self_test, name="pin-test", daemon=True).start()
+        if IS_WIN and is_direct(self._cfg.get("server_url", "")):
+            # WebView2 follows the system proxy too. This variable replaces the arguments pywebview gives, so its own stay.
+            os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--disable-features=ElasticOverscroll --no-proxy-server"
         webview.start(self._on_start, private_mode=False, storage_path=str(config_dir() / "webview"),
                       icon=str(icon) if icon.is_file() else None)
 

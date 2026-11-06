@@ -13,6 +13,7 @@ import { useAuth, type Module } from "../api/auth";
 import { THEME_LABELS, useTheme, type ThemeMode } from "../theme/theme";
 import { DesktopMenu } from "./DesktopMenu";
 import LangSelect from "./LangSelect";
+import TableExport from "./TableExport";
 import Profile from "./Profile";
 import Notifications, { AdminWarnings } from "./Notifications";
 import { UpdateBanner, useUpdate } from "./UpdateCheck";
@@ -291,6 +292,7 @@ export default function Layout() {
             <span className="dot" />{live.online ? tx("Canlı") : tx("Bağlantı yok")}
           </span>
           <span className="spacer" />
+          <TableExport />
           <LangSelect />
           <button className="icon-btn" title={tx("Tema: {0} (değiştirmek için tıklayın)", THEME_LABELS[mode])}
             aria-label={tx("Temayı değiştir")} onClick={() => setMode(THEME_NEXT[mode])}>

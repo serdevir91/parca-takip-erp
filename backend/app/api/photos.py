@@ -1,4 +1,5 @@
-"""Product photos: several per part number (shared across projects, like drawings) or per stock item.
+"""Product photos: several per part number (shared across projects, like drawings) or per stock item,
+and one picture per project.
 
 The browser sends a small JPEG thumbnail with each upload; lists use it, the viewer loads the original."""
 from __future__ import annotations
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user, session_token, user_from_token
 from ..config import get_settings
-from ..models import Photo, StockItem, User
+from ..models import Photo, Project, StockItem, User
 from ..permissions import can
 from ..services import audit, uploads
 from .deps import get_db
@@ -22,7 +23,7 @@ from app.core.i18n import tx
 
 router = APIRouter(tags=["photos"])
 
-ENTITY_MODULES = {"part": "parts", "stock": "stock"}
+ENTITY_MODULES = {"part": "parts", "stock": "stock", "project": "projects"}
 MAX_PHOTO_MB = 50
 MAX_THUMB_MB = 2
 
@@ -41,6 +42,8 @@ def _key(db: Session, entity: str, key: str) -> str:
         raise HTTPException(400, tx("Kayıt anahtarı boş"))
     if entity == "stock" and (not key.isdigit() or db.get(StockItem, int(key)) is None):
         raise HTTPException(404, tx("Stok kartı bulunamadı"))
+    if entity == "project" and (not key.isdigit() or db.get(Project, int(key)) is None):
+        raise HTTPException(404, tx("Proje bulunamadı"))
     return key
 
 
@@ -99,7 +102,14 @@ async def upload_photo(entity: str = Form(...), key: str = Form(...), file: Uplo
     db.add(p)
     db.flush()
     audit.record(db, user, "photo", f"{entity}:{key}", "fotoğraf", None, name, action="create")
+    # A project shows one picture, so a new one replaces it
+    old = db.scalars(select(Photo).where(Photo.entity == "project", Photo.entity_key == key, Photo.id != p.id)).all() \
+        if entity == "project" else []
+    paths = [path for o in old for path in (o.storage_path, o.thumb_path)]
+    for o in old:
+        db.delete(o)
     db.commit()
+    uploads.remove(*paths)
     return photo_out(p)
 
 

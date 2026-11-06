@@ -933,3 +933,7 @@ div.chat-pick-row { cursor: default; }
   color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .notif-go:hover { background: var(--surface-2); border-radius: 6px; }
 .notif-go .muted { font-size: 11px; }
+
+/* Picture on a project card; the file picker in the project form shows a small one */
+.project-photo { display: block; width: calc(100% + 28px); height: 160px; margin: -14px -14px 10px; object-fit: cover; border-radius: 10px 10px 0 0; }
+.project-photo-pick { width: 96px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }

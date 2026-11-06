@@ -10,9 +10,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Project, ProjectTemplate, PurchaseOrder,
+from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Photo, Project, ProjectTemplate, PurchaseOrder,
                       SalesOrder, StockMove, TimeEntry, Tracking, User, WorkOrder, utcnow)
-from ..services import audit, conflict
+from ..services import audit, conflict, uploads
 from ..services import backup as backup_svc
 from ..permissions import can, require
 from .deps import admin, any_user, get_db, project_or_404
@@ -40,10 +40,12 @@ def project_out(db: Session, p: Project) -> dict[str, Any]:
                         .where(BomVersion.project_id == p.id, BomVersion.status == "pending")) or 0
     parts = db.scalar(select(func.count()).select_from(Tracking)
                       .where(Tracking.project_id == p.id, Tracking.archived.is_(False))) or 0
+    photo = db.scalar(select(Photo.id).where(Photo.entity == "project", Photo.entity_key == str(p.id))
+                      .order_by(Photo.id.desc()).limit(1))
     return {"id": p.id, "rev": p.edit_rev, "name": p.name, "root_part_no": p.root_part_no, "description": p.description,
             "archived": p.archived, "created_at": p.created_at.isoformat() if p.created_at else None,
             "current_version_id": p.current_version_id, "current_version": version_brief(cur),
-            "pending_versions": pending, "tracked_parts": parts}
+            "pending_versions": pending, "tracked_parts": parts, "photo_id": photo}
 
 
 def _brief(p: Project) -> dict[str, Any]:
@@ -187,7 +189,12 @@ def purge_project(pid: int, body: PurgeIn | None = None, db: Session = Depends(g
     audit.record(db, user, "project", p.id, "deleted", p.name, "yedeksiz" if skip else None, action="delete")
     p.current_version_id = None
     db.flush()
+    photos = db.scalars(select(Photo).where(Photo.entity == "project", Photo.entity_key == str(pid))).all()
+    paths = [path for o in photos for path in (o.storage_path, o.thumb_path)]
+    for o in photos:
+        db.delete(o)
     db.delete(p)
     db.commit()
+    uploads.remove(*paths)
     shutil.rmtree(get_settings().bom_dir / str(pid), ignore_errors=True)
     return {"ok": True, "backup": backup_name}

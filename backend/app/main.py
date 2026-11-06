@@ -159,7 +159,7 @@ def version() -> dict:
 def connection() -> dict:
     """What another device types to reach this server. The page adds the scheme and port it was opened with."""
     ips = discovery.lan_ipv4()
-    return {"ips": ips, "hostname": socket.gethostname() if ips else ""}
+    return {"ips": ips, "hostname": socket.gethostname() if ips else "", "problems": discovery.network_problems()}
 
 
 for _m in sorted(pkgutil.iter_modules(api_pkg.__path__), key=lambda m: m.name):

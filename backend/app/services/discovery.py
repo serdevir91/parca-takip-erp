@@ -9,11 +9,15 @@ import ipaddress
 import json
 import logging
 import socket
+import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.request import urlopen
+
+from app.core.i18n import tx
 
 PORT = 47811
 MAGIC = b"PARCA_TAKIP_ERP_DISCOVER"
@@ -121,3 +125,29 @@ def discover(timeout: float = 1.5, ports: tuple[int, ...] = (8000, 80, 8080)) ->
                 if ok:
                     found[url] = {"url": url, "name": url.split("//", 1)[1].split(":")[0], "version": None}
     return sorted(found.values(), key=lambda s: s["url"])
+
+
+def _windows(*command: str) -> str:
+    """Output of a read-only Windows command; empty when it cannot run."""
+    try:
+        return subprocess.run(command, capture_output=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW,
+                              check=False).stdout.decode(errors="ignore")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def network_problems() -> list[str]:
+    """What will stop other devices on a Windows server. This only reads; the settings stay with the user and IT."""
+    if sys.platform != "win32":
+        return []
+    out: list[str] = []
+    profiles = _windows("powershell", "-NoProfile", "-Command", "(Get-NetConnectionProfile).NetworkCategory")
+    if "public" in profiles.lower():
+        out.append(tx("Bu bilgisayarın ağı Genel (Public) olarak ayarlı, bu yüzden diğer cihazlar bağlanamaz. Ayarlar > "
+                      "Ağ ve İnternet bölümünden Özel yapın. Şirket bilgisayarında bunu BT birimi yapar."))
+    if getattr(sys, "frozen", False):
+        rules = _windows("netsh", "advfirewall", "firewall", "show", "rule", "name=all", "dir=in", "verbose")
+        if rules and sys.executable.lower() not in rules.lower():
+            out.append(tx("Güvenlik duvarında LAB ERP izni bulunamadı. Kurulumu yönetici olarak yapın veya BT biriminden "
+                          "bu programa ya da porta izin isteyin."))
+    return out

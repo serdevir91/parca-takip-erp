@@ -1,6 +1,16 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.8.0
+
+- **Project pictures.** A project can have a picture. Add it in the project form; it appears on the project card in the Projects screen.
+- **Fix issues from the Control list.** Issues that need a value now have a **Fix** button: empty material, material mismatch, empty procurement type, missing drawing and revision warnings. Select several rows to give them one value. The value goes into the data, so the issue disappears by itself. Issues about the design structure lead to the product tree.
+- **Excel matching in the Product tree.** **Match with Excel** compares any Excel or CSV file with the tree and shows new rows, changed fields and parts missing from the file before anything changes. Level or parent assembly columns place new rows in the right spot. **Start from Excel** builds an empty tree from a file, and **Export to Excel** saves the tree.
+- **Export everywhere.** Pages with plain tables have an **Export to Excel** button in the header, with one sheet per table. Projects has its own button, and administrators can export all data from Administration > Backups, one sheet per table. Users, settings and chat messages are not included.
+- **Saved table layouts.** Column layouts and views of the Control, Drawings, Stock, Fasteners and BOM lists are now kept on the server. Before, they were lost at the next sign-in.
+- **Drawing thumbnails.** Thumbnails no longer stay blank when many PDFs load at once. Rendering several PDFs side by side could crash the server process, so they now render one at a time, and a failed thumbnail is tried again.
+- **Connecting to a server.** An address without a port now also tries port 8000, on Windows and Android. Addresses on the local network no longer go through the system proxy. When a connection fails, the Windows app says more about the reason, and the server address card warns about a Public network profile or a missing firewall rule.
+
 ## What's new in 1.7.0
 
 - **Compare any Excel with the part list.** In the Parts list, **Import > Compare with Excel** reads any `.xlsx`, `.xlsm`, `.xls` or `.csv` file. It finds the part number, status, order status and procurement columns by itself and shows what would change. Nothing is saved until you click Apply.
