@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import select
 
-from app.models import BomRow, Part, Project
+from app.models import Part, Project
 from app.services import bomimport
 
 F_1102 = "BOM_T01_0000_0000_2026-11-02.csv"
@@ -89,13 +89,6 @@ def test_control_manual_issue(client, admin_headers, data_file):
 
 def _kind(data: dict, kind: str) -> list[dict]:
     return [i for i in data["items"] if i["kind"] == kind]
-
-
-def _rows(pid: int, part_no: str) -> list[BomRow]:
-    from app.db import SessionLocal
-    with SessionLocal() as db:
-        version = db.scalar(select(Project).where(Project.id == pid)).current_version_id
-        return list(db.scalars(select(BomRow).where(BomRow.version_id == version, BomRow.part_no == part_no)))
 
 
 def test_fix_from_the_list_changes_the_data_and_clears_the_issue(client, admin_headers, data_file):

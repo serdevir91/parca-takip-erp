@@ -147,7 +147,7 @@ def test_probe_tells_why_a_server_cannot_be_reached(desk, monkeypatch):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         closed = s.getsockname()[1]
-    assert desk.probe(f"http://127.0.0.1:{closed}", 1) == "refused"
+    assert desk.probe(f"http://127.0.0.1:{closed}", 5) == "refused"   # Windows retries for about 2 seconds first
 
     answers = {"http://a": {"status": "ok"}, "http://b": {"hello": "world"}}
     monkeypatch.setattr(desk, "http_json", lambda url, *a, **k: answers[url.removesuffix("/api/health")])
