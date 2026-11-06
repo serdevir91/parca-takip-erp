@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { api, upload } from "../api/client";
 import { useAuth } from "../api/auth";
@@ -9,7 +9,7 @@ import { statusStyle } from "../theme/theme";
 import { LOCALE, tx } from "../api/i18n";
 
 // Backend: backend/app/api/excel.py (router prefix /excel)
-const PREVIEW_PATH = (pid: number) => `/excel/${pid}/import`;
+const PREVIEW_PATH = (pid: number) => `/excel/${pid}/compare`;
 const APPLY_PATH = (pid: number) => `/excel/${pid}/import/apply`;
 
 type Val = string | number | boolean | null;
@@ -27,14 +27,35 @@ type Change = {
   row: number;
 };
 
+type Layout = {
+  name: string;
+  header: number;
+  use: boolean;
+  rows: number;
+  matched: number;
+  cols: Record<string, number>;
+  headers: { col: number; title: string }[];
+};
+
+type NewTemin = { raw: string; name: string; kind: string; count: number };
+
 type Preview = {
+  mode: "any" | "export";
   sheets: string[];
   rows: number;
+  matched: number;
   changes: Change[];
   unknown: { sheet: string; row: number; part_no: string }[];
   invalid: { sheet: string; row: number; key: string; field: string; value: string; message: string }[];
+  not_in_file: { part_no: string; name: string; status: string; procurement: string }[];
+  layouts: Layout[];
+  unresolved: { value: string; count: number }[];
+  new_temins: NewTemin[];
   version_id: number;
 };
+
+type Values = { progress: Record<string, string>; temin: Record<string, string> };
+type Config = { sheets: Record<string, { use: boolean; cols: Record<string, number> }>; values: Values };
 
 type ApplyResp = { applied: number; skipped: { key: string; message: string }[] };
 
@@ -44,7 +65,18 @@ const fmt = (n: number) => n.toLocaleString(LOCALE);
 const show = (v: Val): string =>
   v === null || v === undefined || v === "" ? tx("(Boş)") : typeof v === "number" ? v.toLocaleString(LOCALE) : typeof v === "boolean" ? (v ? tx("Evet") : tx("Hayır")) : String(v);
 
-type Tab = "changes" | "unknown" | "invalid";
+const NO_VALUES: Values = { progress: {}, temin: {} };
+const PROGRESS = ["Bekliyor", "Devam ediyor", "Tamamlandı"];
+const NEW_KINDS = ["İmalat", "Hazır Alım"];
+
+const mapFields = (): [string, string][] => [
+  ["part_no", tx("Parça No")], ["status", tx("Durum (üretim)")], ["order", tx("Sipariş Durumu")], ["temin", tx("Temin Şekli")],
+  ["manufacturer", tx("Üretici")], ["material_status", tx("Malzeme Durumu")], ["t35_note", tx("Durum Notu")], ["note", tx("Not")],
+];
+
+const columnName = (n: number): string => (n > 26 ? columnName(Math.floor((n - 1) / 26)) : "") + String.fromCharCode(65 + ((n - 1) % 26));
+
+type Tab = "changes" | "unknown" | "invalid" | "absent";
 type Props = { pid: number; open: boolean; onClose: () => void };
 
 export function ExcelImportModal(p: Props) {
@@ -64,13 +96,20 @@ function Inner({ pid, onClose }: Props) {
   const [sel, setSel] = useState<RowSelectionState>({});
   const [tab, setTab] = useState<Tab>("changes");
   const [result, setResult] = useState<ApplyResp | null>(null);
+  const [values, setValues] = useState<Values>(NO_VALUES);
+  const [kinds, setKinds] = useState<Record<string, string>>({});
+  const choices = useQuery({
+    queryKey: ["partChoices", pid],
+    queryFn: () => api.get<{ temin_choices: string[] }>(`/projects/${pid}/parts/choices`),
+  });
 
   const changes = preview?.changes ?? [];
 
   const pv = useMutation({
-    mutationFn: (f: File) => {
+    mutationFn: ({ f, config }: { f: File; config?: Config }) => {
       const fd = new FormData();
       fd.append("file", f);
+      if (config) fd.append("config", JSON.stringify(config));
       setPct(0);
       return upload<Preview>(PREVIEW_PATH(pid), fd, setPct);
     },
@@ -86,8 +125,11 @@ function Inner({ pid, onClose }: Props) {
   });
 
   const ap = useMutation({
-    mutationFn: (items: Change[]) =>
-      api.post<ApplyResp>(APPLY_PATH(pid), { changes: items.map((c) => ({ kind: c.kind, key: c.key, field: c.field, new: c.new, old: c.old })) }),
+    mutationFn: (items: Change[]) => {
+      const used = new Set(items.filter((c) => c.field === "procurement_override").map((c) => String(c.new)));
+      const new_temins = (preview?.new_temins ?? []).filter((t) => used.has(t.name)).map((t) => ({ name: t.name, kind: kinds[t.raw] ?? t.kind }));
+      return api.post<ApplyResp>(APPLY_PATH(pid), { new_temins, changes: items.map((c) => ({ kind: c.kind, key: c.key, field: c.field, new: c.new, old: c.old })) });
+    },
     onSuccess: (r) => {
       setResult(r);
       toast(tx("{0} değişiklik uygulandı", fmt(r.applied)) + (r.skipped.length ? tx(" · {0} atlandı", fmt(r.skipped.length)) : ""), r.skipped.length > 0);
@@ -95,6 +137,7 @@ function Inner({ pid, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ["dashboard", pid] });
       qc.invalidateQueries({ queryKey: ["fasteners", pid] });
       qc.invalidateQueries({ queryKey: ["control", pid] });
+      qc.invalidateQueries({ queryKey: ["partChoices", pid] });
       if (!r.skipped.length) onClose();
     },
     onError: (e) => toast(errText(e), true),
@@ -121,11 +164,31 @@ function Inner({ pid, onClose }: Props) {
 
   const busy = pv.isPending || ap.isPending;
 
+  /** Read the same file again with the corrected columns and values. */
+  const rerun = (layouts: Layout[], next: Values) => {
+    setValues(next);
+    if (file) pv.mutate({ f: file, config: { values: next, sheets: Object.fromEntries(layouts.map((l) => [l.name, { use: l.use, cols: l.cols }])) } });
+  };
+  const layouts = preview?.layouts ?? [];
+  const setLayout = (name: string, ch: Partial<Layout>) => rerun(layouts.map((l) => (l.name === name ? { ...l, ...ch } : l)), values);
+  const setColumn = (l: Layout, field: string, col: number) => {
+    const cols = { ...l.cols };
+    if (col) cols[field] = col;
+    else delete cols[field];
+    setLayout(l.name, { cols, use: l.use || field === "part_no" });
+  };
+  const pickFile = (f: File) => {
+    setFile(f);
+    setValues(NO_VALUES);
+    setKinds({});
+    pv.mutate({ f });
+  };
+
   return (
     <div className="modal-back" onClick={() => !busy && onClose()}>
       <div className="modal imp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>{tx("Düzenlenmiş Excel'i geri yükle")}</h3>
+          <h3 style={{ margin: 0 }}>{tx("Excel ile karşılaştır ve güncelle")}</h3>
           <button className="btn small" onClick={onClose} disabled={busy} aria-label={tx("Kapat")}>✕</button>
         </div>
         {!canEdit ? (
@@ -133,11 +196,11 @@ function Inner({ pid, onClose }: Props) {
         ) : (
           <>
             <div className="row" style={{ marginTop: 10 }}>
-              <input ref={fileRef} type="file" accept=".xlsx,.xlsm" style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f) pv.mutate(f); e.target.value = ""; }} />
-              <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>{tx("Excel dosyası seç (.xlsx)")}</button>
+              <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls,.csv" style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = ""; }} />
+              <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>{tx("Excel dosyası seç")}</button>
               {file && <span className="muted">{file.name}</span>}
-              {preview && file && <button className="btn small" disabled={busy} onClick={() => pv.mutate(file)}>{tx("Yeniden oku")}</button>}
+              {preview && file && <button className="btn small" disabled={busy} onClick={() => pickFile(file)}>{tx("Yeniden oku")}</button>}
             </div>
             {pv.isPending && (
               <div style={{ marginTop: 8 }}>
@@ -146,21 +209,80 @@ function Inner({ pid, onClose }: Props) {
               </div>
             )}
             {!preview && !pv.isPending && (
-              <p className="muted">{tx("Sistemden alınan Takip Listesi / Parça Takip Excel'ini düzenleyip yükleyin. Değişen alanlar listelenir; Uygula demeden hiçbir şey kaydedilmez.")}</p>
+              <p className="muted">{tx("Herhangi bir Excel veya CSV dosyası seçin. Parça numarası, durum ve temin sütunları otomatik bulunur, dosya mevcut parça listesiyle karşılaştırılır. Uygula demeden hiçbir şey kaydedilmez.")}</p>
             )}
             {preview && (
               <>
                 <div className="row" style={{ marginTop: 10 }}>
                   <span className="badge">{tx("{0} satır okundu", fmt(preview.rows))}</span>
                   <span className="badge" title={preview.sheets.join(", ")}>{tx("{0} sayfa", fmt(preview.sheets.length))}</span>
+                  {preview.mode === "any" && <span className="badge">{tx("{0} parça eşleşti", fmt(preview.matched))}</span>}
                   <span className="badge new">{tx("{0} değişiklik", fmt(changes.length))}</span>
                   {preview.unknown.length > 0 && <span className="badge warn">{tx("{0} bilinmeyen parça no", fmt(preview.unknown.length))}</span>}
                   {preview.invalid.length > 0 && <span className="badge err">{tx("{0} geçersiz değer", fmt(preview.invalid.length))}</span>}
                 </div>
+                {preview.mode === "any" && (
+                  <details className="imp-map" open={preview.matched === 0} key={preview.matched === 0 ? "open" : "closed"}>
+                    <summary>{tx("Sütun eşleştirme")}</summary>
+                    {layouts.map((l) => (
+                      <div className="imp-map-sheet" key={l.name}>
+                        <label className="row" style={{ gap: 8 }}>
+                          <input type="checkbox" checked={l.use} disabled={busy} onChange={(e) => setLayout(l.name, { use: e.target.checked })} />
+                          <b>{l.name}</b>
+                          <span className="muted">{tx("{0} parça eşleşti", fmt(l.matched))}</span>
+                        </label>
+                        <div className="imp-map-fields">
+                          {mapFields().map(([field, label]) => (
+                            <label key={field}>
+                              <span className="muted">{label}</span>
+                              <select value={l.cols[field] ?? 0} disabled={busy} onChange={(e) => setColumn(l, field, Number(e.target.value))}>
+                                <option value={0}>{tx("Kullanma")}</option>
+                                {l.headers.map((h) => <option key={h.col} value={h.col}>{columnName(h.col)}{h.title ? `: ${h.title}` : ""}</option>)}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </details>
+                )}
+                {(preview.unresolved.length > 0 || preview.new_temins.length > 0) && (
+                  <div className="card imp-values" style={{ marginTop: 10, maxHeight: 200, overflow: "auto" }}>
+                    {preview.unresolved.length > 0 && <b>{tx("Anlaşılamayan durum değerleri: ne anlama geliyor?")}</b>}
+                    {preview.unresolved.map((u) => (
+                      <div className="row" key={u.value}>
+                        <span>{u.value} <span className="muted">({fmt(u.count)})</span></span>
+                        <select value="?" disabled={busy} aria-label={u.value}
+                          onChange={(e) => rerun(layouts, { ...values, progress: { ...values.progress, [u.value]: e.target.value } })}>
+                          <option value="?">{tx("Seçin…")}</option>
+                          {PROGRESS.map((p) => <option key={p} value={p}>{tx(p)}</option>)}
+                          <option value="">{tx("Yoksay")}</option>
+                        </select>
+                      </div>
+                    ))}
+                    {preview.new_temins.length > 0 && <b>{tx("Listede olmayan temin şekilleri")}</b>}
+                    {preview.new_temins.map((t) => (
+                      <div className="row" key={t.raw}>
+                        <span>{t.raw} <span className="muted">({fmt(t.count)})</span></span>
+                        <select value={`new:${kinds[t.raw] ?? t.kind}`} disabled={busy} aria-label={t.raw}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v.startsWith("new:")) setKinds((k) => ({ ...k, [t.raw]: v.slice(4) }));
+                            else rerun(layouts, { ...values, temin: { ...values.temin, [t.raw]: v.slice(4) } });
+                          }}>
+                          {NEW_KINDS.map((k) => <option key={k} value={`new:${k}`}>{tx("Yeni tür ekle: {0}", tx(k))}</option>)}
+                          {(choices.data?.temin_choices ?? []).map((c) => <option key={c} value={`map:${c}`}>{tx(c)}</option>)}
+                          <option value="map:">{tx("Yoksay")}</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="tabs" style={{ marginTop: 10, marginBottom: 0 }}>
                   <button className={tab === "changes" ? "active" : ""} onClick={() => setTab("changes")}>{tx("Değişiklikler ({0})", fmt(changes.length))}</button>
                   <button className={tab === "unknown" ? "active" : ""} onClick={() => setTab("unknown")}>{tx("Bilinmeyen parça no ({0})", fmt(preview.unknown.length))}</button>
                   <button className={tab === "invalid" ? "active" : ""} onClick={() => setTab("invalid")}>{tx("Geçersiz değerler ({0})", fmt(preview.invalid.length))}</button>
+                  {preview.mode === "any" && <button className={tab === "absent" ? "active" : ""} onClick={() => setTab("absent")}>{tx("Excel'de olmayan parçalar ({0})", fmt(preview.not_in_file.length))}</button>}
                 </div>
                 <div className="imp-body">
                   {tab === "changes" && (
@@ -185,7 +307,13 @@ function Inner({ pid, onClose }: Props) {
                     <WarnList empty={tx("Geçersiz değer yok.")}
                       note={tx("Bu hücrelerdeki değerler kabul edilmedi; içe aktarılmaz. Excel'de düzeltip yeniden yükleyin.")}
                       head={[tx("Sayfa"), tx("Satır"), tx("Kalem"), tx("Alan"), tx("Değer"), tx("Hata")]}
-                      rows={preview.invalid.map((v) => [v.sheet, v.row, v.key, v.field, v.value || tx("(Boş)"), v.message])} />
+                      rows={preview.invalid.map((v) => [v.sheet, v.row, v.key, tx(v.field), v.value || tx("(Boş)"), v.message])} />
+                  )}
+                  {tab === "absent" && (
+                    <WarnList empty={tx("Projedeki tüm parçalar dosyada bulundu.")}
+                      note={tx("Bu parçalar projede var ama dosyada yok. Değerleri değişmez.")}
+                      head={[tx("Parça No"), tx("Parça Adı"), tx("Temin Şekli"), tx("Durum")]}
+                      rows={preview.not_in_file.map((p) => [p.part_no, p.name, tx(p.procurement), tx(p.status)])} />
                   )}
                 </div>
                 {result && result.skipped.length > 0 && (

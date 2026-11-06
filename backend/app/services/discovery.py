@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from urllib.request import urlopen
 
 PORT = 47811
@@ -45,14 +46,26 @@ def start_responder(http_port: int, version: str, scheme: str = "http", fingerpr
     return True
 
 
-def _local_ipv4() -> list[str]:
-    ips: set[str] = set()
+def _outgoing_ipv4() -> str | None:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))  # no packet is sent; picks the outgoing interface
-            ips.add(s.getsockname()[0])
+            return s.getsockname()[0]
     except OSError:
-        pass
+        return None
+
+
+def lan_ipv4() -> list[str]:
+    """Addresses other devices can try, the outgoing interface first. Inside Docker the container's
+    own address is of no use to them."""
+    if Path("/.dockerenv").exists():
+        return []
+    first = _outgoing_ipv4()
+    return sorted(_local_ipv4(), key=lambda ip: ip != first)
+
+
+def _local_ipv4() -> list[str]:
+    ips: set[str] = set(filter(None, [_outgoing_ipv4()]))
     try:
         ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
     except OSError:

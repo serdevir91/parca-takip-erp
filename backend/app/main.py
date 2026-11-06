@@ -4,19 +4,21 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
+import socket
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import DataError, IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from . import api as api_pkg
+from .auth import current_user
 from .bodylimit import BodyLimit
 from .config import get_settings
 from .db import SessionLocal, engine
-from .services import mailer, maintenance, sync, tls
+from .services import discovery, mailer, maintenance, sync, tls
 from .services.bootstrap import seed_defaults
 from app.core.i18n import set_lang, tx
 
@@ -151,6 +153,13 @@ def tls_cert() -> Response:
 def version() -> dict:
     cfg = get_settings()
     return {"version": cfg.app_version, "update_feed_url": cfg.update_feed_url}
+
+
+@app.get("/api/connection", tags=["system"], dependencies=[Depends(current_user)])
+def connection() -> dict:
+    """What another device types to reach this server. The page adds the scheme and port it was opened with."""
+    ips = discovery.lan_ipv4()
+    return {"ips": ips, "hostname": socket.gethostname() if ips else ""}
 
 
 for _m in sorted(pkgutil.iter_modules(api_pkg.__path__), key=lambda m: m.name):

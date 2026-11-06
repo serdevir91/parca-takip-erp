@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { sys } from "../api/system";
 import { useAuth, type User } from "../api/auth";
 import { Field, Modal, roleLabel } from "../pages/admin/shared";
+import ServerAddress from "./ServerAddress";
 import { errText, useToast } from "./Toast";
 import { tx } from "../api/i18n";
 
@@ -77,6 +78,7 @@ export default function Profile({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </form>
+      <ServerAddress />
     </Modal>
   );
 }

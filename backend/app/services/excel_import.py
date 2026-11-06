@@ -12,7 +12,6 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from sqlalchemy.orm import Session
 
-from ..core.bomparse import TEMIN_CHOICES
 from ..core.status import PROG_WAIT, PROGRESS_CHOICES
 from ..core.xlsxguard import check_xlsx
 from ..models import FastenerSetting, MissingRow, Project, Tracking, User
@@ -21,7 +20,7 @@ from .bomimport import TRACKING_FIELDS
 from .excel_export import (H_FX_STATUS, H_KEY, H_MANUF, H_MATST, H_NOTE, H_PNO, H_PRICE, H_PROG,
                            H_SPARE, H_SUPPLIER, H_T35, H_TEMIN, KEY_FASTENER, KEY_MISSING, KEY_PART,
                            MISSING_SUFFIX)
-from .settings import manufacturers
+from .settings import manufacturers, temin_choices
 from .state import FASTENER_ORDER_STATUSES, ProjectView
 from .tracking import material_status_choices
 from app.core.i18n import tx
@@ -98,6 +97,7 @@ class _Ctx:
         self.fx_by_name = {(_txt(f["type"]), _txt(f["std"]), _txt(f["size"])): k for k, f in self.fasteners.items()}
         self.manufacturers = manufacturers(db)
         self.material = material_status_choices(db)
+        self.temins = temin_choices(db)
 
     # ---- current values ----
     def current(self, kind: str, key: str, field: str) -> Any:
@@ -129,8 +129,8 @@ class _Ctx:
             if v not in PROGRESS_CHOICES:
                 raise ValueError(tx("Seçenekler: ") + ", ".join(PROGRESS_CHOICES))
         elif field == "procurement_override":
-            if v not in TEMIN_CHOICES:
-                raise ValueError(tx("Seçenekler: ") + ", ".join(TEMIN_CHOICES))
+            if v not in self.temins:
+                raise ValueError(tx("Seçenekler: ") + ", ".join(self.temins))
             p = self.parts[key]
             if p["is_purchased_assembly"] and v != p["procurement"]:
                 raise ValueError(tx("Satın alınan montajın temin şekli değiştirilemez"))
@@ -181,30 +181,23 @@ def _parse_key(raw_key: str, pno: str) -> tuple[str, str] | None:
     return KIND_TRACKING, p
 
 
-def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
-    """Compare the workbook with the DB. Nothing is written."""
-    try:
-        check_xlsx(path)
-        wb = load_workbook(path, data_only=False, read_only=False)
-    except Exception as e:                                      # noqa: BLE001 - any parse failure
-        raise ImportError_(tx("Excel dosyası okunamadı")) from e
-    ctx = _Ctx(db, project)
-    if ctx.view.version is None:
-        raise ImportError_(tx("Projede onaylı BOM sürümü yok"))
-    # one item can be on several rows (a part under several assemblies): every value read is kept, and
-    # only the values that differ from the DB count; two different new values for one item are a conflict
-    seen: dict[tuple[str, str, str], dict[str, Any]] = {}
-    unknown: list[dict[str, Any]] = []
-    invalid: list[dict[str, Any]] = []
-    sheets_used: list[str] = []
-    rows_read = 0
+class Diff:
+    """Differences between sheet values and the DB. One item can be on several rows (a part under several
+    assemblies): every value read is kept, only the values that differ from the DB count, and two different
+    new values for one item are a conflict."""
 
-    def take(kind: str, key: str, field: str, raw: Any, sheet: str, row: int, label: str) -> None:
+    def __init__(self, ctx: _Ctx):
+        self.ctx = ctx
+        self.seen: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self.invalid: list[dict[str, Any]] = []
+
+    def take(self, kind: str, key: str, field: str, raw: Any, sheet: str, row: int, label: str) -> None:
+        ctx, seen = self.ctx, self.seen
         try:
             new = ctx.clean(kind, key, field, raw)
         except ValueError as e:
-            invalid.append({"sheet": sheet, "row": row, "key": label, "field": LABELS[field],
-                            "value": _txt(raw), "message": str(e)})
+            self.invalid.append({"sheet": sheet, "row": row, "key": label, "field": LABELS[field],
+                                 "value": _txt(raw), "message": str(e)})
             return
         sig = (kind, key, field)
         if sig not in seen:
@@ -216,6 +209,41 @@ def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
             return                                     # SLDPRT + SLDASM rows each show their own temin
         if not _same(old, new) and not any(_same(v, new) for v, _, _ in seen[sig]["vals"]):
             seen[sig]["vals"].append((new, sheet, row))
+
+    def changes(self) -> list[dict[str, Any]]:
+        out = []
+        for ch in self.seen.values():
+            vals = ch.pop("vals")
+            if not vals:
+                continue
+            if len(vals) > 1:
+                for v, sheet, row in vals:
+                    self.invalid.append({"sheet": sheet, "row": row, "key": ch["label"], "field": ch["field_label"],
+                                         "value": _txt(v), "message": tx("Aynı kalem için farklı değerler var")})
+                continue
+            ch["new"], ch["sheet"], ch["row"] = vals[0]
+            out.append(ch)
+        out.sort(key=lambda c: (c["sheet"], c["row"], c["field"]))
+        for c in out:
+            c["id"] = f"{c['kind']}|{c['key']}|{c['field']}"
+        return out
+
+
+def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
+    """Compare the workbook with the DB. Nothing is written."""
+    try:
+        check_xlsx(path)
+        wb = load_workbook(path, data_only=False, read_only=False)
+    except Exception as e:                                      # noqa: BLE001 - any parse failure
+        raise ImportError_(tx("Excel dosyası okunamadı")) from e
+    ctx = _Ctx(db, project)
+    if ctx.view.version is None:
+        raise ImportError_(tx("Projede onaylı BOM sürümü yok"))
+    diff = Diff(ctx)
+    take, invalid = diff.take, diff.invalid
+    unknown: list[dict[str, Any]] = []
+    sheets_used: list[str] = []
+    rows_read = 0
 
     for ws in wb.worksheets:
         if ws.sheet_state != "visible":
@@ -283,22 +311,7 @@ def preview(db: Session, project: Project, path: str | Path) -> dict[str, Any]:
     if not sheets_used:
         raise ImportError_(tx("Dosyada tanınan bir sayfa yok (Parça No / İlerleme başlıkları bulunamadı)"))
 
-    changes = []
-    for ch in seen.values():
-        vals = ch.pop("vals")
-        if not vals:
-            continue
-        if len(vals) > 1:
-            for v, sheet, row in vals:
-                invalid.append({"sheet": sheet, "row": row, "key": ch["label"], "field": ch["field_label"],
-                                "value": _txt(v), "message": tx("Aynı kalem için farklı değerler var")})
-            continue
-        ch["new"], ch["sheet"], ch["row"] = vals[0]
-        changes.append(ch)
-    changes.sort(key=lambda c: (c["sheet"], c["row"], c["field"]))
-    for c in changes:
-        c["id"] = f"{c['kind']}|{c['key']}|{c['field']}"
-    return {"sheets": sheets_used, "rows": rows_read, "changes": changes, "unknown": unknown, "invalid": invalid,
+    return {"sheets": sheets_used, "rows": rows_read, "changes": diff.changes(), "unknown": unknown, "invalid": invalid,
             "version_id": ctx.view.version.id}
 
 

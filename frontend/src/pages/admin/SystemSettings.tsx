@@ -6,6 +6,7 @@ import { OPTIONS_KEY } from "../../api/system";
 import BrandMark from "../../components/BrandMark";
 import { errText, useToast } from "../../components/Toast";
 import { Field, ListEditor, Loading } from "./shared";
+import ServerAddress from "../../components/ServerAddress";
 import { tx } from "../../api/i18n";
 
 type Values = Record<string, string | number | string[]>;
@@ -68,6 +69,7 @@ function Forms({ data }: { data: Data }) {
 
   return (
     <div className="grid adm-settings">
+      <section className="card"><ServerAddress /></section>
       <Card {...card} section="company" title={tx("Şirket ve görünüm")}
         note={tx("Şirket bilgileri sipariş, teklif ve fatura formlarının üstüne yazılır. Uygulama adı menüde, giriş ekranında ve e-postalarda görünür.")}>
         {(f, set) => (

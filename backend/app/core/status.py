@@ -37,8 +37,10 @@ MATERIAL_STATUS_CHOICES = ["Stoktan", "Malzeme söylenecek", "Sipariş verildi",
 # Temin types. `kind` picks the status set, `drawing` asks for a technical drawing,
 # `order` lets the requirement screen suggest a work order or purchase.
 TEMIN_UNSET = "Belirtilmemiş"
+PROCESS_TEMINS = ("Lazer Kesim", "Büküm", "Kaynak", "Talaşlı İmalat", "Montaj", "Boya", "Isıl İşlem")
 DEFAULT_TEMIN_TYPES: list[dict] = [
     {"name": KIND_IMALAT, "kind": KIND_IMALAT, "drawing": True, "order": True},
+    *({"name": n, "kind": KIND_IMALAT, "drawing": True, "order": True} for n in PROCESS_TEMINS),
     {"name": KIND_HAZIR, "kind": KIND_HAZIR, "drawing": False, "order": True},
     {"name": "Fason İmalat", "kind": KIND_HAZIR, "drawing": True, "order": True},
     {"name": "Standart Parça", "kind": KIND_HAZIR, "drawing": False, "order": True},

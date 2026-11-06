@@ -562,7 +562,7 @@ export default function Parts() {
             <button className="btn small" onClick={() => setMenu(menu === "import" ? null : "import")} aria-haspopup="menu">{tx("İçe aktar ▾")}</button>
             {menu === "import" && (
               <div className="dg-menu card" role="menu">
-                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>{tx("Excel'den içe aktar")}</button>
+                <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("excel"); }}>{tx("Excel ile karşılaştır")}</button>
                 <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("t35"); }}>{tx("Durum listesi içe aktar")}</button>
                 <button role="menuitem" className="btn small" onClick={() => { setMenu(null); setImp("names"); }}>{tx("Parça adlarını yapıştır")}</button>
               </div>

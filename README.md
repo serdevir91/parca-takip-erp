@@ -229,6 +229,7 @@ This is a Windows app that opens in its own window instead of a browser. You do 
    - **Connect to a server on the network:** The "Find server on network" button finds servers on the same network. You can also type the address
      by hand (for example `http://192.168.1.20:8000`).
 3. Phones, tablets and other computers on the same network can also open the server address in a browser.
+   The address is shown in **My profile** and in **Administration > System Settings**.
 
 **Running in the background:** On the server computer, closing the window does not stop the server. The app moves to the hidden icons in the taskbar
 (the ^ arrow next to the clock), and the other devices keep working. Click the icon to open the window
@@ -425,9 +426,12 @@ In real use, archive the demo projects or do not run this command.
 Alongside part tracking there is a small manufacturing ERP. The flow: a BOM is uploaded, requirements are calculated, shortages
 are covered from stock, by a purchase order or by a work order, and the cost is posted to the project.
 
-- **Procurement types:** The built-in types are Manufacturing, Purchased, Subcontracted manufacturing, Standard part, From
-  stock, Customer-supplied and Unspecified. New ones are added in Administration > System Settings. Each type behaves like Manufacturing
+- **Procurement types:** The built-in types are Manufacturing, Laser Cutting, Bending, Welding, Machining, Assembly, Painting,
+  Heat Treatment, Purchased, Subcontracted manufacturing, Standard part, From stock, Customer-supplied and Unspecified. New ones
+  are added in Administration > System Settings, or by an administrator during an Excel comparison. Each type behaves like Manufacturing
   or Purchased, and drawings and order suggestions are turned on or off separately.
+- **Compare with Excel:** Any `.xlsx`, `.xlsm`, `.xls` or `.csv` file can be compared with the part list. Part number, status,
+  order and procurement columns are found automatically and can be corrected. Changes are saved only after review.
 - **Table:** Cell selection, ranges, copy and paste, fill handle, undo, find and replace, column
   hiding and pinning, conditional and advanced filters, saved views, `.xlsx` download. There are no formulas, charts or pivot tables.
 - **Product tree** (project menu): Builds the BOM by hand for products that have no SolidWorks list. You start from the top

@@ -206,6 +206,22 @@ What the Excel files must have:
 - Extra outputs: a fastener order form (item, standard, size, requirement, spare %, order quantity, unit, unit price, amount), an "export visible" option for the filtered table.
 - **Import back from Excel:** The user must be able to change Progress/Procurement/Note in an exported Excel file and upload it again. The system matches rows by part number + parent assembly, previews the differences and applies them when approved.
 
+### 9.1 Comparing any workbook
+
+`POST /api/excel/{project}/compare` (`services/excel_compare.py`) reads `.xlsx`, `.xlsm`, `.xls` and `.csv` files.
+Nothing is saved at this step; the existing apply endpoint saves the rows the user selects.
+
+- The app's own tracking export is recognised and goes through the normal import preview.
+- In any other file, the header row is the row with the most known titles. The part column is the column that
+  matches the most project parts. Other columns are found by title, then temin and status columns by their values.
+- Parts match by part number, then alias, then a loose key without separators and case. Fasteners, parts inside
+  purchased assemblies and the root row are skipped.
+- Blank cells keep the stored value. For purchased parts, the order column is read before the status column.
+- The response lists changes, part numbers not in the project, invalid values, project parts not in the file, the
+  detected layout of each sheet, status words that could not be read and temin names that are not defined.
+- The client can send back a `config` with corrected columns and value meanings. The file is then read again.
+- Only an administrator can add a new temin type, and this happens at apply time.
+
 ## 10. Quality and acceptance criteria
 
 - Write unit tests for the backend with pytest: CSV parsing, quantity multiplication, fastener patterns, BOM comparison, status derivation, T-35 mapping, drawing file name matching.

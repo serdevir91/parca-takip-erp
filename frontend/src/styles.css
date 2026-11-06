@@ -205,6 +205,17 @@ table.simple th { background: var(--surface-2); font-weight: 600; position: stic
 .ctl-tabs { margin-bottom: 0; border: none; }
 .ctl-stale { max-height: 240px; overflow: auto; margin-top: 6px; }
 .imp-modal { width: min(1200px, 96vw); max-width: min(1200px, 96vw); }
+.imp-map { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.imp-map summary { cursor: pointer; font-weight: 600; }
+.imp-map-sheet { margin-top: 8px; }
+.imp-map-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 10px; margin-top: 6px; }
+.imp-map-fields label { display: grid; gap: 2px; font-size: 12px; }
+.imp-values { display: grid; gap: 6px; margin-top: 8px; }
+.imp-values .row > span { min-width: 0; overflow-wrap: anywhere; }
+.server-address { margin-top: 12px; }
+.server-address h3 { margin: 0 0 4px; }
+.server-address .row { margin-top: 6px; flex-wrap: wrap; }
+.server-address code { overflow-wrap: anywhere; font-size: 14px; }
 .imp-body { height: 50vh; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 
 /* === Teknik Resimler === */

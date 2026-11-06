@@ -2,20 +2,25 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Project, User
+from ..models import ROLE_ADMIN, Project, User
+from ..services import audit
+from ..services import excel_compare as cp
 from ..services import excel_export as ex
 from ..services import excel_import as im
+from ..services.settings import add_temin_types
 from ..services.state import ProjectView
 from ..permissions import require
 from .deps import get_db, project_or_404
@@ -76,12 +81,13 @@ def gorunen(project_id: int, body: VisibleIn, db: Session = Depends(get_db), _: 
     return _send(p, "gorunen", ex.build_parca_takip(db, v, only=set(body.part_nos)))
 
 
-async def _save_upload(file: UploadFile) -> str:
+async def _save_upload(file: UploadFile, kinds: tuple[str, ...] = (".xlsx",)) -> str:
     """Stream the upload to a temp file in 1 MB chunks, enforcing max_upload_mb."""
-    if not (file.filename or "").lower().endswith(".xlsx"):
-        raise HTTPException(400, tx("Sadece .xlsx dosyası yüklenebilir"))
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in kinds:
+        raise HTTPException(400, tx("Sadece {0} dosyası yüklenebilir", ", ".join(kinds)))
     limit = get_settings().max_upload_mb << 20
-    fd, path = tempfile.mkstemp(suffix=".xlsx", prefix="excel_import_")
+    fd, path = tempfile.mkstemp(suffix=ext, prefix="excel_import_")
     size = 0
     try:
         with os.fdopen(fd, "wb") as out:
@@ -116,6 +122,26 @@ async def import_preview(project_id: int, file: UploadFile = File(...), db: Sess
         os.unlink(path)
 
 
+@router.post("/{project_id}/compare")
+async def compare(project_id: int, file: UploadFile = File(...), config: str | None = Form(None),
+                  db: Session = Depends(get_db), user: User = Depends(parts_edit)) -> dict[str, Any]:
+    """Any spreadsheet against the project's parts. Columns are guessed; `config` corrects the guess. Writes nothing."""
+    p = project_or_404(db, project_id)
+    try:
+        cfg = json.loads(config) if config else {}
+    except ValueError:
+        cfg = None
+    if not isinstance(cfg, dict):
+        raise HTTPException(400, tx("Sütun eşleştirmesi okunamadı"))
+    path = await _save_upload(file, cp.FILE_TYPES)
+    try:
+        return await run_in_threadpool(cp.compare, db, p, path, cfg, user.role == ROLE_ADMIN)
+    except im.ImportError_ as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        os.unlink(path)
+
+
 class ChangeIn(BaseModel):
     kind: str
     key: str
@@ -124,8 +150,14 @@ class ChangeIn(BaseModel):
     old: Any = None
 
 
+class NewTeminIn(BaseModel):
+    name: str
+    kind: str
+
+
 class ApplyIn(BaseModel):
     changes: list[ChangeIn] = Field(default_factory=list)
+    new_temins: list[NewTeminIn] = Field(default_factory=list)
 
 
 @router.post("/{project_id}/import/apply")
@@ -137,6 +169,15 @@ def import_apply(project_id: int, body: ApplyIn, db: Session = Depends(get_db),
         raise HTTPException(400, tx("Projede onaylı BOM sürümü yok"))
     if not body.changes:
         raise HTTPException(400, tx("Uygulanacak değişiklik seçilmedi"))
+    if body.new_temins:
+        if user.role != ROLE_ADMIN:
+            raise HTTPException(403, tx("Yeni temin şeklini yalnızca yönetici ekleyebilir"))
+        try:
+            added = add_temin_types(db, [t.model_dump() for t in body.new_temins])
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        if added:
+            audit.record(db, user, "setting", "temin_types", "temin_types", None, ", ".join(added))
     res = im.apply(db, p, user, [c.model_dump(exclude_unset=True) for c in body.changes])
     db.commit()
     return res

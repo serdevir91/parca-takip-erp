@@ -92,6 +92,9 @@ the `python -m app.cli serve` command is all you need.
 
 On any device, type the server address in the browser (for example `http://192.168.1.20:8000`).
 
+**Finding the address later:** Sign in on any device that already works. The address is shown with a **Copy** button in
+**My profile** and in **Administration > System Settings**. If several addresses are listed, try the first one first.
+
 ## 3. Account requests and approval
 
 New employees request their own accounts, and the administrator approves them. This feature is off in new installations. The administrator first
@@ -153,6 +156,7 @@ sends the file with Gmail, WhatsApp or Drive; this does not need email settings 
 - The **Advanced** button builds rule groups. Inside a group the rules are joined with AND or OR; the groups apply together. Filters, sorting and column layout are saved by name in the **Views** menu. Saved views are kept on that device.
 - In table mode, click a cell and move with the arrow keys; start typing to edit. Select a range with the mouse or with Shift. Ctrl+C, Ctrl+X and Ctrl+V work both ways with Excel. Drag the handle in the corner to fill: 1, 2 or A1, A2 continue as a series. Ctrl+Z undoes, Ctrl+F finds, Ctrl+H replaces. The right-click menu offers the same actions. The status bar shows the sum and average of the selection.
 - The **Columns** button hides, orders and pins columns. The Share menu downloads the rows and columns visible on screen as `.xlsx`.
+- **Import > Compare with Excel** reads any `.xlsx`, `.xlsm`, `.xls` or `.csv` file and compares it with the part list. Check the changes, correct the columns under **Column mapping** if needed, then click **Apply**. Blank cells do not change anything.
 - There are no formulas, charts, pivot tables, macros or selections of separate ranges. For these, download the list as `.xlsx` and open it in Excel.
 - In the Parts list, filter and select rows, then change them all at once with **Set progress** or **Set procurement** in the bar at the top. This works in both modes.
 - **Part name** is typed or pasted in the table. For many names, use **Import > Paste part names**: copy the part no and name columns from Excel. The name appears in every project where the same part number occurs.

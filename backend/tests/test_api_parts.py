@@ -202,11 +202,11 @@ def test_a_temin_type_decides_status_drawing_and_planning(client, admin_headers,
 def test_a_new_temin_type_is_accepted_and_the_fixed_ones_stay(client, admin_headers, data_file, temins):
     url = "/api/admin/settings/temin_types"
     types = client.get("/api/admin/settings", headers=admin_headers).json()["temin_types"]
-    extra = {"name": "Lazer Kesim", "kind": "Hazır Alım", "drawing": True, "order": True}
+    extra = {"name": "Su Jeti Kesim", "kind": "Hazır Alım", "drawing": True, "order": True}
     assert client.put(url, json={"value": [*types, extra]}, headers=admin_headers).status_code == 200
     pid = _project_with_bom(client, admin_headers, data_file, "TeminC")
     pno = _leaf(client, admin_headers, pid)["part_no"]
-    assert client.patch(f"/api/projects/{pid}/parts/{pno}", json={"procurement_override": "Lazer Kesim"},
+    assert client.patch(f"/api/projects/{pid}/parts/{pno}", json={"procurement_override": "Su Jeti Kesim"},
                         headers=admin_headers).status_code == 200
     assert client.put(url, json={"value": [t for t in types if t["name"] != "İmalat"]},
                       headers=admin_headers).status_code == 400

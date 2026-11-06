@@ -1,6 +1,14 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.7.0
+
+- **Compare any Excel with the part list.** In the Parts list, **Import > Compare with Excel** reads any `.xlsx`, `.xlsm`, `.xls` or `.csv` file. It finds the part number, status, order status and procurement columns by itself and shows what would change. Nothing is saved until you click Apply.
+- **Column and value corrections.** If a column was guessed wrong, change it under **Column mapping**. Status words the system cannot read are shown so you can say what they mean.
+- **Parts missing from the file.** A new tab lists the parts that are in the project but not in the file. Part numbers that are in the file but not in the project are listed too.
+- **New procurement types.** Laser Cutting, Bending, Welding, Machining, Assembly, Painting and Heat Treatment are built in and are added to lists saved earlier. An administrator can also add a new type straight from the Excel comparison.
+- **Server address on screen.** System Settings and My profile show the address that other computers and phones must enter, with a Copy button.
+
 ## What's new in 1.6.0
 
 - **Four languages.** The interface now runs in Turkish, English, Spanish and German. Pick the language in the header or on the sign-in page; dates and numbers follow it. Server messages, notifications and the first-run screens are translated too. The Excel tracking workbook stays Turkish because its formulas and the import depend on that text.

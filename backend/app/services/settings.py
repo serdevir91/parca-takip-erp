@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 from ..core import t35 as t35core
 from ..core.bomparse import DEFAULT_PART_NO_PATTERNS
 from ..core.fastener import DEFAULT_RULES as FASTENER_DEFAULTS, FastenerMatcher
-from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR
+from ..core.status import DEFAULT_TEMIN_TYPES, FIXED_TEMINS, KIND_HAZIR, KIND_IMALAT
 from ..models import FastenerRule, Firm, Part, Setting
+from app.core.i18n import tx
 
 DEFAULTS: dict[str, Any] = {
     "t35": {"rules": t35core.DEFAULT_RULES, "default_progress": t35core.DEFAULT_PROGRESS,
@@ -55,6 +56,28 @@ def temin_types(db: Session) -> list[dict[str, Any]]:
 
 def temin_choices(db: Session) -> list[str]:
     return [t["name"] for t in temin_types(db)]
+
+
+def add_temin_types(db: Session, items: list[dict[str, str]]) -> list[str]:
+    """Append new temin types and return the names added. Raises ValueError on a bad name or kind."""
+    types = temin_types(db)
+    names = {t["name"].casefold() for t in types}
+    added: list[str] = []
+    for item in items:
+        name, kind = str(item.get("name") or "").strip(), item.get("kind")
+        if not name or len(name) > 64:
+            raise ValueError(tx("Temin şekli adı boş olamaz ve 64 karakteri geçemez"))
+        if kind not in (KIND_IMALAT, KIND_HAZIR):
+            raise ValueError(tx("{0}: davranış İmalat veya Hazır Alım olmalı", name))
+        if name.casefold() in names:
+            continue
+        names.add(name.casefold())
+        types.append({"name": name, "kind": kind, "drawing": kind == KIND_IMALAT, "order": True})
+        added.append(name)
+    if added:
+        set_setting(db, "temin_types", types)
+        db.flush()                                # db.get in get_setting does not see a pending row
+    return added
 
 
 def buy_temins(db: Session) -> list[str]:

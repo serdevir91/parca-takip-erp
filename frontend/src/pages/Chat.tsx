@@ -13,6 +13,7 @@ import { errText, useToast } from "../components/Toast";
 import Thumb from "../components/viewer/Thumb";
 import Viewer, { type ViewItem } from "../components/viewer/Viewer";
 import { Modal } from "./admin/shared";
+import { copyText } from "../api/clipboard";
 import { LOCALE, tx } from "../api/i18n";
 
 export type ChatState = { key: string; unread: number; last_id: number };
@@ -38,19 +39,6 @@ const EDIT_MS = 48 * 3600 * 1000;
 const LONG_PRESS_MS = 450;
 const summary = (m: Msg) => m.body || (m.file ? `📎 ${m.file.name}` : "");
 const editable = (m: Msg) => !m.deleted && !m.forwarded_from && !!m.created_at && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
-
-/** navigator.clipboard needs HTTPS, and a LAN server is often plain HTTP. */
-async function copyText(text: string) {
-  if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return; }
-  const area = document.createElement("textarea");
-  area.value = text;
-  area.style.position = "fixed";
-  area.style.opacity = "0";
-  document.body.appendChild(area);
-  area.select();
-  document.execCommand("copy");
-  area.remove();
-}
 
 const isPdf = (name: string) => name.toLowerCase().endsWith(".pdf");
 const initial = (s: string) => (s || "?").slice(0, 1).toLocaleUpperCase(LOCALE);
