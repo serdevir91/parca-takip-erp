@@ -269,8 +269,8 @@ def _attachment(data: bytes, media: str, name: str) -> Response:
 
 
 @router.get("/{pid}/assembly/plans/{plan_id}/pdf")
-def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, db: Session = Depends(get_db),
-             _: User = Depends(view_level)) -> Response:
+def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, qr: Literal["back", "none"] = "back",
+             db: Session = Depends(get_db), _: User = Depends(view_level)) -> Response:
     project = project_or_404(db, pid)
     _needs_bom(project)
     plan = _plan(db, pid, plan_id)
@@ -278,8 +278,26 @@ def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, d
     doc = ctx.docs[plan.id]
     if foy is not None and doc.foy(foy) is None:
         raise HTTPException(404, tx("Föy bulunamadı"))
-    data = assembly_pdf.build(ctx, plan, doc, base_url(request), foy)
+    data = assembly_pdf.build(ctx, plan, doc, base_url(request), foy, qr == "back")
     return _attachment(data, "application/pdf", f"montaj_plani_{plan.no}{'_' + foy if foy else ''}.pdf")
+
+
+@router.get("/{pid}/assembly/plans/{plan_id}/codes")
+def plan_codes(pid: int, plan_id: int, request: Request, layout: Literal["labels", "list"] = "labels", foy: str | None = None,
+               db: Session = Depends(get_db), _: User = Depends(view_level)) -> Response:
+    """The plan's QR codes apart from the drawings, as stickers or as one list."""
+    project = project_or_404(db, pid)
+    _needs_bom(project)
+    plan = _plan(db, pid, plan_id)
+    ctx = svc.context(db, project, plan)
+    doc = ctx.docs[plan.id]
+    if foy is not None and doc.foy(foy) is None:
+        raise HTTPException(404, tx("Föy bulunamadı"))
+    codes = assembly_pdf.plan_codes(ctx, plan, doc, base_url(request), foy)
+    if not codes:
+        raise HTTPException(404, tx("Seçime uyan parça yok"))
+    data = assembly_pdf.codes_pdf(layout, tx("Montaj planı {0}", plan.no) + (f" – {foy}" if foy else ""), codes)
+    return _attachment(data, "application/pdf", f"montaj_plani_{plan.no}{'_' + foy if foy else ''}_qr_{layout}.pdf")
 
 
 @router.get("/{pid}/assembly/plans/{plan_id}/excel")

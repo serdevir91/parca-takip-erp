@@ -1,7 +1,7 @@
 ﻿; Inno Setup script for the desktop app. CI: ISCC /DAppVersion=x.y.z desktop\installer.iss
 ; Expects dist\LabERP (PyInstaller) and dist\MicrosoftEdgeWebview2Setup.exe (Evergreen bootstrapper).
 #ifndef AppVersion
-  #define AppVersion "1.9.1"
+  #define AppVersion "1.9.2"
 #endif
 
 [Setup]

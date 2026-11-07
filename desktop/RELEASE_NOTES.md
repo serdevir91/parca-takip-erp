@@ -1,6 +1,12 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.9.2
+
+- **More ways to use QR codes.** The print menus now offer QR on the back, no QR for single-sided printing, A4 QR labels and a QR list. None of them changes a drawing.
+- **Labels for any drawing.** Labels and lists also cover DWG, picture and missing drawings. Stick a label on the part, its box or a drawing that is already printed.
+- **Confirm without paper.** A Confirm button beside each step and part on an assembly sheet opens the confirmation screen with the drawing.
+
 ## What's new in 1.9.1
 
 - **QR on the back of drawings.** Printed double-sided, each drawing page has a QR code on its back. Assembly sheets get one for each step and for parts without a drawing page. **Print with QR** on the Drawings page does the same for selected drawings.

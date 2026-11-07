@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, Response, UploadFile
@@ -165,6 +165,22 @@ def project_print(pid: int, body: PrintIn, request: Request, db: Session = Depen
     if data is None:
         raise HTTPException(404, tx("Seçime uyan PDF resim yok"))
     name = quote(f"{svc.safe_filename(project.name)}_resimler_qr.pdf")
+    return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{name}"})
+
+
+class CodesIn(PrintIn):
+    layout: Literal["labels", "list"] = "labels"
+
+
+@router.post("/projects/{pid}/drawings/codes")
+def project_codes(pid: int, body: CodesIn, request: Request, db: Session = Depends(get_db), user: User = Depends(file_user)) -> Response:
+    """The chosen parts' QR codes apart from the drawings, so any drawing format and already printed sheets can use them."""
+    project = project_or_404(db, pid)
+    codes = assembly_pdf.part_codes(assembly.context(db, project), body.part_nos, assembly_base_url(request))
+    if not codes:
+        raise HTTPException(404, tx("Seçime uyan parça yok"))
+    data = assembly_pdf.codes_pdf(body.layout, project.name, codes)
+    name = quote(f"{svc.safe_filename(project.name)}_qr_{body.layout}.pdf")
     return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{name}"})
 
 

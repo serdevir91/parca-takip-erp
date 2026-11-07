@@ -1,4 +1,4 @@
-"""QR codes on the back of printed drawings and assembly sheets. Reading one only opens a confirmation with the
+"""QR codes for printed drawings, assembly sheets, labels and lists. Reading one only opens a confirmation with the
 drawing; nothing is booked until the user confirms. Codes: P<project>-<part>, A<plan>-<part>, S<plan>-<item>-<step>."""
 from __future__ import annotations
 

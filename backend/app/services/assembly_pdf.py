@@ -44,6 +44,8 @@ MARGIN = 10 * mm
 BOTTOM = 14 * mm
 PAGE_W = A4[0] - 2 * MARGIN
 MAX_RASTER_DPI = 200
+LABEL_W, LABEL_H = 70 * mm, 37 * mm
+LABEL_COLS, LABEL_ROWS = 3, 8
 
 
 @lru_cache(maxsize=1)
@@ -385,8 +387,8 @@ def _foy_back(ctx: Context, plan: AssemblyPlan, f: Foy, base_url: str, drawn: se
     return _code_pages(f"{tx('MONTAJ FÖYÜ')}: {f.part_no}", cells)
 
 
-def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None) -> bytes:
-    """The whole plan, or with `only` one föy with its drawings."""
+def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None, backs: bool = True) -> bytes:
+    """The whole plan, or with `only` one föy with its drawings. Without `backs` it prints single-sided: no QR pages, no blanks."""
     _fonts()
     pages: list[tuple[Any, str]] = []
     if only is None:
@@ -395,7 +397,7 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
         d.build([*_plan_story(ctx, plan, doc), PageBreak(), *_pick_story(plan, doc)])
         pages += [(p, "") for p in PdfReader(BytesIO(front.getvalue())).pages]
         singles = dict.fromkeys(r.part_no for f in doc.foys if f.single for r in f.part_rows)
-        for back in _code_pages(tx("Tekil parçalar"), [_part_cell(ctx, plan, p, base_url) for p in singles]):
+        for back in _code_pages(tx("Tekil parçalar"), [_part_cell(ctx, plan, p, base_url) for p in singles]) if backs else []:
             _on_back(pages, back)
     for f in doc.foys:
         if f.single or (only is not None and f.part_no != only):
@@ -410,18 +412,23 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
                     sheets.append((a, PdfReader(BytesIO(_black_and_white(a.path.read_bytes())))))
                 except Exception:  # a damaged drawing must not cost the whole document; the sheet still lists it
                     continue
-        _on_front(pages)
+        if backs:
+            _on_front(pages)
         pages += [(p, "") for p in PdfReader(BytesIO(_foy_pdf(ctx, plan, f, atts, base_url))).pages]
-        for back in _foy_back(ctx, plan, f, base_url, {a.part_no for a, _ in sheets}):
+        for back in _foy_back(ctx, plan, f, base_url, {a.part_no for a, _ in sheets}) if backs else []:
             _on_back(pages, back)
         for a, reader in sheets:
             stamp = f"{f.part_no} · {tx('ADIM {0}/{1}', a.step_no, a.step_total)} · {a.part_no}"
             url = marks.plan_part_url(base_url, plan.id, a.part_no)
             for p in reader.pages:
+                if not backs:
+                    pages.append((p, stamp))
+                    continue
                 _on_front(pages)
                 pages.append((p, stamp))
                 _on_back(pages, _back_of_drawing(*_size(p), url, a.part_no, tx(marks.done_label(ctx, a.part_no)), tx("Plan {0}", plan.no)))
-    _on_front(pages)
+    if backs:
+        _on_front(pages)
     writer = PdfWriter()
     title = footer_title(ctx)
     for i, (page, stamp) in enumerate(pages, 1):
@@ -430,12 +437,13 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
         w, h = float(added.mediabox.width), float(added.mediabox.height)
         added.merge_page(_overlay(w, h, title, tx("Sayfa {0} / {1}", i, len(pages)), stamp))
     writer.add_metadata({"/Title": tx("Montaj planı {0}", plan.no)})
-    return _write(writer)
+    return _write(writer, backs)
 
 
-def _write(writer: PdfWriter) -> bytes:
-    writer.create_viewer_preferences()
-    writer.viewer_preferences.duplex = "/DuplexFlipLongEdge"
+def _write(writer: PdfWriter, duplex: bool = True) -> bytes:
+    if duplex:
+        writer.create_viewer_preferences()
+        writer.viewer_preferences.duplex = "/DuplexFlipLongEdge"
     out = BytesIO()
     writer.write(out)
     return out.getvalue()
@@ -463,3 +471,113 @@ def drawings_with_qr(ctx: Context, part_nos: list[str], base_url: str) -> bytes 
             writer.add_page(p)
             writer.add_page(_back_of_drawing(*size, url, part_no, tx(marks.done_label(ctx, part_no)), ctx.project.name))
     return _write(writer) if len(writer.pages) else None
+
+
+@dataclass
+class Code:
+    url: str
+    title: str
+    name: str
+    action: str
+    qty: float
+    place: str
+
+
+def plan_codes(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None) -> list[Code]:
+    """Every code of the plan or of one föy: each step, then each part once."""
+    out: list[Code] = []
+    seen: set[str] = set()
+
+    def part(part_no: str, place: str) -> None:
+        if part_no in seen:
+            return
+        seen.add(part_no)
+        p = ctx.cat.get(part_no)
+        pick = next((x for x in doc.picks if x.part_no == part_no), None)
+        out.append(Code(marks.plan_part_url(base_url, plan.id, part_no), part_no, p.name if p is not None else "",
+                        tx(marks.done_label(ctx, part_no)), pick.need + pick.extra if pick is not None else 0, place))
+
+    for f in doc.foys:
+        if only is not None and f.part_no != only:
+            continue
+        if f.single:
+            for r in f.part_rows:
+                part(r.part_no, tx("Tekil parçalar"))
+            continue
+        for s in f.steps:
+            place = f"{f.part_no} · {tx('ADIM {0}/{1}', s.no, s.total)}"
+            step_part = ctx.cat.get(s.part_no)
+            out.append(Code(marks.step_url(base_url, plan.id, f.item_id, s.no), s.part_no, step_part.name if step_part is not None else "",
+                            tx("Montaj tamam"), s.make, place))
+            for r in s.rows:
+                if not r.is_sub:
+                    part(r.part_no, place)
+    return out
+
+
+def part_codes(ctx: Context, part_nos: list[str], base_url: str) -> list[Code]:
+    """Codes of chosen parts, whatever their drawing is: a DWG, a picture or none at all."""
+    return [Code(marks.part_url(base_url, ctx.project.id, p), p, ctx.cat[p].name, tx(marks.done_label(ctx, p)), ctx.totals.get(p, 0), ctx.project.name)
+            for p in dict.fromkeys(part_nos) if p in ctx.cat]
+
+
+def _text_on(c: Canvas, text: str, style: ParagraphStyle, x: float, top: float, width: float, height: float) -> float:
+    """Draw what fits and return the y below it. Long part numbers wrap; a block that does not fit is left out."""
+    p = Paragraph(escape(text), style)
+    _, used = p.wrap(width, height)
+    if used > height:
+        return top
+    p.drawOn(c, x, top - used)
+    return top - used - 0.6 * mm
+
+
+def _label(c: Canvas, code: Code, x: float, y: float) -> None:
+    size = LABEL_H - 9 * mm
+    renderPDF.draw(_qr(code.url, size), c, x + 5 * mm, y + 4.5 * mm)
+    left = x + 5 * mm + size + 2 * mm
+    width = x + LABEL_W - 4 * mm - left
+    top = y + LABEL_H - 4 * mm
+    bottom = y + 3 * mm
+    top = _text_on(c, code.title, _style(8.5, "Dj-B"), left, top, width, top - bottom)
+    top = _text_on(c, tx("Bitince okutun: {0}", code.action), _style(7, "Dj-B"), left, top, width, top - bottom)
+    top = _text_on(c, f"{core.n(code.qty)} {tx('adet')} · {code.place}", _style(6), left, top, width, top - bottom)
+    _text_on(c, code.name[:60], _style(6, "Dj-I"), left, top, width, top - bottom)
+
+
+def labels(title: str, codes: list[Code]) -> bytes:
+    """A4 sheets of 3 x 8 stickers of 70 x 37 mm: on the part, the box or an already printed drawing."""
+    _fonts()
+    buf = BytesIO()
+    c = Canvas(buf, pagesize=A4)
+    c.setTitle(title)
+    per_page = LABEL_COLS * LABEL_ROWS
+    gap = (A4[1] - LABEL_ROWS * LABEL_H) / 2
+    for i, code in enumerate(codes):
+        if i and i % per_page == 0:
+            c.showPage()
+        row, col = divmod(i % per_page, LABEL_COLS)
+        x, y = col * LABEL_W, A4[1] - gap - (row + 1) * LABEL_H
+        c.setStrokeColor(colors.lightgrey)
+        c.setLineWidth(0.25)
+        c.rect(x, y, LABEL_W, LABEL_H)
+        _label(c, code, x, y)
+    c.save()
+    return buf.getvalue()
+
+
+def code_list(title: str, codes: list[Code]) -> bytes:
+    """One table to keep beside the work: the drawings stay as they are and need no second side."""
+    _fonts()
+    head = [_p(h, 7, "Dj-B", alignment=TA_CENTER) for h in ("QR", tx("Parça No"), tx("Adet"), tx("Bitince okutun"), tx("Yer"))]
+    rows = [head] + [[_qr(c.url, 22 * mm), [_p(c.title, 9, "Dj-B"), _p(c.name, 7)], _p(core.n(c.qty), 9, alignment=TA_CENTER),
+                      _p(f"{EMPTY} {c.action}", 8), _p(c.place, 7)] for c in codes]
+    t = Table(rows, colWidths=_widths([15, 37, 8, 20, 20]), repeatRows=1)
+    t.setStyle(_grid())
+    buf = BytesIO()
+    _doc(buf).build([_p(title, 11, "Dj-B", alignment=TA_CENTER), _p(tx("Okutunca teknik resimle birlikte onay ekranı açılır."), 8, alignment=TA_CENTER),
+                     Spacer(1, 6), t])
+    return buf.getvalue()
+
+
+def codes_pdf(layout: str, title: str, codes: list[Code]) -> bytes:
+    return labels(title, codes) if layout == "labels" else code_list(title, codes)

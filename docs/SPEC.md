@@ -235,6 +235,8 @@ Nothing is saved at this step; the existing apply endpoint saves the rows the us
   columns. The preview lists changes and issues, and only selected changes are applied.
 - For double-sided printing, QR pages are always on even pages. A scan opens a confirmation with the drawing and books nothing until it is
   confirmed. A code books at most once per plan.
+- Printing never changes a drawing. Besides QR backs, a plan prints single-sided without codes, and its codes print as 70 x 37 mm labels
+  (24 per A4) or as one list. A published plan also opens the same confirmation from the sheet screen, without paper.
 - The seven consistency checks on a returned file: needed minus ready equals short; the total ready agrees with the sheets; a part
   fully ready on the pick list is not shown as missing on a sheet; extras are on the right part; a hand-changed need is at least the
   BOM quantity and the difference can become an extra; status text agrees with the boxes; plan and pick list totals agree.

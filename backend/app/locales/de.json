@@ -802,5 +802,8 @@
 "Şifre en az {0} karakter olmalı": "Das Passwort muss mindestens {0} Zeichen lang sein",
 "Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın.": "Passwörter und Dokumente werden im lokalen Netzwerk unverschlüsselt übertragen. Aktivieren Sie HTTPS unter Verwaltung > HTTPS.",
 "Şu an hazır montaj yok.": "Derzeit ist keine Baugruppe bereit.",
-"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = Status im System. Fertigungsteil: Gefertigt / In Fertigung / Nicht gefertigt – Kaufteil: Eingetroffen / Bestellt / Nicht eingetroffen. Unterbaugruppen zuerst; Schrittfolge einhalten."
+"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = Status im System. Fertigungsteil: Gefertigt / In Fertigung / Nicht gefertigt – Kaufteil: Eingetroffen / Bestellt / Nicht eingetroffen. Unterbaugruppen zuerst; Schrittfolge einhalten.",
+"Bitince okutun": "Nach Fertigstellung scannen",
+"Yer": "Ort",
+"Seçime uyan parça yok": "Kein Teil entspricht der Auswahl"
 }

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Page, useProject } from "../components/Layout";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
+import PrintMenu from "../components/PrintMenu";
 import PreviewThumb from "../components/viewer/Thumb";
 import Viewer, { type ViewItem } from "../components/viewer/Viewer";
 import { errText, useToast } from "../components/Toast";
@@ -747,11 +748,10 @@ export default function Drawings() {
     onError: (e) => toast(errText(e), true),
   });
 
-  const printQr = async () => {
+  const printQr = async (path: string, extra: object, name: string) => {
     setZipBusy(true);
     try {
-      await postDownload(`/projects/${pid}/drawings/print`, { part_nos: zipParts }, "resimler_qr.pdf");
-      toast(tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."));
+      await postDownload(`/projects/${pid}/drawings/${path}`, { part_nos: zipParts, ...extra }, name);
     } catch (e) {
       toast(errText(e), true);
     } finally {
@@ -783,8 +783,11 @@ export default function Drawings() {
             title={selCount ? tx("Seçili parçaların resimleri") : tx("Filtrelenen parçaların resimleri")}>
             {zipBusy ? tx("Hazırlanıyor…") : tx("ZIP indir ({0} {1} parça)", selCount ? tx("seçili") : tx("filtrelenen"), zipParts.length.toLocaleString(LOCALE))}
           </button>
-          <button className="btn small" disabled={zipBusy || !zipParts.length} onClick={() => void printQr()}
-            title={tx("Her resmin arka sayfasına QR ekler")}>{tx("QR'lı yazdır")}</button>
+          <PrintMenu label={tx("QR'lı yazdır")} disabled={zipBusy || !zipParts.length} choices={[
+            { label: tx("QR arkada"), hint: tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."), run: () => void printQr("print", {}, "resimler_qr.pdf") },
+            { label: tx("QR etiketleri"), hint: tx("70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın."), run: () => void printQr("codes", { layout: "labels" }, "qr_etiket.pdf") },
+            { label: tx("QR listesi"), hint: tx("Tüm kodlar tek listede. İş başında panoda durur."), run: () => void printQr("codes", { layout: "list" }, "qr_liste.pdf") },
+          ]} />
         </>
       )}
       {canDesign && selIds.length > 0 && (

@@ -803,5 +803,8 @@
 "Şifre en az {0} karakter olmalı": "La contraseña debe tener al menos {0} caracteres",
 "Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın.": "Las contraseñas y documentos viajan sin cifrar en la red local. Actívelo en la pestaña Administración > HTTPS.",
 "Şu an hazır montaj yok.": "Ningún conjunto listo ahora mismo.",
-"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = estado en el sistema. Pieza fabricada: Fabricado / En producción / Sin fabricar – Pieza comprada: Recibido / En pedido / No recibido. Los subconjuntos van primero; siga el orden de los pasos."
+"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = estado en el sistema. Pieza fabricada: Fabricado / En producción / Sin fabricar – Pieza comprada: Recibido / En pedido / No recibido. Los subconjuntos van primero; siga el orden de los pasos.",
+"Bitince okutun": "Escanee al terminar",
+"Yer": "Lugar",
+"Seçime uyan parça yok": "Ninguna pieza coincide con la selección"
 }

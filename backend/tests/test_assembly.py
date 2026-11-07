@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 
 from app.core import assembly as core
+from app.services import assembly_pdf
 
 DATA = Path(__file__).parent / "data" / "assembly"
 ORDER = {"T01_0010_0000": 2, "T01_0020_0000": 1, "T01_0030_0000": 2, "T01_0040_0000": 1, "T01_0050_0000": 2,
@@ -531,3 +532,53 @@ def test_second_read_adds_nothing_when_an_earlier_plan_took_the_parts(client, ad
     rows = client.get(f"/api/projects/{pid}/assembly/quantities", headers=admin_headers).json()
     rows = rows["rows"] if isinstance(rows, dict) else rows
     assert next(r for r in rows if r["part_no"] == part)["ready"] == left
+
+
+def test_single_sided_plan_has_no_qr_pages_and_leaves_duplex_off(client, admin_headers, t01, tmp_path):
+    pid, plan = t01
+    part = "T01_0600_0003"
+    drawing(pid, part, tmp_path)
+    set_plan_mode(plan, "pages")
+    r = client.get(f"/api/projects/{pid}/assembly/plans/{plan}/pdf?qr=none", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    reader = PdfReader(BytesIO(r.content))
+    pages = [p.extract_text() for p in reader.pages]
+    assert sum(f"· {part}" in t for t in pages) == 2
+    assert not any("Okutunca" in t for t in pages) and all(t.strip() for t in pages)
+    assert "/ViewerPreferences" not in reader.trailer["/Root"]
+
+
+def test_plan_codes_come_as_labels_and_as_a_list(client, admin_headers, t01):
+    pid, plan = t01
+    base = f"/api/projects/{pid}/assembly/plans/{plan}/codes"
+    labels = client.get(base, headers=admin_headers)
+    assert labels.status_code == 200, labels.text
+    text = "\n".join(p.extract_text() for p in PdfReader(BytesIO(labels.content)).pages)
+    assert "T01_0600_0002" in text and "Montaj tamam" in text and "ADIM" in text
+    assert text.count("T01_0600_0002\n") == 1
+    listed = client.get(f"{base}?layout=list", headers=admin_headers)
+    text = "\n".join(p.extract_text() for p in PdfReader(BytesIO(listed.content)).pages)
+    assert "T01_0600_0002" in text and "Montaj tamam" in text
+    assert client.get(f"{base}?foy=NOPE", headers=admin_headers).status_code == 404
+    assert client.get(base).status_code == 401
+
+
+def test_labels_fill_a_sheet_of_24_and_go_on_to_the_next(client, admin_headers, t01):
+    pid, _ = t01
+    code = assembly_pdf.Code("http://x/q/P1-A", "A", "name", "Üretildi", 2, "proj")
+    assert len(PdfReader(BytesIO(assembly_pdf.labels("t", [code] * 24))).pages) == 1
+    assert len(PdfReader(BytesIO(assembly_pdf.labels("t", [code] * 25))).pages) == 2
+    long = assembly_pdf.Code("http://x/q/P1-A", "X" * 90, "n" * 200, "Montaj tamam", 2, "p" * 200)
+    assert len(PdfReader(BytesIO(assembly_pdf.labels("t", [long]))).pages) == 1
+
+
+def test_project_codes_cover_parts_without_a_pdf_drawing(client, admin_headers, t01):
+    pid, _ = t01
+    part = "T01_0010_0001"
+    url = f"/api/projects/{pid}/drawings/codes"
+    assert client.post(f"/api/projects/{pid}/drawings/print", json={"part_nos": [part]}, headers=admin_headers).status_code == 404
+    for layout in ("labels", "list"):
+        r = client.post(url, json={"part_nos": [part, "NOPE"], "layout": layout}, headers=admin_headers)
+        assert r.status_code == 200, r.text
+        assert part in PdfReader(BytesIO(r.content)).pages[0].extract_text()
+    assert client.post(url, json={"part_nos": ["NOPE"]}, headers=admin_headers).status_code == 404

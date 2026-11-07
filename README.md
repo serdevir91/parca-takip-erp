@@ -500,6 +500,15 @@ approved BOM and the part list, so nothing is typed twice.
 sheet gets one with a code for each step and for each part without a drawing page. Blank pages keep the codes on the back, and the
 PDF asks for long-edge double-sided printing. In the **Drawings** page, **Print with QR** does the same for the selected drawings.
 
+**Other ways to use the codes.** The back of a drawing does not suit every job, so the print menus offer more. None of them changes a drawing:
+
+- **No QR** prints the plan single-sided, with no back pages or blanks.
+- **QR labels** gives A4 sheets of 24 stickers of 70 x 37 mm, for the part, its box or a drawing that is already printed. Print at 100% scale.
+- **QR list** puts every code on one list to keep at the workplace.
+- **Confirm** beside each step and part on the **Sheets** tab opens the same confirmation screen with no paper at all.
+
+Labels and lists also work for DWG, picture and missing drawings, which **QR on the back** on the Drawings page skips.
+
 When the work is finished, scan the code on the back with the phone camera or **Scan barcode**. A confirmation screen opens with
 the drawing, part and quantity. Nothing is saved until you press **Confirm**. A made part becomes **Made**, a bought part becomes
 **Arrived**, and an assembly step is marked fitted and built. Reading the same code again adds nothing. Confirming needs edit

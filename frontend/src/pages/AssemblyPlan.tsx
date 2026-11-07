@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, FileDown, FileSpreadsheet, FileUp, Printer, Trash2 } from "lucide-react";
+import { Camera, CheckCircle2, FileDown, FileSpreadsheet, FileUp, Printer, Trash2 } from "lucide-react";
 import { api, blobUrl, download, upload } from "../api/client";
 import { useAuth } from "../api/auth";
 import { LOCALE, tx } from "../api/i18n";
 import { Page, useProject } from "../components/Layout";
 import { errText, useToast } from "../components/Toast";
 import DataGrid, { type GridColumn } from "../components/DataGrid";
+import PrintMenu, { type PrintChoice } from "../components/PrintMenu";
 import { fmt, Meter, PLAN_DONE, PLAN_DRAFT, PLAN_PUBLISHED, PlanForm, planDate, statusBadge, type Plan, type PlanExtra } from "./Assembly";
 
 // Backend: backend/app/services/assembly.py plan_out, doc_out
@@ -83,7 +84,7 @@ export default function AssemblyPlan() {
         <span className="muted">{planDate(d.plan_date)}{d.responsible ? ` · ${d.responsible}` : ""}</span>
         <Meter value={d.percent ?? 0} />
         <span style={{ flex: 1 }} />
-        <button className="btn small" title={tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir.")} onClick={() => download(`${base}/pdf`, `montaj_plani_${d.no}.pdf`).catch(fail)}><Printer size={14} /> {tx("Yazdır (PDF)")}</button>
+        <PrintMenu label={<><Printer size={14} /> {tx("Yazdır (PDF)")}</>} choices={printChoices(base, `montaj_plani_${d.no}`, "", fail)} />
         <button className="btn small" onClick={() => download(`${base}/excel`, `montaj_plani_${d.no}.xlsx`).catch(fail)}><FileSpreadsheet size={14} /> {tx("Excel'e aktar")}</button>
         {canEdit && d.status !== PLAN_DRAFT && (
           <>
@@ -108,7 +109,7 @@ export default function AssemblyPlan() {
       </div>
       {tab === "plan" && <PlanTab d={d} pid={pid} base={base} canEdit={canEdit && d.status !== PLAN_DONE} />}
       {tab === "picks" && <PicksTab d={d} />}
-      {tab === "foys" && <FoysTab d={d} base={base} />}
+      {tab === "foys" && <FoysTab d={d} base={base} canEdit={canEdit} />}
       {tab === "field" && <FieldTab d={d} base={base} canEdit={canEdit} onSaved={refresh} />}
       {tab === "issues" && <IssuesTab d={d} base={base} canEdit={canEdit} onSaved={refresh} />}
       {tab === "history" && <HistoryTab pid={pid} planId={planId} base={base} />}
@@ -196,8 +197,23 @@ function PicksTab({ d }: { d: Detail }) {
   return <DataGrid<Pick> stateKey="Toplama listesi" exportName={tx("Toplama Listesi")} data={d.picks} columns={columns} getRowId={(r) => r.part_no} emptyText={tx("Kayıt yok.")} />;
 }
 
-function FoysTab({ d, base }: { d: Detail; base: string }) {
+function printChoices(base: string, name: string, foy: string, fail: (e: unknown) => void): PrintChoice[] {
+  const one = foy ? `foy=${encodeURIComponent(foy)}` : "";
+  const get = (path: string, file: string) => () => { download(`${base}/${path}`, file).catch(fail); };
+  return [
+    { label: tx("QR arkada"), hint: tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."), run: get(`pdf${one && `?${one}`}`, `${name}.pdf`) },
+    { label: tx("QR'sız"), hint: tx("Tek taraflı yazıcı için. Resimlere dokunmaz, arka sayfa eklemez."), run: get(`pdf?qr=none${one && `&${one}`}`, `${name}.pdf`) },
+    { label: tx("QR etiketleri"), hint: tx("70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın."), run: get(`codes?layout=labels${one && `&${one}`}`, `${name}_qr_etiket.pdf`) },
+    { label: tx("QR listesi"), hint: tx("Tüm kodlar tek listede. İş başında panoda durur."), run: get(`codes?layout=list${one && `&${one}`}`, `${name}_qr_liste.pdf`) },
+  ];
+}
+
+function FoysTab({ d, base, canEdit }: { d: Detail; base: string; canEdit: boolean }) {
   const toast = useToast();
+  const confirmable = canEdit && d.status === PLAN_PUBLISHED;
+  const confirmLink = (code: string) => (
+    <Link className="btn small" to={`/q/${code}`} title={tx("Kağıtsız onay: resimle birlikte onay ekranını açar")}><CheckCircle2 size={14} /> {tx("Onayla")}</Link>
+  );
   return (
     <div className="asm-foys">
       {d.foys.filter((f) => !f.single).map((f) => (
@@ -207,17 +223,18 @@ function FoysTab({ d, base }: { d: Detail; base: string }) {
             <span className="muted">{tx("Montaj adedi:")} {fmt(f.qty)}</span>
             <Meter value={f.percent} />
             <span style={{ flex: 1 }} />
-            <button className="btn small" onClick={() => download(`${base}/pdf?foy=${encodeURIComponent(f.part_no)}`, `${f.part_no}.pdf`).catch((e) => toast(errText(e), true))}><FileDown size={14} /> {tx("Bu föyü yazdır")}</button>
+            <PrintMenu label={<><FileDown size={14} /> {tx("Bu föyü yazdır")}</>} choices={printChoices(base, f.part_no, f.part_no, (e) => toast(errText(e), true))} />
           </div>
           {f.steps.map((s) => (
             <div key={s.path} className="asm-step">
               <div className="asm-step-title">
                 <b>{tx("ADIM {0}/{1}", s.no, s.total)} · {s.is_top ? tx("ANA MONTAJ") : tx("ALT MONTAJ")}: {s.part_no}</b>
                 <span>{tx("Yapılacak:")} {fmt(s.make)} {tx("adet")} {s.done ? "☒" : "☐"}</span>
+                {confirmable && !s.done && confirmLink(`S${d.id}-${f.item_id}-${s.no}`)}
               </div>
               <div className="asm-table">
                 <table className="simple">
-                  <thead><tr><th>{tx("Poz")}</th><th>{tx("Parça No")}</th><th>{tx("Temin")}</th><th>{tx("Adet")}</th><th>{tx("Toplam Gerekli")}</th><th>{tx("Durum")}</th><th>{tx("Not")}</th></tr></thead>
+                  <thead><tr><th>{tx("Poz")}</th><th>{tx("Parça No")}</th><th>{tx("Temin")}</th><th>{tx("Adet")}</th><th>{tx("Toplam Gerekli")}</th><th>{tx("Durum")}</th><th>{tx("Not")}</th>{confirmable && <th />}</tr></thead>
                   <tbody>
                     {s.rows.map((r) => (
                       <tr key={r.part_no}>
@@ -225,6 +242,7 @@ function FoysTab({ d, base }: { d: Detail; base: string }) {
                         <td>{fmt(r.qty)}</td><td>{fmt(r.need)}</td>
                         <td>{r.is_sub ? "—" : boxText(r)}{r.mounted ? ` · ${tx("Takıldı")}` : ""}</td>
                         <td className="muted">{r.notes.map((n) => n.text).join("; ")}</td>
+                        {confirmable && <td>{!r.is_sub && r.state !== "ready" && confirmLink(`A${d.id}-${encodeURIComponent(r.part_no)}`)}</td>}
                       </tr>
                     ))}
                   </tbody>

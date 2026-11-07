@@ -803,5 +803,8 @@
 "Şifre en az {0} karakter olmalı": "Password must be at least {0} characters",
 "Şifreler ve belgeler yerel ağda şifresiz gidiyor. Yönetim > HTTPS sekmesinden açın.": "Passwords and documents are transmitted unencrypted on the local network. Enable from the Administration > HTTPS tab.",
 "Şu an hazır montaj yok.": "No assembly is ready right now.",
-"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = status in the system. Made part: Made / In production / Not made – Bought part: Arrived / On order / Not arrived. Sub-assemblies come first; follow the step order."
+"☒ = sistemdeki durum. İmalat parçası: Üretildi / Üretimde / Üretilmedi – Hazır alım: Geldi / Siparişte / Gelmedi. Alt montajlar önce yapılır; adım sırasını takip et.": "☒ = status in the system. Made part: Made / In production / Not made – Bought part: Arrived / On order / Not arrived. Sub-assemblies come first; follow the step order.",
+"Bitince okutun": "Scan when finished",
+"Yer": "Where",
+"Seçime uyan parça yok": "No part matches the selection"
 }

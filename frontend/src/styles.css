@@ -683,6 +683,9 @@ div.chat-pick-row { cursor: default; }
 .dg-menu-wrap { position: relative; }
 .dg-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 240px; }
 .dg-menu .btn { text-align: left; justify-content: flex-start; }
+.print-menu { left: auto; right: 0; min-width: 290px; }
+.print-menu .btn { height: auto; padding-top: 6px; padding-bottom: 6px; white-space: normal; }
+.print-menu small { display: block; font-weight: 400; }
 .desk-menu-pop { left: auto; right: 0; min-width: 280px; }
 .desk-menu-info { font-size: 12px; padding: 6px 4px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 /* Filter panel: columns | values */
