@@ -406,3 +406,128 @@ def test_drawing_pages_are_added_and_stamped(client, admin_headers, t01, tmp_pat
     assert sum(f"· {part}" in t for t in pages) >= 1
     for i in range(len(doc)):
         assert sum(doc[i].render(scale=0.5).to_pil().convert("HSV").split()[1].histogram()[16:]) == 0
+
+
+def drawing(client_pid, part, tmp_path):
+    from reportlab.pdfgen.canvas import Canvas
+    from app import models
+    from app.db import SessionLocal
+    f = tmp_path / f"{part}.pdf"
+    c = Canvas(str(f))
+    c.drawString(100, 100, "front")
+    c.showPage()
+    c.drawString(100, 100, "second")
+    c.save()
+    with SessionLocal() as db:
+        d = models.Drawing(project_id=client_pid, part_no=part, filename=f"{part}.pdf", filename_key=f"{part}{client_pid}.pdf", base_name=part, ext="pdf", rev="A")
+        d.versions.append(models.DrawingVersion(version_no=1, storage_path=str(f), size=f.stat().st_size, sha256="0" * 64))
+        db.add(d)
+        db.commit()
+
+
+def mark(client, headers, code, apply=False):
+    return client.post("/api/scan/mark" + ("/apply" if apply else ""), json={"payload": f"http://10.0.0.5:8000/q/{code}"}, headers=headers)
+
+
+def set_plan_mode(plan, mode):
+    from app import models
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        db.get(models.AssemblyPlan, plan).drawing_mode = mode
+        db.commit()
+
+
+def test_qr_lands_on_the_back_of_every_drawing_page(client, admin_headers, t01, tmp_path):
+    pid, plan = t01
+    part = "T01_0600_0003"
+    drawing(pid, part, tmp_path)
+    set_plan_mode(plan, "pages")
+    r = client.get(f"/api/projects/{pid}/assembly/plans/{plan}/pdf", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    reader = PdfReader(BytesIO(r.content))
+    pages = [p.extract_text() for p in reader.pages]
+    assert len(pages) % 2 == 0
+    fronts = [i for i, t in enumerate(pages) if f"· {part}" in t]
+    assert len(fronts) == 2
+    for i in fronts:
+        assert i % 2 == 0 and "Bitince okutun: Üretildi" in pages[i + 1] and part in pages[i + 1]
+    assert all(i % 2 == 0 for i, t in enumerate(pages) if t.startswith("MONTAJ FÖYÜ\n"))
+    assert all(i % 2 == 1 for i, t in enumerate(pages) if "Okutunca" in t)
+    assert reader.trailer["/Root"]["/ViewerPreferences"]["/Duplex"] == "/DuplexFlipLongEdge"
+
+
+def test_part_qr_books_only_after_confirmation(client, admin_headers, t01):
+    pid, plan = t01
+    part = "T01_0600_0002"
+    r = mark(client, admin_headers, f"A{plan}-{part}")
+    assert r.status_code == 200, r.text
+    m = r.json()
+    assert (m["action"], m["done"], m["blocked"]) == ("Üretildi", False, "") and m["left"] > 0
+    assert pick(get(client, admin_headers, pid, plan), part)["ready"] == 0
+    assert mark(client, admin_headers, f"A{plan}-{part}", True).status_code == 200
+    d = get(client, admin_headers, pid, plan)
+    assert pick(d, part)["short"] == 0
+    assert mark(client, admin_headers, f"A{plan}-{part}").json()["done"] is True
+    before = pick(d, part)["ready"]
+    assert mark(client, admin_headers, f"A{plan}-{part}", True).status_code == 200
+    assert pick(get(client, admin_headers, pid, plan), part)["ready"] == before
+
+
+def test_bought_part_qr_says_arrived(client, admin_headers, t01):
+    pid, plan = t01
+    bought = next(p for p in get(client, admin_headers, pid, plan)["picks"] if p["temin"] == "Hazır Alım")
+    assert mark(client, admin_headers, f"A{plan}-{bought['part_no']}").json()["action"] == "Geldi"
+
+
+def test_step_qr_marks_the_assembly_done(client, admin_headers, t01):
+    pid, plan = t01
+    f = foy(get(client, admin_headers, pid, plan), "T01_0600_0000")
+    code = f"S{plan}-{f['item_id']}-1"
+    m = mark(client, admin_headers, code).json()
+    assert m["kind"] == "step" and m["action"] == "Montaj tamam" and m["rows"] and m["warnings"]
+    assert mark(client, admin_headers, code, True).status_code == 200
+    assert mark(client, admin_headers, code).json()["done"] is True
+
+
+def test_qr_needs_rights_and_a_published_plan(client, admin_headers):
+    pid = make_project(client, admin_headers)
+    r = client.post(f"/api/projects/{pid}/assembly/plans", headers=admin_headers,
+                    json={"plan_date": "2026-11-07", "items": [{"part_no": "T01_0600_0000", "qty": 2}]})
+    assert r.status_code == 200, r.text
+    plan = r.json()["id"]
+    assert mark(client, admin_headers, f"A{plan}-T01_0600_0002").json()["blocked"]
+    assert mark(client, admin_headers, f"A{plan}-T01_0600_0002", True).status_code == 409
+    assert mark(client, admin_headers, f"A{plan}-NOPE").status_code == 404
+    assert mark(client, {}, f"A{plan}-T01_0600_0002", True).status_code == 401
+
+
+def test_project_drawing_print_has_qr_backs_and_part_code_books_bom_total(client, admin_headers, t01, tmp_path):
+    pid, plan = t01
+    part = "T01_0600_0004"
+    drawing(pid, part, tmp_path)
+    r = client.post(f"/api/projects/{pid}/drawings/print", json={"part_nos": [part]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    pages = [p.extract_text() for p in PdfReader(BytesIO(r.content)).pages]
+    assert len(pages) == 4 and "front" in pages[0] and "Bitince okutun" in pages[1] and "second" in pages[2] and "Bitince okutun" in pages[3]
+    m = mark(client, admin_headers, f"P{pid}-{part}").json()
+    assert m["drawing"]["filename"] == f"{part}.pdf"
+    assert mark(client, admin_headers, f"P{pid}-{part}", True).status_code == 200
+    assert mark(client, admin_headers, f"P{pid}-{part}").json()["done"] is True
+    r = client.post(f"/api/projects/{pid}/drawings/print", json={"part_nos": ["T01_0010_0001"]}, headers=admin_headers)
+    assert r.status_code == 404
+
+
+def test_second_read_adds_nothing_when_an_earlier_plan_took_the_parts(client, admin_headers):
+    pid = make_project(client, admin_headers)
+    items = [{"part_no": "T01_0600_0000", "qty": 2}]
+    make_plan(client, admin_headers, pid, items)
+    later = make_plan(client, admin_headers, pid, items)
+    part = "T01_0600_0002"
+    code = f"A{later}-{part}"
+    left = mark(client, admin_headers, code).json()["left"]
+    assert mark(client, admin_headers, code, True).status_code == 200
+    assert mark(client, admin_headers, code).json()["done"] is True
+    assert mark(client, admin_headers, code, True).status_code == 200
+    rows = client.get(f"/api/projects/{pid}/assembly/quantities", headers=admin_headers).json()
+    rows = rows["rows"] if isinstance(rows, dict) else rows
+    assert next(r for r in rows if r["part_no"] == part)["ready"] == left

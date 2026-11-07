@@ -170,7 +170,7 @@ export function PlanForm({ pid, plan, onClose }: { pid: number; plan?: Plan; onC
   const [responsible, setResponsible] = useState(plan?.responsible ?? "");
   const [checker, setChecker] = useState(plan?.checker ?? "");
   const [notes, setNotes] = useState(plan?.notes ?? "");
-  const [mode, setMode] = useState(plan?.drawing_mode ?? "none");
+  const [mode, setMode] = useState(plan?.drawing_mode ?? "pages");
   const [dragged, setDragged] = useState<number | null>(null);
   const q = useQuery({
     queryKey: ["assembly", pid, "candidates"],

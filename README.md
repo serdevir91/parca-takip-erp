@@ -496,6 +496,15 @@ approved BOM and the part list, so nothing is typed twice.
    what you select. **Upload photo** stores a photo of a marked sheet next to the field screen. The photo is not read
    automatically; enter its marks on the field screen.
 
+**QR codes on the back.** Print the plan PDF double-sided. Every drawing page gets a QR page on its back, and every assembly
+sheet gets one with a code for each step and for each part without a drawing page. Blank pages keep the codes on the back, and the
+PDF asks for long-edge double-sided printing. In the **Drawings** page, **Print with QR** does the same for the selected drawings.
+
+When the work is finished, scan the code on the back with the phone camera or **Scan barcode**. A confirmation screen opens with
+the drawing, part and quantity. Nothing is saved until you press **Confirm**. A made part becomes **Made**, a bought part becomes
+**Arrived**, and an assembly step is marked fitted and built. Reading the same code again adds nothing. Confirming needs edit
+permission on `assembly`.
+
 Part quantities replace plain statuses here: each part has a ready quantity, and a plan counts how many are left for each
 assembly. An assembly with no shortage is reported as **ready to assemble** on the dashboard and in the notifications.
 When you start using quantities, **Move from status to quantity** on the **Part quantities** tab counts parts shown as

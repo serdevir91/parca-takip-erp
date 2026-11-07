@@ -83,7 +83,7 @@ export default function AssemblyPlan() {
         <span className="muted">{planDate(d.plan_date)}{d.responsible ? ` · ${d.responsible}` : ""}</span>
         <Meter value={d.percent ?? 0} />
         <span style={{ flex: 1 }} />
-        <button className="btn small" onClick={() => download(`${base}/pdf`, `montaj_plani_${d.no}.pdf`).catch(fail)}><Printer size={14} /> {tx("Yazdır (PDF)")}</button>
+        <button className="btn small" title={tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir.")} onClick={() => download(`${base}/pdf`, `montaj_plani_${d.no}.pdf`).catch(fail)}><Printer size={14} /> {tx("Yazdır (PDF)")}</button>
         <button className="btn small" onClick={() => download(`${base}/excel`, `montaj_plani_${d.no}.xlsx`).catch(fail)}><FileSpreadsheet size={14} /> {tx("Excel'e aktar")}</button>
         {canEdit && d.status !== PLAN_DRAFT && (
           <>

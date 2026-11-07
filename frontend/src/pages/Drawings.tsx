@@ -747,6 +747,18 @@ export default function Drawings() {
     onError: (e) => toast(errText(e), true),
   });
 
+  const printQr = async () => {
+    setZipBusy(true);
+    try {
+      await postDownload(`/projects/${pid}/drawings/print`, { part_nos: zipParts }, "resimler_qr.pdf");
+      toast(tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."));
+    } catch (e) {
+      toast(errText(e), true);
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
   const downloadZip = async () => {
     if (!zipParts.length) { toast(tx("İndirilecek eşleşmiş resim yok"), true); return; }
     setZipBusy(true);
@@ -771,6 +783,8 @@ export default function Drawings() {
             title={selCount ? tx("Seçili parçaların resimleri") : tx("Filtrelenen parçaların resimleri")}>
             {zipBusy ? tx("Hazırlanıyor…") : tx("ZIP indir ({0} {1} parça)", selCount ? tx("seçili") : tx("filtrelenen"), zipParts.length.toLocaleString(LOCALE))}
           </button>
+          <button className="btn small" disabled={zipBusy || !zipParts.length} onClick={() => void printQr()}
+            title={tx("Her resmin arka sayfasına QR ekler")}>{tx("QR'lı yazdır")}</button>
         </>
       )}
       {canDesign && selIds.length > 0 && (

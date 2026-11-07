@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -13,10 +14,11 @@ from sqlalchemy.orm import Session
 from ..auth import session_token, user_from_token
 from ..core.drawmatch import split_ext
 from ..models import Drawing, DrawingVersion, User
-from ..services import audit
+from ..services import assembly, assembly_pdf, audit
 from ..services import drawings as svc
 from ..services.state import ProjectView
 from ..permissions import can, require
+from .assembly import base_url as assembly_base_url
 from .deps import get_db, project_or_404
 from app.core.i18n import tx
 
@@ -149,6 +151,21 @@ def project_zip(pid: int, body: ZipIn, background: BackgroundTasks, db: Session 
     background.add_task(path.unlink, missing_ok=True)
     return FileResponse(path, media_type="application/zip",
                         filename=f"{svc.safe_filename(project.name)}_resimler.zip")
+
+
+class PrintIn(BaseModel):
+    part_nos: list[str] = Field(min_length=1, max_length=2000)
+
+
+@router.post("/projects/{pid}/drawings/print")
+def project_print(pid: int, body: PrintIn, request: Request, db: Session = Depends(get_db), user: User = Depends(file_user)) -> Response:
+    """One PDF of the chosen parts' drawings for double-sided printing, with a QR code on the back of each page."""
+    project = project_or_404(db, pid)
+    data = assembly_pdf.drawings_with_qr(assembly.context(db, project), body.part_nos, assembly_base_url(request))
+    if data is None:
+        raise HTTPException(404, tx("Seçime uyan PDF resim yok"))
+    name = quote(f"{svc.safe_filename(project.name)}_resimler_qr.pdf")
+    return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{name}"})
 
 
 @router.get("/drawings/unmatched")

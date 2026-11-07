@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { DesktopMenu } from "../components/DesktopMenu";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../api/auth";
 import { api } from "../api/client";
 import { mobileApp } from "../api/mobile";
@@ -13,6 +13,7 @@ import { tx } from "../api/i18n";
 export default function Login() {
   const { user, login } = useAuth();
   const nav = useNavigate();
+  const from = (useLocation().state as { from?: string } | null)?.from ?? "/";
   const [mode, setMode] = useState<"login" | "signup">("login");
   const brand = useBrand();
   const signupOn = brand.options?.signup ?? false;
@@ -26,7 +27,7 @@ export default function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={from} replace />;
 
   function switchTo(m: "login" | "signup") {
     setMode(m);

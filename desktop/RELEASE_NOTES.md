@@ -1,6 +1,12 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.9.1
+
+- **QR on the back of drawings.** Printed double-sided, each drawing page has a QR code on its back. Assembly sheets get one for each step and for parts without a drawing page. **Print with QR** on the Drawings page does the same for selected drawings.
+- **Scan to confirm.** Scanning a code opens a confirmation screen with the drawing, part and quantity. Nothing is saved until you confirm. Made parts become Made, bought parts become Arrived, and assembly steps are marked done.
+- **Sign-in keeps your page.** After signing in, you return to the page you opened, such as a scanned QR link.
+
 ## What's new in 1.9.0
 
 - **Assembly sheets.** A new project page plans the day's assembly work from the approved BOM. Pick assemblies, set the quantities and drag them into the reservation order, then publish the plan.

@@ -14,7 +14,8 @@ from xml.sax.saxutils import escape
 
 import pypdfium2 as pdfium
 from PIL import Image
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter
+from reportlab.graphics import renderPDF
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing as Shape
 from reportlab.lib import colors
@@ -33,7 +34,8 @@ from ..core import assembly as core
 from ..core.assembly import EPS, Doc, Foy, Row
 from ..core.i18n import tx
 from ..models import AssemblyPlan, Drawing
-from .assembly import Context, uses_text
+from . import assembly_marks as marks
+from .assembly import Context, pick_drawing, uses_text
 from .assembly_excel import CHECKED, EMPTY, fastener_title, footer_title, legend, step_info, step_title
 
 FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
@@ -200,23 +202,6 @@ class Attached:
     path: Path | None
 
 
-def _pick_drawing(ctx: Context, part_no: str) -> tuple[Drawing | None, str]:
-    """The drawing whose rev matches the BOM; else the newest one, with a warning."""
-    ds = [d for d in ctx.view.drawings.get(part_no, [])]
-    if not ds:
-        return None, ""
-    rev = (ctx.cat.get(part_no) or core.Part(part_no)).rev
-    pdfs = [d for d in ds if d.ext.lower().lstrip(".") == "pdf"]
-    pool = pdfs or ds
-    match = [d for d in pool if rev and d.rev == rev]
-    if match:
-        return match[0], ""
-    newest = max(pool, key=lambda d: (d.updated_at, d.id))
-    if rev and newest.rev and newest.rev != rev:
-        return newest, tx("BOM Rev {0} resmi yok, en güncel resim (Rev {1}) seçildi", rev, newest.rev)
-    return newest, ""
-
-
 def _attachments(ctx: Context, f: Foy) -> list[Attached]:
     out: list[Attached] = []
     seen: set[str] = set()
@@ -226,7 +211,7 @@ def _attachments(ctx: Context, f: Foy) -> list[Attached]:
             if r.is_sub or r.part_no in seen or part is None or not (part.needs_drawing or r.kind == core.KIND_IMALAT):
                 continue
             seen.add(r.part_no)
-            d, warning = _pick_drawing(ctx, r.part_no)
+            d, warning = pick_drawing(ctx, r.part_no)
             if d is None:
                 continue
             v = next((x for x in d.versions if x.version_no == d.current_version), None)
@@ -325,6 +310,81 @@ def _overlay(w: float, h: float, footer: str, number: str, stamp: str) -> Any:
     return PdfReader(BytesIO(buf.getvalue())).pages[0]
 
 
+# ---------- backs: printed double-sided, a QR page always lands on the back of the sheet before it ----------
+
+def _size(page: Any) -> tuple[float, float]:
+    w, h = float(page.mediabox.width), float(page.mediabox.height)
+    return (h, w) if (page.get("/Rotate") or 0) % 180 else (w, h)
+
+
+def _blank(w: float = A4[0], h: float = A4[1]) -> Any:
+    return PageObject.create_blank_page(width=w, height=h)
+
+
+def _on_front(pages: list[tuple[Any, str]]) -> None:
+    if len(pages) % 2:
+        pages.append((_blank(), ""))
+
+
+def _on_back(pages: list[tuple[Any, str]], page: Any) -> None:
+    if len(pages) % 2 == 0:
+        pages.append((_blank(*_size(page)), ""))
+    pages.append((page, ""))
+
+
+def _back_of_drawing(w: float, h: float, url: str, part_no: str, action: str, info: str) -> Any:
+    """One large code in the middle of a page the size of the drawing."""
+    _fonts()
+    buf = BytesIO()
+    c = Canvas(buf, pagesize=(w, h))
+    size = min(70 * mm, w * 0.5, h * 0.5)
+    renderPDF.draw(_qr(url, size), c, (w - size) / 2, (h - size) / 2)
+    y = (h + size) / 2 + 8 * mm
+    c.setFillColor(BLACK)
+    c.setFont("Dj-B", 16)
+    c.drawCentredString(w / 2, y, part_no)
+    y = (h - size) / 2 - 8 * mm
+    c.setFont("Dj-B", 11)
+    c.drawCentredString(w / 2, y, tx("Bitince okutun: {0}", action))
+    c.setFont("Dj", 8)
+    c.drawCentredString(w / 2, y - 5 * mm, tx("Okutunca teknik resimle birlikte onay ekranı açılır."))
+    if info:
+        c.drawCentredString(w / 2, y - 9 * mm, info)
+    c.showPage()
+    c.save()
+    return PdfReader(BytesIO(buf.getvalue())).pages[0]
+
+
+def _cell(url: str, title: str, action: str, info: str = "") -> list[Any]:
+    return [_qr(url, 32 * mm), Spacer(1, 1), _p(title, 8, "Dj-B", alignment=TA_CENTER), _p(action, 8, alignment=TA_CENTER),
+            _p(info, 6.5, "Dj-I", alignment=TA_CENTER)]
+
+
+def _code_pages(title: str, cells: list[list[Any]]) -> list[Any]:
+    """A grid of codes on as many pages as it takes."""
+    if not cells:
+        return []
+    rows = [(cells[i:i + 3] + [[], []])[:3] for i in range(0, len(cells), 3)]
+    t = Table(rows, colWidths=_widths([1, 1, 1]))
+    t.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.5, BLACK), ("INNERGRID", (0, 0), (-1, -1), 0.5, BLACK), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                           ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    buf = BytesIO()
+    _doc(buf).build([_p(title, 11, "Dj-B", alignment=TA_CENTER), _p(tx("Okutunca teknik resimle birlikte onay ekranı açılır."), 8, alignment=TA_CENTER),
+                     Spacer(1, 6), t])
+    return list(PdfReader(BytesIO(buf.getvalue())).pages)
+
+
+def _part_cell(ctx: Context, plan: AssemblyPlan, part_no: str, base_url: str) -> list[Any]:
+    return _cell(marks.plan_part_url(base_url, plan.id, part_no), part_no, tx(marks.done_label(ctx, part_no)))
+
+
+def _foy_back(ctx: Context, plan: AssemblyPlan, f: Foy, base_url: str, drawn: set[str]) -> list[Any]:
+    cells = [_cell(marks.step_url(base_url, plan.id, f.item_id, s.no), s.part_no, tx("Montaj tamam"), tx("ADIM {0}/{1}", s.no, s.total)) for s in f.steps]
+    parts = dict.fromkeys(r.part_no for r in f.part_rows if r.part_no not in drawn)
+    cells += [_part_cell(ctx, plan, p, base_url) for p in parts]
+    return _code_pages(f"{tx('MONTAJ FÖYÜ')}: {f.part_no}", cells)
+
+
 def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None) -> bytes:
     """The whole plan, or with `only` one föy with its drawings."""
     _fonts()
@@ -334,22 +394,34 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
         d = _doc(front)
         d.build([*_plan_story(ctx, plan, doc), PageBreak(), *_pick_story(plan, doc)])
         pages += [(p, "") for p in PdfReader(BytesIO(front.getvalue())).pages]
+        singles = dict.fromkeys(r.part_no for f in doc.foys if f.single for r in f.part_rows)
+        for back in _code_pages(tx("Tekil parçalar"), [_part_cell(ctx, plan, p, base_url) for p in singles]):
+            _on_back(pages, back)
     for f in doc.foys:
         if f.single or (only is not None and f.part_no != only):
             continue
         atts = _attachments(ctx, f) if plan.drawing_mode != core.DRAWING_NONE else []
+        sheets: list[tuple[Attached, Any]] = []
+        if plan.drawing_mode in (core.DRAWING_PAGES, core.DRAWING_BOTH):
+            for a in atts:
+                if a.path is None:
+                    continue
+                try:
+                    sheets.append((a, PdfReader(BytesIO(_black_and_white(a.path.read_bytes())))))
+                except Exception:  # a damaged drawing must not cost the whole document; the sheet still lists it
+                    continue
+        _on_front(pages)
         pages += [(p, "") for p in PdfReader(BytesIO(_foy_pdf(ctx, plan, f, atts, base_url))).pages]
-        if plan.drawing_mode not in (core.DRAWING_PAGES, core.DRAWING_BOTH):
-            continue
-        for a in atts:
-            if a.path is None:
-                continue
-            try:
-                reader = PdfReader(BytesIO(_black_and_white(a.path.read_bytes())))
-            except Exception:  # a damaged drawing must not cost the whole document; the sheet still lists it
-                continue
+        for back in _foy_back(ctx, plan, f, base_url, {a.part_no for a, _ in sheets}):
+            _on_back(pages, back)
+        for a, reader in sheets:
             stamp = f"{f.part_no} · {tx('ADIM {0}/{1}', a.step_no, a.step_total)} · {a.part_no}"
-            pages += [(p, stamp) for p in reader.pages]
+            url = marks.plan_part_url(base_url, plan.id, a.part_no)
+            for p in reader.pages:
+                _on_front(pages)
+                pages.append((p, stamp))
+                _on_back(pages, _back_of_drawing(*_size(p), url, a.part_no, tx(marks.done_label(ctx, a.part_no)), tx("Plan {0}", plan.no)))
+    _on_front(pages)
     writer = PdfWriter()
     title = footer_title(ctx)
     for i, (page, stamp) in enumerate(pages, 1):
@@ -358,6 +430,36 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
         w, h = float(added.mediabox.width), float(added.mediabox.height)
         added.merge_page(_overlay(w, h, title, tx("Sayfa {0} / {1}", i, len(pages)), stamp))
     writer.add_metadata({"/Title": tx("Montaj planı {0}", plan.no)})
+    return _write(writer)
+
+
+def _write(writer: PdfWriter) -> bytes:
+    writer.create_viewer_preferences()
+    writer.viewer_preferences.duplex = "/DuplexFlipLongEdge"
     out = BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+def drawings_with_qr(ctx: Context, part_nos: list[str], base_url: str) -> bytes | None:
+    """The drawings as they are, in colour, each page with its code on the back. None when no part has a PDF drawing."""
+    _fonts()
+    writer = PdfWriter()
+    for part_no in dict.fromkeys(part_nos):
+        if part_no not in ctx.cat:
+            continue
+        d, _ = pick_drawing(ctx, part_no)
+        v = next((x for x in d.versions if x.version_no == d.current_version), None) if d is not None else None
+        if d is None or v is None or d.ext.lower().lstrip(".") != "pdf" or not Path(v.storage_path).exists():
+            continue
+        try:
+            reader = PdfReader(v.storage_path)
+            sources = list(reader.pages)
+        except Exception:  # one damaged file must not cost the rest
+            continue
+        url = marks.part_url(base_url, ctx.project.id, part_no)
+        for p in sources:
+            size = _size(p)
+            writer.add_page(p)
+            writer.add_page(_back_of_drawing(*size, url, part_no, tx(marks.done_label(ctx, part_no)), ctx.project.name))
+    return _write(writer) if len(writer.pages) else None

@@ -125,6 +125,10 @@ Read this file first. Do not re-scan the whole project.
   hidden tag columns and the `LABERP-ASSEMBLY:<id>` subject; `assembly_pdf.py` uses reportlab + pypdf with the DejaVu fonts in
   `app/assets/fonts/`. `app/api/assembly.py` serves `/projects/{id}/assembly/...`. Effective ready quantity is the larger of the
   stored quantity and the BOM total of a completed part. The desktop spec bundles `app/assets` and the reportlab submodules.
+- QR backs: `services/assembly_marks.py` holds the `/q/` codes (`P<project>-<part>`, `A<plan>-<part>`, `S<plan>-<item>-<step>`).
+  `POST /scan/mark` is only a preview; `POST /scan/mark/apply` books. `assembly_scans` (migration 0015) stops a second read from adding
+  a plan's quantity again, because an earlier plan may have taken the parts. `assembly_pdf.build` keeps fronts on odd pages with
+  `_on_front` and QR pages on even pages with `_on_back`. Frontend route `q/*` renders `pages/Scan.tsx`.
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.

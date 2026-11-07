@@ -234,6 +234,25 @@ def doc_out(ctx: Context, doc: Doc) -> dict[str, Any]:
             "issues": core.check(core.sheet_of(doc), doc, ctx.cat)}
 
 
+# ---------- drawings ----------
+
+def pick_drawing(ctx: Context, part_no: str) -> tuple[Drawing | None, str]:
+    """The drawing whose rev matches the BOM; else the newest one, with a warning."""
+    ds = [d for d in ctx.view.drawings.get(part_no, [])]
+    if not ds:
+        return None, ""
+    rev = (ctx.cat.get(part_no) or core.Part(part_no)).rev
+    pdfs = [d for d in ds if d.ext.lower().lstrip(".") == "pdf"]
+    pool = pdfs or ds
+    match = [d for d in pool if rev and d.rev == rev]
+    if match:
+        return match[0], ""
+    newest = max(pool, key=lambda d: (d.updated_at, d.id))
+    if rev and newest.rev and newest.rev != rev:
+        return newest, tx("BOM Rev {0} resmi yok, en güncel resim (Rev {1}) seçildi", rev, newest.rev)
+    return newest, ""
+
+
 # ---------- quantities ----------
 
 def _quantity(db: Session, ctx: Context, part_no: str) -> PartQuantity:
@@ -268,6 +287,10 @@ def _sync_progress(db: Session, user: User, ctx: Context, part_no: str, wanted: 
 def _log(db: Session, user: User, ctx: Context, plan: AssemblyPlan | None, what: str, old: Any, new: Any, source: str) -> None:
     where = f"{source}, plan {plan.no}" if plan is not None else source
     audit.record(db, user, "assembly_plan", plan.id if plan is not None else 0, what[:100], old, f"{new} ({where})", ctx.project.id)
+
+
+def quantity_of(db: Session, ctx: Context, part_no: str) -> PartQuantity:
+    return _quantity(db, ctx, part_no)
 
 
 def set_ready(db: Session, user: User, ctx: Context, plan: AssemblyPlan | None, part_no: str, ready: float, source: str,

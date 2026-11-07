@@ -254,7 +254,7 @@ def history(pid: int, plan_id: int, db: Session = Depends(get_db), _: User = Dep
 
 # ---------- documents ----------
 
-def _base_url(request: Request) -> str:
+def base_url(request: Request) -> str:
     """QR codes are read by a phone, so a loopback address is swapped for the LAN one."""
     base = str(request.base_url).rstrip("/")
     if request.url.hostname in ("127.0.0.1", "localhost", "::1"):
@@ -278,7 +278,7 @@ def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, d
     doc = ctx.docs[plan.id]
     if foy is not None and doc.foy(foy) is None:
         raise HTTPException(404, tx("Föy bulunamadı"))
-    data = assembly_pdf.build(ctx, plan, doc, _base_url(request), foy)
+    data = assembly_pdf.build(ctx, plan, doc, base_url(request), foy)
     return _attachment(data, "application/pdf", f"montaj_plani_{plan.no}{'_' + foy if foy else ''}.pdf")
 
 

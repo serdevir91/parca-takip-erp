@@ -869,6 +869,7 @@ class AssemblyPlan(Revisioned, Base):
                                                        order_by="AssemblyItem.seq")
     extras: Mapped[list["AssemblyExtra"]] = relationship(cascade="all, delete-orphan", order_by="AssemblyExtra.id")
     marks: Mapped[list["AssemblyMark"]] = relationship(cascade="all, delete-orphan")
+    scans: Mapped[list["AssemblyScan"]] = relationship(cascade="all, delete-orphan")
 
 
 class AssemblyItem(Base):
@@ -894,6 +895,19 @@ class AssemblyExtra(Base):
     qty: Mapped[float] = mapped_column(Float)
     assembly_no: Mapped[str] = mapped_column(String(200), default="")
     note: Mapped[str] = mapped_column(String(300), default="")
+
+
+class AssemblyScan(Base):
+    """A part's QR confirmed on a plan. Scarce parts may go to an earlier plan, so the counts alone cannot tell
+    that this sheet was already booked; a second read must not add the quantity again."""
+    __tablename__ = "assembly_scans"
+    __table_args__ = (UniqueConstraint("plan_id", "part_no", name="uq_assembly_scan"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("assembly_plans.id", ondelete="CASCADE"), index=True)
+    part_no: Mapped[str] = mapped_column(String(200))
+    qty: Mapped[float] = mapped_column(Float, default=0)
+    username: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class AssemblyMark(Base):

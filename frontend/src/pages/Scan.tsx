@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import jsQR from "jsqr";
-import { Camera, Image as ImageIcon } from "lucide-react";
+import { Camera, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ApiError, api } from "../api/client";
 import { useAuth } from "../api/auth";
 import { Page } from "../components/Layout";
+import PreviewThumb from "../components/viewer/Thumb";
+import Viewer from "../components/viewer/Viewer";
 import { errText, useToast } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
 import { Loading } from "./admin/shared";
@@ -22,6 +24,16 @@ type Result =
   | { type: "stock"; id: number; label: string; actions: string[]; detail: StockDetail }
   | { type: "po"; id: number; label: string; actions: string[]; detail: PoDetail }
   | { type: "wo"; id: number; label: string; actions: string[]; detail: WoDetail };
+
+type Mark = {
+  type: "mark"; kind: "part" | "step"; part_no: string; name: string; project: string; plan_no: number | null; action: string;
+  qty: number; left: number; done: boolean; blocked: string; warnings: string[]; can_apply: boolean; step?: string; foy?: string;
+  rows: { part_no: string; need: number; ready: number; mounted: boolean }[];
+  drawing: { id: number; filename: string; rev: string; ext: string } | null;
+};
+
+// The code on the back of a printed drawing; a scanner on a Turkish layout turns its slashes into dots
+const MARK_CODE = /(^|[/.])q[/.][PAS]\d/;
 
 const MAX_SIDES = [1600, 1000, 2400];   // a phone photo is far bigger than jsQR needs; smaller is faster and often reads better
 
@@ -96,6 +108,7 @@ export default function Scan() {
   const toast = useToast();
   const [text, setText] = useState("");
   const [payload, setPayload] = useState("");
+  const [mark, setMark] = useState("");
   const [camera, setCamera] = useState(false);
   const [decoding, setDecoding] = useState(false);
   const box = useRef<HTMLInputElement>(null);
@@ -114,6 +127,8 @@ export default function Scan() {
     if (!v) return;
     setCamera(false);
     setText("");
+    if (MARK_CODE.test(v)) { setPayload(""); setMark(v); return; }
+    setMark("");
     // The same code again is a fresh read: the quantity may have changed since
     if (last.current === v) void refetch();
     last.current = v;
@@ -122,6 +137,9 @@ export default function Scan() {
   }, [refetch]);
 
   useEffect(focusBox, []);
+  // A phone's own camera opens the printed link straight on this page
+  const { pathname } = useLocation();
+  useEffect(() => { if (pathname.startsWith("/q/")) read(window.location.href); }, [pathname, read]);
 
   const photo = async (file: File | undefined) => {
     if (!file) return;
@@ -137,8 +155,8 @@ export default function Scan() {
     }
   };
 
-  if (!(can("stock") || can("purchasing") || can("workorders"))) {
-    return <Page><div className="card empty">{tx("Tarama için stok, satın alma veya iş emri yetkisi gerekli.")}</div></Page>;
+  if (!(can("stock") || can("purchasing") || can("workorders") || can("assembly"))) {
+    return <Page><div className="card empty">{tx("Tarama için stok, satın alma, iş emri veya montaj yetkisi gerekli.")}</div></Page>;
   }
   const submit = (e: FormEvent) => { e.preventDefault(); read(text); };
   const failed = res.error instanceof ApiError ? res.error : null;
@@ -176,6 +194,7 @@ export default function Scan() {
         {camera && <CameraReader onRead={read} onClose={() => setCamera(false)} />}
         {payload && res.isLoading && <Loading error={null} loading />}
         {failed && <div className="card"><span className="error">{failed.message}</span></div>}
+        {mark && <MarkCard key={mark} code={mark} onClose={() => { setMark(""); focusBox(); }} />}
         {res.data && !res.error && <ResultCard key={`${res.data.type}-${res.data.id}`} r={res.data} />}
       </div>
     </Page>
@@ -193,6 +212,65 @@ function useDone() {
 
 function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="scan-facts">{rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>;
+}
+
+/** What a printed QR would book, with its drawing. Nothing is written until the user confirms. */
+function MarkCard({ code, onClose }: { code: string; onClose: () => void }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const q = useQuery({ queryKey: ["scan-mark", code], retry: false, gcTime: 0, queryFn: () => api.post<Mark>("/scan/mark", { payload: code }) });
+  const apply = useMutation({
+    mutationFn: () => api.post("/scan/mark/apply", { payload: code }),
+    onSuccess: () => {
+      const m = q.data;
+      if (m) toast(`${m.part_no}: ${m.action}`);
+      for (const k of ["assembly", "assembly-plan", "parts", "control", "stock"]) void qc.invalidateQueries({ queryKey: [k] });
+      onClose();
+    },
+    onError: (e) => toast(errText(e), true),
+  });
+  if (q.isLoading) return <Loading error={null} loading />;
+  if (q.error) return <div className="card"><span className="error">{errText(q.error)}</span></div>;
+  const m = q.data;
+  if (!m) return null;
+  const d = m.drawing;
+  const viewable = !!d && ["pdf", "png", "jpg", "jpeg"].includes(d.ext);
+  return (
+    <div className="card scan-card scan-mark">
+      <div className="muted">{tx("Bu işlemi onaylıyor musunuz?")}</div>
+      <h3>{m.part_no}</h3>
+      {m.name && <div>{m.name}</div>}
+      <div className="scan-mark-action"><CheckCircle2 size={20} /> {m.action}</div>
+      {d
+        ? <button type="button" className="scan-mark-img" disabled={!viewable} onClick={() => setOpen(true)} title={tx("Resmi aç")}>
+            <PreviewThumb path={viewable ? `/drawings/${d.id}/thumb` : null} label={d.filename} />
+          </button>
+        : <div className="scan-note">{tx("Teknik resim yok")}</div>}
+      <Facts rows={[
+        [tx("Proje"), m.project],
+        [tx("Plan"), m.plan_no ?? ""],
+        [tx("Föy"), m.foy ? `${m.foy} · ${m.step}` : ""],
+        [tx("Adet"), fmtQty(m.qty)],
+        [tx("Resim dosyası"), d ? `${d.filename}${d.rev ? ` · Rev ${d.rev}` : ""}` : ""],
+      ]} />
+      {m.rows.length > 0 && (
+        <table className="simple">
+          <thead><tr><th>{tx("Parça No")}</th><th>{tx("Adet")}</th><th>{tx("Hazır")}</th></tr></thead>
+          <tbody>{m.rows.map((r) => <tr key={r.part_no}><td>{r.part_no}</td><td>{fmtQty(r.need)}</td><td>{fmtQty(r.ready)}</td></tr>)}</tbody>
+        </table>
+      )}
+      {m.warnings.map((w) => <div key={w} className="scan-note">{w}</div>)}
+      {m.blocked && <div className="error">{m.blocked}</div>}
+      {m.done && !m.blocked && <div className="scan-note">{tx("Bu işlem daha önce kaydedilmiş.")}</div>}
+      {!m.can_apply && <div className="error">{tx("Bu işlem için montaj düzenleme yetkisi gerekli")}</div>}
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn primary" disabled={apply.isPending || m.done || !!m.blocked || !m.can_apply} onClick={() => apply.mutate()}>{tx("Onayla")}</button>
+        <button className="btn" onClick={onClose}>{tx("Vazgeç")}</button>
+      </div>
+      {open && d && <Viewer items={[{ key: d.id, name: d.filename, path: `/drawings/${d.id}/file`, kind: d.ext === "pdf" ? "pdf" : "image" }]} start={0} onClose={() => setOpen(false)} />}
+    </div>
+  );
 }
 
 function ResultCard({ r }: { r: Result }) {

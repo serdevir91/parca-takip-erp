@@ -1,5 +1,6 @@
 """Barkod / QR: turns a scanned payload into a record and the actions this user may take on it.
-Payloads: STK:<code>, WO:<no>, PO:<no> or a bare stock code. The card shows no money."""
+Payloads: STK:<code>, WO:<no>, PO:<no> or a bare stock code. The card shows no money.
+The /q/ codes on printed drawings go through /scan/mark: a preview first, and only /scan/mark/apply books anything."""
 from __future__ import annotations
 
 from typing import Any
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Project, PurchaseOrder, StockItem, User, WorkOrder
 from ..permissions import can
+from ..services import assembly_marks as marks
 from ..services import erp, womaterials
 from .deps import any_user, get_db
 from app.core.i18n import tx
@@ -95,3 +97,28 @@ def resolve(body: ResolveIn, me: User = Depends(any_user), db: Session = Depends
         if hit is not None:
             return hit
     raise denied or HTTPException(404, tx("Kayıt bulunamadı: {0}", text))
+
+
+def _mark(db: Session, text: str) -> marks.Mark:
+    for candidate in dict.fromkeys((text, text.translate(TURKISH_Q))):
+        code = marks.parse(candidate)
+        if code is not None:
+            return marks.load(db, *code)
+    raise HTTPException(404, tx("Kayıt bulunamadı: {0}", text))
+
+
+@router.post("/scan/mark")
+def mark_preview(body: ResolveIn, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    if not can(me, "assembly", "view"):
+        raise HTTPException(403, tx("Bu kaydı görme yetkiniz yok"))
+    return marks.preview(_mark(db, body.payload)) | {"can_apply": can(me, "assembly", "edit")}
+
+
+@router.post("/scan/mark/apply")
+def mark_apply(body: ResolveIn, me: User = Depends(any_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    if not can(me, "assembly", "edit"):
+        raise HTTPException(403, tx("Bu işlem için montaj düzenleme yetkisi gerekli"))
+    m = _mark(db, body.payload)
+    marks.apply(db, me, m)
+    db.commit()
+    return {"ok": True}

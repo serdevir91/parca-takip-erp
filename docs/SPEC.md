@@ -233,6 +233,8 @@ Nothing is saved at this step; the existing apply endpoint saves the rows the us
   steps. Pick list totals must equal the plan total plus extra quantities.
 - The workbook keeps live formulas and has three sheets. A returned file is matched to its plan by the document subject and hidden tag
   columns. The preview lists changes and issues, and only selected changes are applied.
+- For double-sided printing, QR pages are always on even pages. A scan opens a confirmation with the drawing and books nothing until it is
+  confirmed. A code books at most once per plan.
 - The seven consistency checks on a returned file: needed minus ready equals short; the total ready agrees with the sheets; a part
   fully ready on the pick list is not shown as missing on a sheet; extras are on the right part; a hand-changed need is at least the
   BOM quantity and the difference can become an extra; status text agrees with the boxes; plan and pick list totals agree.

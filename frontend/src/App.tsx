@@ -71,6 +71,7 @@ export default function App() {
         <Route path="work-orders" element={<M m="workorders"><WorkOrders /></M>} />
         <Route path="stock" element={<M m="stock"><Stock /></M>} />
         <Route path="scan" element={<S><Scan /></S>} />
+        <Route path="q/*" element={<S><Scan /></S>} />
         <Route path="hr" element={<M m="hr"><Hr /></M>} />
         <Route path="hr/me" element={<S><MyCard /></S>} />
         <Route path="attendance" element={<S><Attendance /></S>} />
