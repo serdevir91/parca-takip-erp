@@ -1,6 +1,10 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.9.4
+
+- **QR on real drawings.** The print choice that puts a QR code on the drawing now handles tinted sheets, screenshots, faint watermarks, shaded 3D views and frames with a zone strip. The code gets a white background, so a phone can read it on a beige or grey sheet.
+
 ## What's new in 1.9.3
 
 - **QR on the drawing.** A new print choice puts a small QR code in the empty place right above the title block, on one side of the paper. It never covers numbers or lines. If a page has no room, its code goes on the next page.

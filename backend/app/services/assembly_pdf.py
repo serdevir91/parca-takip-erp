@@ -5,6 +5,7 @@ counts the drawing pages too. DejaVu is embedded so ☐ and ☒ print as plain g
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
@@ -47,9 +48,9 @@ MAX_RASTER_DPI = 200
 LABEL_W, LABEL_H = 70 * mm, 37 * mm
 LABEL_COLS, LABEL_ROWS = 3, 8
 FRONT_QR = 20 * mm
-FRONT_CLEAR = 2                 # empty millimetres kept around a code on a drawing
+FRONT_CLEAR = 1                 # empty millimetres around a code on a drawing, on top of the code's own white border
 FRONT_EDGE_X, FRONT_EDGE_Y = 8, 10   # printers lose the page edge, and the footer takes the bottom
-INK = 245
+INK_GAP = 24                    # how far from the paper's shade a pixel must be to count as ink; a faint watermark does not
 
 
 @lru_cache(maxsize=1)
@@ -362,18 +363,14 @@ def _back_of_drawing(w: float, h: float, url: str, part_no: str, action: str, in
 
 
 def _title_top(cells: bytes, cols: int, rows: int) -> int:
-    """The row of the title block's top line: the first long line in the lower sheet that starts at the right frame.
-    The block's own cells can be empty, so they must not count as free room."""
+    """The row of the title block's top line: the first long line in the lower sheet that reaches the right side. A zone
+    strip can sit outside the frame, so the line may stop short of the edge. A shaded 3D view has wide rows too, but ink
+    above them as well. The block's own cells can be empty, so they must not count as free room."""
     for y in range(int(rows * 0.6), rows):
-        line = cells[y * cols:(y + 1) * cols]
-        x = cols - 1
-        while x > cols - 16 and not line[x]:
-            x -= 1
-        run = 0
-        while x >= 0 and line[x]:
-            run, x = run + 1, x - 1
-        if run >= 40:
-            return y
+        for m in re.finditer(rb"[^\0]{40,}", cells[y * cols:(y + 1) * cols]):
+            above = cells[(y - 4) * cols + m.start():(y - 4) * cols + m.end()]
+            if m.end() > cols * 0.85 and above.count(0) > len(above) * 0.7:
+                return y
     return rows
 
 
@@ -383,8 +380,13 @@ def _free_spot(page: Any) -> tuple[float, float] | None:
     w, h = page.get_size()
     gray = page.render(scale=min(150 / 72, 6000 / max(w, h)), grayscale=True).to_pil().convert("L")
     cols, rows = int(w / mm), int(h / mm)
+    # Scans and screenshots are not white, so ink is measured from the most common shade, which is the paper.
     # One cell per millimetre; averaging keeps a single dark pixel above zero, so a thin line still marks its cell
-    cells = gray.point(lambda v: 255 if v < INK else 0).resize((cols, rows), Image.BOX).tobytes()
+    shades = gray.histogram()
+    paper = shades.index(max(shades))
+    if paper < 128:                 # a dark or fully inked sheet has no paper to print on
+        return None
+    cells = gray.point(lambda v: 255 if abs(v - paper) > INK_GAP else 0).resize((cols, rows), Image.BOX).tobytes()
     side = round(FRONT_QR / mm) + 2 * FRONT_CLEAR
     sums = [[0] * (cols + 1) for _ in range(rows + 1)]
     for y in range(rows):
@@ -409,6 +411,8 @@ def _put_qr(page: Any, url: str, spot: tuple[float, float]) -> None:
     """Stamp a code on an already upright page. The spot counts from the visible box, as the render that found it did."""
     buf = BytesIO()
     c = Canvas(buf, pagesize=(FRONT_QR, FRONT_QR))
+    c.setFillColor(colors.white)    # a phone needs the code's border lighter than a grey or beige sheet
+    c.rect(0, 0, FRONT_QR, FRONT_QR, stroke=0, fill=1)
     renderPDF.draw(_qr(url, FRONT_QR), c, 0, 0)
     c.showPage()
     c.save()

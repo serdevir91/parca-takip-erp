@@ -618,6 +618,47 @@ def test_free_spot_sits_right_above_the_title_block_and_touches_nothing(tmp_path
     assert assembly_pdf._free_spot(pdfium.PdfDocument(str(f))[0]) is None
 
 
+def test_free_spot_finds_the_title_block_on_a_tinted_sheet_with_a_zone_strip_and_a_shaded_view(tmp_path):
+    from reportlab.lib.colors import Color
+    from reportlab.lib.pagesizes import A3, landscape
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen.canvas import Canvas
+    f = tmp_path / "a.pdf"
+    w, h = landscape(A3)
+    c = Canvas(str(f), pagesize=(w, h))
+    c.setFillColor(Color(0.9, 0.9, 0.85))
+    c.rect(0, 0, w, h, stroke=0, fill=1)
+    c.setFillColor(Color(0.3, 0.3, 0.4))
+    c.rect(10 * mm, 10 * mm, w - 20 * mm, h - 20 * mm, fill=0)
+    c.rect(20 * mm, 20 * mm, w - 40 * mm, h - 40 * mm, fill=0)     # the frame stands 20 mm in, zones outside it
+    c.rect(w - 160 * mm, 20 * mm, 140 * mm, 50 * mm, fill=0)
+    c.circle(w - 80 * mm, 130 * mm, 40 * mm, fill=1)               # wide rows in the lower sheet, but not a line
+    c.save()
+    x, y = assembly_pdf._free_spot(pdfium.PdfDocument(str(f))[0])
+    assert 70 * mm <= y < 75 * mm
+    assert x + 20 * mm < w - 20 * mm
+
+
+def test_free_spot_ignores_a_faint_watermark(tmp_path):
+    from reportlab.lib.colors import Color
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen.canvas import Canvas
+    f = tmp_path / "a.pdf"
+    w, h = sheet(f)
+    mark = tmp_path / "mark.pdf"
+    c = Canvas(str(mark), pagesize=(w, h))
+    c.setFillColor(Color(0.96, 0.96, 0.96))
+    c.rect(w / 2, 50 * mm, w / 2, 60 * mm, stroke=0, fill=1)
+    c.setFillColor(Color(1, 1, 1))
+    c.rect(0, 0, w / 2, h, stroke=0, fill=1)
+    c.setStrokeColor(Color(0, 0, 0))
+    c.rect(10 * mm, 10 * mm, w - 20 * mm, h - 20 * mm)
+    c.rect(w - 130 * mm, 10 * mm, 120 * mm, 40 * mm)
+    c.save()
+    x, y = assembly_pdf._free_spot(pdfium.PdfDocument(str(mark))[0])
+    assert 50 * mm < y < 56 * mm and x + 20 * mm < w - 10 * mm
+
+
 @pytest.mark.parametrize("rotate", [0, 90])
 def test_code_on_the_drawing_changes_nothing_but_its_own_empty_square(tmp_path, rotate):
     from PIL import ImageChops
