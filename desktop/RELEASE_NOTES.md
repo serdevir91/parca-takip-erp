@@ -5,7 +5,7 @@ Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 a
 
 - **More ways to use QR codes.** The print menus now offer QR on the back, no QR for single-sided printing, A4 QR labels and a QR list. None of them changes a drawing.
 - **Labels for any drawing.** Labels and lists also cover DWG, picture and missing drawings. Stick a label on the part, its box or a drawing that is already printed.
-- **Confirm without paper.** A Confirm button beside each step and part on an assembly sheet opens the confirmation screen with the drawing.
+- **Confirm without paper.** An Approve button beside each step and part on an assembly sheet opens the confirmation screen with the drawing.
 
 ## What's new in 1.9.1
 

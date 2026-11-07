@@ -505,7 +505,7 @@ PDF asks for long-edge double-sided printing. In the **Drawings** page, **Print 
 - **No QR** prints the plan single-sided, with no back pages or blanks.
 - **QR labels** gives A4 sheets of 24 stickers of 70 x 37 mm, for the part, its box or a drawing that is already printed. Print at 100% scale.
 - **QR list** puts every code on one list to keep at the workplace.
-- **Confirm** beside each step and part on the **Sheets** tab opens the same confirmation screen with no paper at all.
+- **Approve** beside each step and part on the **Sheets** tab opens the same confirmation screen with no paper at all.
 
 Labels and lists also work for DWG, picture and missing drawings, which **QR on the back** on the Drawings page skips.
 
