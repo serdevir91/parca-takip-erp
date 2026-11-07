@@ -6,11 +6,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import (BomVersion, ControlIssue, Drawing, Invoice, Photo, Project, ProjectTemplate, PurchaseOrder,
+from ..models import (AssemblyPlan, BomVersion, ControlIssue, Drawing, Invoice, Photo, Project, ProjectTemplate, PurchaseOrder,
                       SalesOrder, StockMove, TimeEntry, Tracking, User, WorkOrder, utcnow)
 from ..services import audit, conflict, uploads
 from ..services import backup as backup_svc
@@ -189,7 +189,9 @@ def purge_project(pid: int, body: PurgeIn | None = None, db: Session = Depends(g
     audit.record(db, user, "project", p.id, "deleted", p.name, "yedeksiz" if skip else None, action="delete")
     p.current_version_id = None
     db.flush()
-    photos = db.scalars(select(Photo).where(Photo.entity == "project", Photo.entity_key == str(pid))).all()
+    plan_ids = [str(i) for i in db.scalars(select(AssemblyPlan.id).where(AssemblyPlan.project_id == pid))]
+    photos = db.scalars(select(Photo).where(or_(and_(Photo.entity == "project", Photo.entity_key == str(pid)),
+                                                and_(Photo.entity == "assembly", Photo.entity_key.in_(plan_ids))))).all()
     paths = [path for o in photos for path in (o.storage_path, o.thumb_path)]
     for o in photos:
         db.delete(o)

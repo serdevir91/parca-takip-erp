@@ -120,6 +120,11 @@ Read this file first. Do not re-scan the whole project.
   everyone, admin included; `admin` cannot be turned off. `next_no(db, model)` takes document prefixes from settings.
 - The `t35` code names (`t35_note`, `/t35`, setting key `t35`) stay for compatibility; the UI calls them "Durum listesi".
   `DEFAULT_MANUFACTURERS` is empty, and `excel_import` still accepts the old "T-35 Notu" header.
+- Assembly sheets: `app/core/assembly.py` holds the pure rules; `app/services/assembly.py` builds a plan document (reservations
+  are computed live in plan order, extras after BOM needs); `assembly_excel.py` writes the workbook and reads it back through
+  hidden tag columns and the `LABERP-ASSEMBLY:<id>` subject; `assembly_pdf.py` uses reportlab + pypdf with the DejaVu fonts in
+  `app/assets/fonts/`. `app/api/assembly.py` serves `/projects/{id}/assembly/...`. Effective ready quantity is the larger of the
+  stored quantity and the BOM total of a completed part. The desktop spec bundles `app/assets` and the reportlab submodules.
 - `app/cli.py` provides:
   - `seed`: demo data.
   - `backup`: one run, or `--daemon` for the daily run with retention of `ERP_BACKUP_KEEP_DAYS`.
@@ -168,6 +173,8 @@ Read this file first. Do not re-scan the whole project.
   inside the app. `components/Profile.tsx`: own name + password ("Profilim", opened from the user chip).
 - Mobile UI: `styles.css` `/* === Mobil (telefon) === */` block. At <=800px the sidebar is an off-canvas drawer
   (`.nav-open`), modals are bottom sheets, tables scroll; `.mobile-only` / `.desk-only` helpers.
+- `pages/Assembly.tsx`: plan list, part quantities and the plan wizard. `pages/AssemblyPlan.tsx`: plan tabs, field entry and the
+  Excel return dialog. Children of `.asm-page` must not shrink, because `.tabs` has `overflow-x: auto` on phones.
 - `src/theme/`: light, dark and AMOLED themes. The theme is set with the `data-theme` attribute and saved in localStorage under `erp_theme`.
 - `src/styles.css`: one block per screen, marked with `/* === Screen === */` comments.
 

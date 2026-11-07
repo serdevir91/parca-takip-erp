@@ -13,6 +13,8 @@ const BomVersions = lazy(() => import("./pages/BomVersions"));
 const BomTree = lazy(() => import("./pages/BomTree"));
 const Drawings = lazy(() => import("./pages/Drawings"));
 const Control = lazy(() => import("./pages/Control"));
+const Assembly = lazy(() => import("./pages/Assembly"));
+const AssemblyPlan = lazy(() => import("./pages/AssemblyPlan"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Planning = lazy(() => import("./pages/Planning"));
 const Purchasing = lazy(() => import("./pages/Purchasing"));
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="bom" element={<M m="projects"><BomVersions /></M>} />
           <Route path="drawings" element={<M m="drawings"><Drawings /></M>} />
           <Route path="control" element={<M m="control"><Control /></M>} />
+          <Route path="assembly" element={<M m="assembly"><Assembly /></M>} />
+          <Route path="assembly/:id" element={<M m="assembly"><AssemblyPlan /></M>} />
           <Route path="planning" element={<M m="planning"><Planning /></M>} />
           <Route path="purchasing" element={<M m="purchasing"><Purchasing /></M>} />
           <Route path="work-orders" element={<M m="workorders"><WorkOrders /></M>} />

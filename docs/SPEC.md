@@ -224,6 +224,21 @@ Nothing is saved at this step; the existing apply endpoint saves the rows the us
 - The client can send back a `config` with corrected columns and value meanings. The file is then read again.
 - Only an administrator can add a new temin type, and this happens at apply time.
 
+### Assembly sheets
+
+- A plan belongs to a project and an approved BOM. Its items are assemblies or single parts with a quantity, in reservation order.
+  Statuses are Draft, Published and Completed. A published plan can change only its reservation order; a plan with field
+  marks cannot return to draft; only a draft can be deleted.
+- The PDF holds the daily plan, the pick list and one sheet per assembly, in black and white. Sub-assemblies come first as numbered
+  steps. Pick list totals must equal the plan total plus extra quantities.
+- The workbook keeps live formulas and has three sheets. A returned file is matched to its plan by the document subject and hidden tag
+  columns. The preview lists changes and issues, and only selected changes are applied.
+- The seven consistency checks on a returned file: needed minus ready equals short; the total ready agrees with the sheets; a part
+  fully ready on the pick list is not shown as missing on a sheet; extras are on the right part; a hand-changed need is at least the
+  BOM quantity and the difference can become an extra; status text agrees with the boxes; plan and pick list totals agree.
+- Acceptance data: the full T01 plan has a plan total of 163 parts. The reference status gives 169 picked and 61 ready, as in
+  `backend/tests/test_assembly.py`.
+
 ## 10. Quality and acceptance criteria
 
 - Write unit tests for the backend with pytest: CSV parsing, quantity multiplication, fastener patterns, BOM comparison, status derivation, T-35 mapping, drawing file name matching.

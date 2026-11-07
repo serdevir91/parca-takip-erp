@@ -1,6 +1,15 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.9.0
+
+- **Assembly sheets.** A new project page plans the day's assembly work from the approved BOM. Pick assemblies, set the quantities and drag them into the reservation order, then publish the plan.
+- **Printable documents.** One black-and-white PDF holds the daily plan, the pick list and a sheet per assembly, with drawing pages or a QR drawing list. The same plan exports to an Excel workbook with live formulas.
+- **Field entry.** Mark parts on screen with the keyboard, or upload the filled Excel back. You see every change and error first, and apply only what you select. Sheet photos can be stored beside the field screen, but they are not read automatically.
+- **Part quantities.** Parts now have ready quantities, and scarce parts are reserved in plan order. Extra quantities stay separate and never hold up an assembly.
+- **Readiness.** The dashboard shows the assemblies that are ready and the parts holding up the most assemblies. A notification is sent when an assembly becomes ready.
+- **Consistency warnings.** Seven checks compare the plan, the pick list, the sheets and the extra quantities. Every change is kept in the plan's history.
+
 ## What's new in 1.8.0
 
 - **Project pictures.** A project can have a picture. Add it in the project form; it appears on the project card in the Projects screen.

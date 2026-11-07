@@ -1,0 +1,12 @@
+﻿Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+1;T01_0040_0000.SLDASM;1;;;;;
+1.1;  T01_0040_0001.SLDPRT;1;5083-111;7722.84;B;İmalat;
+1.2;  T01_0020_0010.SLDPRT;3;5083-111;29.15;A;İmalat;
+1.3;  T01_0020_0009.SLDPRT;1;;;;Hazır Alım;
+1.4;  T01_0020_0008.SLDPRT;1;;;;Hazır Alım;
+1.5;  T01_0020_0007.SLDPRT;1;;;;Hazır Alım;
+1.6;  T01_0020_0006.SLDPRT;1;1.0037 (S235JR);1272.30;A;İmalat;
+1.7;  T01_0020_0005.SLDPRT;1;AISI 1045 Steel, cold drawn;33.92;A;İmalat;
+1.8;  T01_0020_0004.SLDPRT;1;1.0037 (S235JR);1157.55;A;İmalat;
+1.9;  T01_0020_0003.SLDPRT;1;AISI 4130 Steel, annealed at 865C;975.34;B;İmalat;
+1.10;  T01_0020_0002.SLDPRT;1;;;;Hazır Alım;

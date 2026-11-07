@@ -79,7 +79,7 @@ shows step by step what to do on the server and on the computer. The **Test conn
 | Area | Features |
 |---|---|
 | **Engineering** | Project and BOM versions, product tree building, Excel-like table, advanced filters, bulk status changes, version comparison, part and fastener tracking, technical drawings, control list |
-| **Production** | Requirements analysis, work orders, operations and material consumption, stock cards and movements, barcodes and QR codes, automatic order suggestions, project costs |
+| **Production** | Assembly sheets and readiness, requirements analysis, work orders, operations and material consumption, stock cards and movements, barcodes and QR codes, automatic order suggestions, project costs |
 | **Commercial** | Purchasing, supplier performance, contacts, quotes, sales orders, partial shipments and returns, invoices, collections and payments, TCMB exchange rates |
 | **Team** | Staff cards, time entries, attendance tracking and correction requests, leave and sick notes, splitting attendance hours across jobs, chat, sharing by email |
 | **Administration** | Per-module permissions, sign-up approval, audit log, notification center, automatic backups, restore from the screen, one-click HTTPS, project templates, system settings |
@@ -478,6 +478,32 @@ are covered from stock, by a purchase order or by a work order, and the cost is 
 - **Staff and time:** Staff cards (hourly cost) and working hours posted to a project or work order.
   Labour cost is added to the project's Costs tab with the source "Labour".
 - **Attendance:** Employees clock in and out with a button, and the server records the time. Everyone sees only their own attendance. A manager with the `Attendance (all staff)` permission sees everyone, corrects records and exports them to Excel. Overtime is weekly; weekly hours and breaks come from System Settings. The employee's staff card must be linked to their account.
+
+### Assembly sheets
+
+The **Assembly sheets** page of a project prepares the day's assembly work on paper and on screen. It is built from the
+approved BOM and the part list, so nothing is typed twice.
+
+1. **Plan.** Choose **New plan**, pick the assemblies and single parts of the day, enter how many of each, and drag them
+   into order. The order is the reservation order: scarce parts go to the upper row first. Save it as a draft, check the
+   preview and publish it.
+2. **Print.** **Print (PDF)** gives the daily plan, the pick list and one sheet per assembly in black and white. Each sheet
+   can be followed by its drawings, or by a drawing list with QR codes. **Export to Excel** gives the same plan as a
+   workbook with live formulas.
+3. **Work in the workshop.** Sheets are marked by hand, or on the **Field entry** tab with the keyboard: arrows move
+   between rows, keys 1, 2 and 3 set the status, and 4 marks a part as fitted.
+4. **Bring it back.** **Upload Excel back** reads a filled workbook, shows every change and every error, and applies only
+   what you select. **Upload photo** stores a photo of a marked sheet next to the field screen. The photo is not read
+   automatically; enter its marks on the field screen.
+
+Part quantities replace plain statuses here: each part has a ready quantity, and a plan counts how many are left for each
+assembly. An assembly with no shortage is reported as **ready to assemble** on the dashboard and in the notifications.
+When you start using quantities, **Move from status to quantity** on the **Part quantities** tab counts parts shown as
+completed as ready up to their BOM quantity and leaves other parts alone. **Mark completed** closes a published plan.
+
+Extra quantities (a spare for the workshop, for example) are stored separately. They are reserved after the plan's needs, so
+they never hold up an assembly. The **Consistency warnings** tab compares the plan, the pick list and the sheets, and the
+**History** tab lists every change with who made it. Plans use the `assembly` permission module.
 
 ### Photos and image viewer
 

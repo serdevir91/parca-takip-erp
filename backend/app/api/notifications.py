@@ -14,11 +14,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..core import numbers as num
+from ..core.status import KIND_HAZIR
 from ..models import (ROLE_ADMIN, AttendanceRequest, BomVersion, Employee, Invoice, LeaveRequest, NotificationRead, Project,
                       PurchaseOrder, SalesOrder, StockItem, User, WorkOrder)
 from ..auth import is_https
 from ..permissions import can
 from ..services import commerce, erp
+from ..services.assembly import ready_alerts
 from ..services.settings import signup_enabled
 from . import chat
 from .deps import any_user, get_db
@@ -105,6 +107,17 @@ def _boms(db: Session) -> list[dict[str, Any]]:
             for vid, pid, name in rows]
 
 
+def _assembly(db: Session) -> list[dict[str, Any]]:
+    out = []
+    for a in ready_alerts(db):
+        names = [x.removesuffix("_0000") for x in a["assemblies"]]
+        title = tx("{0} geldi", a["part_no"]) if a["kind"] == KIND_HAZIR else tx("{0} üretildi", a["part_no"])
+        out.append(_item(f"assembly:{a['project_id']}:{a['part_no']}:{','.join(a['assemblies'])}", "Montaj", title,
+                         tx("{0} montaja hazır", tx(" ve ").join(names) if len(names) < 3 else ", ".join(names)),
+                         f"/p/{a['project_id']}/assembly/{a['plan_id']}", a["when"]))
+    return out
+
+
 def _mine(db: Session, me: User, today: date) -> list[dict[str, Any]]:
     """Answers to this user's own requests."""
     ids = list(db.scalars(select(Employee.id).where(Employee.user_id == me.id)))
@@ -152,6 +165,8 @@ def collect(db: Session, me: User, secure: bool = True) -> list[dict[str, Any]]:
         out += _approvals(db)
     if can(me, "projects", "edit"):
         out += _boms(db)
+    if can(me, "assembly"):
+        out += _assembly(db)
     return out
 
 

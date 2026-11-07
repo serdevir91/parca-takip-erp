@@ -1,0 +1,5 @@
+﻿Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+1;T01_0010_0000.SLDASM;1;;;;;
+1.1;  T01_0010_0003.SLDPRT;1;;;;İmalat;
+1.2;  T01_0010_0002.SLDPRT;2;;;;;
+1.3;  T01_0010_0001.SLDPRT;1;AISI 4130 Steel, normalized at 870C;2249.61;B;İmalat;

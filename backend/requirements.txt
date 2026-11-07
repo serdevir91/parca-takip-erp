@@ -13,4 +13,6 @@ PyJWT==2.15.1
 bcrypt==4.2.1
 python-multipart==0.0.33
 pypdfium2==4.30.0
+reportlab==5.1.0
+pypdf==7.0.0
 cryptography==46.0.7

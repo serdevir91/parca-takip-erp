@@ -1,0 +1,22 @@
+﻿Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+1;T01_0050_0000.SLDASM;1;;;;;
+1.1;  T01_0051_0000.SLDASM;2;;;;;
+1.1.1;    T01_0051_0013.SLDPRT;1;AISI 4130 Steel, normalized at 870C;409.03;A;İmalat;
+1.1.2;    T01_0051_0012.SLDPRT;1;AISI 4130 Steel, normalized at 870C;467.77;A;İmalat;
+1.1.3;    T01_0051_0010.SLDPRT;1;Aluminum Bronze;383.75;B;İmalat;
+1.1.4;    T01_0051_0009.SLDPRT;1;1.0114 (S235J0);3411.02;A;İmalat;
+1.1.5;    T01_0051_0008.SLDPRT;1;AISI 4130 Steel, annealed at 865C;2948.16;B;İmalat;
+1.1.6;    T01_0051_0007.SLDPRT;1;;;;Hazır Alım;
+1.1.7;    T01_0051_0006.SLDPRT;1;AISI 4130 Steel, normalized at 870C;2182.16;C;İmalat;
+1.1.8;    T01_0051_0005.SLDPRT;1;;;;Hazır Alım;
+1.1.9;    T01_0051_0004.SLDPRT;1;5083-111;2713.27;A;İmalat;
+1.1.10;    T01_0051_0003.SLDPRT;1;5083-111;2727.27;C;İmalat;
+1.1.11;    T01_0051_0002.SLDPRT;2;5083-111;313.03;A;İmalat;
+1.1.12;    T01_0051_0001.SLDPRT;1;5083-111;7832.12;C;İmalat;
+1.1.13;    T01_0051_0011.SLDASM;1;;;;;
+1.1.13.1;      T01_0051_0012.SLDPRT;1;AISI 4130 Steel, normalized at 870C;467.77;A;İmalat;
+1.1.13.2;      T01_0051_0013.SLDPRT;1;AISI 4130 Steel, normalized at 870C;409.03;A;İmalat;
+1.2;  T01_0050_0005.SLDPRT;3;;;;Hazır Alım;
+1.3;  T01_0050_0004.SLDPRT;2;5083-111;1863.41;B;İmalat;
+1.4;  T01_0050_0003.SLDPRT;1;5083-111;1426.24;A;İmalat;
+1.5;  T01_0050_0002.SLDPRT;2;5083-111;3875.66;B;İmalat;

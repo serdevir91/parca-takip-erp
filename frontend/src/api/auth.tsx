@@ -8,7 +8,7 @@ export type Role = "admin" | "designer" | "planner" | "viewer" | string;
 export type Level = "none" | "view" | "edit";
 /** Permission modules (backend/app/permissions.py MODULES). */
 export type Module =
-  | "projects" | "parts" | "fasteners" | "drawings" | "control" | "planning" | "purchasing"
+  | "projects" | "parts" | "fasteners" | "drawings" | "control" | "assembly" | "planning" | "purchasing"
   | "workorders" | "stock" | "hr" | "attendance" | "contacts" | "sales" | "finance" | "chat" | "mail" | "admin";
 const RANK: Record<Level, number> = { none: 0, view: 1, edit: 2 };
 

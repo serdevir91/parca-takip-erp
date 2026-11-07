@@ -845,3 +845,83 @@ class ChatReaction(Base):
     message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     emoji: Mapped[str] = mapped_column(String(16))
+
+
+class AssemblyPlan(Revisioned, Base):
+    """Montaj planı: a dated list of assemblies to build. Reservations are worked out from it, see core/assembly.py."""
+    __tablename__ = "assembly_plans"
+    __table_args__ = (UniqueConstraint("project_id", "no", name="uq_assembly_plan_no"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    no: Mapped[int] = mapped_column(Integer)
+    plan_date: Mapped[date] = mapped_column(Date)
+    responsible: Mapped[str] = mapped_column(String(120), default="")
+    checker: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(20), default="Taslak")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    drawing_mode: Mapped[str] = mapped_column(String(10), default="none")    # none | pages | list | both
+    published_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+
+    items: Mapped[list["AssemblyItem"]] = relationship(back_populates="plan", cascade="all, delete-orphan",
+                                                       order_by="AssemblyItem.seq")
+    extras: Mapped[list["AssemblyExtra"]] = relationship(cascade="all, delete-orphan", order_by="AssemblyExtra.id")
+    marks: Mapped[list["AssemblyMark"]] = relationship(cascade="all, delete-orphan")
+
+
+class AssemblyItem(Base):
+    """One line of a plan: an assembly, or a lone part that goes straight on the main assembly. `seq` is the order
+    in which parts on hand are reserved."""
+    __tablename__ = "assembly_items"
+    __table_args__ = (UniqueConstraint("plan_id", "part_no", name="uq_assembly_item_part"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("assembly_plans.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    part_no: Mapped[str] = mapped_column(String(200))
+    qty: Mapped[float] = mapped_column(Float, default=1)
+
+    plan: Mapped[AssemblyPlan] = relationship(back_populates="items")
+
+
+class AssemblyExtra(Base):
+    """A need outside the BOM ("+2 ek"). It is kept apart so the BOM need stays visible next to it."""
+    __tablename__ = "assembly_extras"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("assembly_plans.id", ondelete="CASCADE"), index=True)
+    part_no: Mapped[str] = mapped_column(String(200))
+    qty: Mapped[float] = mapped_column(Float)
+    assembly_no: Mapped[str] = mapped_column(String(200), default="")
+    note: Mapped[str] = mapped_column(String(300), default="")
+
+
+class AssemblyMark(Base):
+    """A box ticked from the field. With a part number: that use is mounted. With an empty part number: the step
+    at `path` is built. `qty` and `stock_qty` keep what was booked, so unticking gives back exactly that."""
+    __tablename__ = "assembly_marks"
+    __table_args__ = (UniqueConstraint("plan_id", "item_id", "path", "part_no", name="uq_assembly_mark"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("assembly_plans.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("assembly_items.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(String(1000), default="")
+    part_no: Mapped[str] = mapped_column(String(200), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0)
+    stock_qty: Mapped[float] = mapped_column(Float, default=0)
+    username: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+
+
+class PartQuantity(Base):
+    """Counted quantities of a part in a project. ready_qty only grows with production and deliveries, used_qty with
+    mounting, so what can still be reserved is ready_qty - used_qty. A part without a row falls back to its progress:
+    Tamamlandı counts as the whole BOM need."""
+    __tablename__ = "part_quantities"
+    __table_args__ = (UniqueConstraint("project_id", "part_no", name="uq_part_quantity"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    part_no: Mapped[str] = mapped_column(String(200))
+    ready_qty: Mapped[float] = mapped_column(Float, default=0)
+    used_qty: Mapped[float] = mapped_column(Float, default=0)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+    updated_by: Mapped[str] = mapped_column(String(64), default="")

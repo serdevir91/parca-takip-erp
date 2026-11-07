@@ -1,0 +1,4 @@
+﻿Level;Dosya Adı;Reference Count;Malzeme;Ağırlık;Revizyon;TeminSekli;Kaplama Bilgisi
+1;T01_0060_0000.SLDASM;1;;;;;
+1.1;  T01_0031_0000.SLDPRT;2;Material <not specified>;33.29;;Hazır Alım;
+1.2;  T01_0060_0001.SLDPRT;1;5083-111;1146.14;A;İmalat;

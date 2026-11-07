@@ -37,10 +37,10 @@ WO_STATUS = {"planned": "Planlandı", "in_progress": "Üretimde", "done": "Tamam
              "cancelled": "İptal"}
 WO_OPEN = ("planned", "in_progress")
 WO_FINAL = ("done", "closed", "cancelled")
-MOVE_KINDS = {"in": "Giriş", "out": "Çıkış", "count": "Sayım", "receipt": "Satın alma girişi",
+MOVE_KINDS = {"assembly": "Montajda kullanıldı", "assembly_return": "Montajdan dönüş", "in": "Giriş", "out": "Çıkış", "count": "Sayım", "receipt": "Satın alma girişi",
               "production": "Üretim girişi", "issue": "Projeye çıkış", "issue_return": "Projeden dönüş",
               "supplier_return": "Tedarikçiye iade", "sale": "Satış sevki", "sale_return": "Satış iadesi"}
-OUT_KINDS = ("out", "issue", "supplier_return", "sale")
+OUT_KINDS = ("out", "issue", "supplier_return", "sale", "assembly")
 ISSUE_KINDS = ("issue", "issue_return")     # their signed sum is what a project holds
 ITEM_KINDS = {"part": "Parça", "fastener": "Bağlantı elemanı", "other": "Diğer"}
 STOCK_REF = "STOK"      # ref of issues taken from free stock (costed at the stock's average cost)

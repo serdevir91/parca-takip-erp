@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RowSelectionState } from "@tanstack/react-table";
@@ -545,7 +546,8 @@ export default function Drawings() {
   const toast = useToast();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>("all");
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") ?? "");
   const [selected, setSelected] = useState<DrawingOut | null>(null);
   const [viewer, setViewer] = useState<Opened | null>(null);
   const [mode, setMode] = useState<"list" | "gallery">(() => {

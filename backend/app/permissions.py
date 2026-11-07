@@ -21,6 +21,7 @@ MODULES: list[tuple[str, str, str]] = [
     ("fasteners", "Bağlantı elemanları", "Mühendislik"),
     ("drawings", "Teknik resimler", "Mühendislik"),
     ("control", "Kontrol listesi ve durum listesi", "Mühendislik"),
+    ("assembly", "Montaj föyü ve hazırlık", "Üretim"),
     ("planning", "İhtiyaç ve maliyet", "Planlama"),
     ("purchasing", "Satın alma", "Planlama"),
     ("workorders", "İş emirleri", "Üretim"),
@@ -36,7 +37,7 @@ MODULES: list[tuple[str, str, str]] = [
 ]
 MODULE_KEYS = [m[0] for m in MODULES]
 
-_ENG = ("projects", "parts", "fasteners", "drawings", "control")
+_ENG = ("projects", "parts", "fasteners", "drawings", "control", "assembly")
 _OPS = ("planning", "purchasing", "workorders", "stock", "hr", "attendance", "contacts", "sales", "finance")
 # Defaults follow the job: wages (hr), money (finance) and customer deals (sales) stay with the roles that
 # work on them. Every employee still sees their own personnel card (GET /hr/me) and their own shifts
@@ -47,7 +48,7 @@ ROLE_DEFAULTS: dict[str, dict[str, str]] = {
                     "planning": VIEW, "purchasing": VIEW, "workorders": VIEW, "stock": VIEW,
                     "chat": EDIT, "mail": EDIT, "admin": NONE},
     # Planning/purchasing edits part tracking (progress, procurement) but does not upload BOMs or drawings
-    ROLE_PLANNER: {**{k: VIEW for k in _ENG}, "parts": EDIT, "fasteners": EDIT, "control": EDIT,
+    ROLE_PLANNER: {**{k: VIEW for k in _ENG}, "parts": EDIT, "fasteners": EDIT, "control": EDIT, "assembly": EDIT,
                    **{k: EDIT for k in ("planning", "purchasing", "workorders", "stock", "contacts")},
                    "sales": VIEW, "finance": NONE, "hr": NONE, "attendance": NONE, "chat": EDIT, "mail": EDIT,
                    "admin": NONE},

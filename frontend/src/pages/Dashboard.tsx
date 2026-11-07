@@ -5,6 +5,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../api/client";
+import { useAuth } from "../api/auth";
 import { Page, useProject } from "../components/Layout";
 import { errText } from "../components/Toast";
 import { statusStyle } from "../theme/theme";
@@ -166,6 +167,8 @@ function Body({ pid, d, fast, fastErr }: { pid: number; d: DashboardData; fast?:
         <KpiCard label={tx("Yeni parça")} value={fmt(k.new_parts)} sub={tx("Son sürümle gelen")} />
       </div>
 
+      <AssemblyCard pid={pid} />
+
       <div className="dash-pies">
         <PieCard title={tx("İmalat durumu")} data={slices.imalat} unit={tx("parça")} />
         <PieCard title={tx("Hazır alım sipariş durumu")} data={slices.hazir} unit={tx("parça")} />
@@ -177,6 +180,47 @@ function Body({ pid, d, fast, fastErr }: { pid: number; d: DashboardData; fast?:
 
       <GroupSection d={d} />
     </>
+  );
+}
+
+type AssemblySummary = {
+  ready: { plan_id: number; plan_no: number; part_no: string; qty: number; name: string }[];
+  blocking: { part_no: string; short: number; assemblies: string[]; plan_id: number }[];
+  planned: number; completed: number;
+};
+
+function AssemblyCard({ pid }: { pid: number }) {
+  const { can } = useAuth();
+  const allowed = can("assembly", "view");
+  const q = useQuery({
+    queryKey: ["assembly", pid, "summary"],
+    queryFn: () => api.get<AssemblySummary>(`/projects/${pid}/assembly/summary`),
+    enabled: allowed,
+    refetchInterval: 60_000,
+  });
+  const s = q.data;
+  if (!allowed || !s || (!s.planned && !s.ready.length)) return null;
+  return (
+    <div className="card asm-dash">
+      <div className="row">
+        <h3 style={{ margin: 0 }}>{tx("Montaj hazırlık")}</h3>
+        <span className="muted">{tx("Planlanan {0} · tamamlanan {1}", fmt(s.planned), fmt(s.completed))}</span>
+        <span style={{ flex: 1 }} />
+        <Link className="btn small" to={`/p/${pid}/assembly`}>{tx("Montaj föyleri")}</Link>
+      </div>
+      <div className="asm-dash-cols">
+        <div>
+          <b>{tx("Montaja hazır")}</b>
+          {s.ready.length === 0 && <div className="muted">{tx("Şu an hazır montaj yok.")}</div>}
+          {s.ready.map((r) => <div key={`${r.plan_id}-${r.part_no}`}><Link to={`/p/${pid}/assembly/${r.plan_id}`}>{r.part_no}</Link> <span className="muted">× {fmt(r.qty)} · {tx("Plan {0}", r.plan_no)}</span></div>)}
+        </div>
+        <div>
+          <b>{tx("En çok montajı bekleten parçalar")}</b>
+          {s.blocking.length === 0 && <div className="muted">{tx("Bekleten parça yok.")}</div>}
+          {s.blocking.slice(0, 8).map((b) => <div key={b.part_no}><Link to={`/p/${pid}/assembly/${b.plan_id}`}>{b.part_no}</Link> <span className="muted">{tx("{0} eksik · {1} montaj", fmt(b.short), fmt(b.assemblies.length))}</span></div>)}
+        </div>
+      </div>
+    </div>
   );
 }
 

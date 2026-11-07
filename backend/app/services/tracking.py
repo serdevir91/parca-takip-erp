@@ -13,8 +13,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..core.status import MATERIAL_STATUS_CHOICES, PROGRESS_CHOICES
-from ..models import AuditLog, MissingRow, PartAlias, PartName, SyncState, Tracking, User
+from ..core.status import MATERIAL_STATUS_CHOICES, PROG_DONE, PROG_WAIT, PROGRESS_CHOICES
+from ..models import (AuditLog, BomRow, MissingRow, PartAlias, PartName, PartQuantity, Project, SyncState, Tracking,
+                     User)
 from . import audit
 from .settings import get_setting, manufacturers, temin_choices
 from app.core.i18n import tx
@@ -73,10 +74,29 @@ def clean_changes(db: Session, changes: dict[str, Any]) -> dict[str, Any]:
 
 def apply_changes(db: Session, user: User, t: Tracking, changes: dict[str, Any]) -> int:
     """Apply already cleaned changes with audit entries. Returns changed field count."""
+    before = t.progress
     n = audit.record_changes(db, user, t, changes, "tracking", t.part_no, t.project_id)
     if n:
         t.updated_by = user.username
+    if t.progress != before:
+        _follow_progress(db, t)
     return n
+
+
+def _follow_progress(db: Session, t: Tracking) -> None:
+    """Keep counted quantities true when someone takes a part back in the part list. Tamamlandı needs nothing here:
+    it already counts as the whole need."""
+    q = db.scalar(select(PartQuantity).where(PartQuantity.project_id == t.project_id, PartQuantity.part_no == t.part_no))
+    if q is None or t.progress == PROG_DONE:
+        return
+    if t.progress == PROG_WAIT:
+        q.ready_qty = q.used_qty
+        return
+    version = db.get(Project, t.project_id).current_version_id
+    need = db.scalar(select(func.sum(BomRow.total_qty)).where(BomRow.version_id == version, BomRow.part_no == t.part_no,
+                                                              BomRow.in_purchased.is_(False))) or 0
+    if need and q.ready_qty >= need:
+        q.ready_qty = max(need - 1, q.used_qty)
 
 
 def current_rev(db: Session) -> int:
