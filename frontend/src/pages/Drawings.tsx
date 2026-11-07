@@ -784,6 +784,7 @@ export default function Drawings() {
             {zipBusy ? tx("Hazırlanıyor…") : tx("ZIP indir ({0} {1} parça)", selCount ? tx("seçili") : tx("filtrelenen"), zipParts.length.toLocaleString(LOCALE))}
           </button>
           <PrintMenu label={tx("QR'lı yazdır")} disabled={zipBusy || !zipParts.length} choices={[
+            { label: tx("QR resimde"), hint: tx("Antetin üstündeki boş yere küçük QR basar, sayı ve çizgilerin üstüne binmez. Yer yoksa QR sonraki sayfaya gelir."), run: () => void printQr("print", { place: "front" }, "resimler_qr.pdf") },
             { label: tx("QR arkada"), hint: tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."), run: () => void printQr("print", {}, "resimler_qr.pdf") },
             { label: tx("QR etiketleri"), hint: tx("70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın."), run: () => void printQr("codes", { layout: "labels" }, "qr_etiket.pdf") },
             { label: tx("QR listesi"), hint: tx("Tüm kodlar tek listede. İş başında panoda durur."), run: () => void printQr("codes", { layout: "list" }, "qr_liste.pdf") },

@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 import pypdfium2 as pdfium
 from PIL import Image
-from pypdf import PageObject, PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 from reportlab.graphics import renderPDF
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing as Shape
@@ -46,6 +46,10 @@ PAGE_W = A4[0] - 2 * MARGIN
 MAX_RASTER_DPI = 200
 LABEL_W, LABEL_H = 70 * mm, 37 * mm
 LABEL_COLS, LABEL_ROWS = 3, 8
+FRONT_QR = 20 * mm
+FRONT_CLEAR = 2                 # empty millimetres kept around a code on a drawing
+FRONT_EDGE_X, FRONT_EDGE_Y = 8, 10   # printers lose the page edge, and the footer takes the bottom
+INK = 245
 
 
 @lru_cache(maxsize=1)
@@ -357,6 +361,62 @@ def _back_of_drawing(w: float, h: float, url: str, part_no: str, action: str, in
     return PdfReader(BytesIO(buf.getvalue())).pages[0]
 
 
+def _title_top(cells: bytes, cols: int, rows: int) -> int:
+    """The row of the title block's top line: the first long line in the lower sheet that starts at the right frame.
+    The block's own cells can be empty, so they must not count as free room."""
+    for y in range(int(rows * 0.6), rows):
+        line = cells[y * cols:(y + 1) * cols]
+        x = cols - 1
+        while x > cols - 16 and not line[x]:
+            x -= 1
+        run = 0
+        while x >= 0 and line[x]:
+            run, x = run + 1, x - 1
+        if run >= 40:
+            return y
+    return rows
+
+
+def _free_spot(page: Any) -> tuple[float, float] | None:
+    """Where a code fits on a drawing with nothing under it: the empty place nearest the bottom right corner, which is
+    right above the title block. Only the lower right of the sheet counts, so a code never sits among the views."""
+    w, h = page.get_size()
+    gray = page.render(scale=min(150 / 72, 6000 / max(w, h)), grayscale=True).to_pil().convert("L")
+    cols, rows = int(w / mm), int(h / mm)
+    # One cell per millimetre; averaging keeps a single dark pixel above zero, so a thin line still marks its cell
+    cells = gray.point(lambda v: 255 if v < INK else 0).resize((cols, rows), Image.BOX).tobytes()
+    side = round(FRONT_QR / mm) + 2 * FRONT_CLEAR
+    sums = [[0] * (cols + 1) for _ in range(rows + 1)]
+    for y in range(rows):
+        line, above, here = cells[y * cols:(y + 1) * cols], sums[y], sums[y + 1]
+        for x in range(cols):
+            here[x + 1] = here[x] + above[x + 1] - above[x] + (1 if line[x] else 0)
+    right, bottom = cols - FRONT_EDGE_X - side, min(rows - FRONT_EDGE_Y, _title_top(cells, cols, rows)) - side
+    spots = [(x, y) for y in range(int(rows * 0.4), bottom + 1) for x in range(cols // 2, right + 1)
+             if sums[y + side][x + side] - sums[y][x + side] - sums[y + side][x] + sums[y][x] == 0]
+    if not spots:
+        return None
+    x, y = min(spots, key=lambda s: (right - s[0]) ** 2 + (bottom - s[1]) ** 2)
+    return (x + FRONT_CLEAR) * w / cols, h - (y + side - FRONT_CLEAR) * h / rows
+
+
+def _free_spots(data: bytes) -> list[tuple[float, float] | None]:
+    doc = pdfium.PdfDocument(data)
+    return [_free_spot(doc[i]) for i in range(len(doc))]
+
+
+def _put_qr(page: Any, url: str, spot: tuple[float, float]) -> None:
+    """Stamp a code on an already upright page. The spot counts from the visible box, as the render that found it did."""
+    buf = BytesIO()
+    c = Canvas(buf, pagesize=(FRONT_QR, FRONT_QR))
+    renderPDF.draw(_qr(url, FRONT_QR), c, 0, 0)
+    c.showPage()
+    c.save()
+    box = page.cropbox
+    page.merge_transformed_page(PdfReader(BytesIO(buf.getvalue())).pages[0],
+                                Transformation().translate(float(box.left) + spot[0], float(box.bottom) + spot[1]))
+
+
 def _cell(url: str, title: str, action: str, info: str = "") -> list[Any]:
     return [_qr(url, 32 * mm), Spacer(1, 1), _p(title, 8, "Dj-B", alignment=TA_CENTER), _p(action, 8, alignment=TA_CENTER),
             _p(info, 6.5, "Dj-I", alignment=TA_CENTER)]
@@ -387,46 +447,59 @@ def _foy_back(ctx: Context, plan: AssemblyPlan, f: Foy, base_url: str, drawn: se
     return _code_pages(f"{tx('MONTAJ FÖYÜ')}: {f.part_no}", cells)
 
 
-def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None, backs: bool = True) -> bytes:
-    """The whole plan, or with `only` one föy with its drawings. Without `backs` it prints single-sided: no QR pages, no blanks."""
+def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str | None = None, qr: str = "back") -> bytes:
+    """The whole plan, or with `only` one föy with its drawings. `qr` is "back" for double-sided printing; "front" prints
+    single-sided with the code on the drawing, or on the next page when the drawing has no empty place; "none" has no codes."""
     _fonts()
+    backs, codes = qr == "back", qr != "none"
     pages: list[tuple[Any, str]] = []
+    stamps: dict[int, tuple[str, tuple[float, float]]] = {}
+
+    def place(page: Any) -> None:
+        if backs:
+            _on_back(pages, page)
+        else:
+            pages.append((page, ""))
+
     if only is None:
         front = BytesIO()
         d = _doc(front)
         d.build([*_plan_story(ctx, plan, doc), PageBreak(), *_pick_story(plan, doc)])
         pages += [(p, "") for p in PdfReader(BytesIO(front.getvalue())).pages]
         singles = dict.fromkeys(r.part_no for f in doc.foys if f.single for r in f.part_rows)
-        for back in _code_pages(tx("Tekil parçalar"), [_part_cell(ctx, plan, p, base_url) for p in singles]) if backs else []:
-            _on_back(pages, back)
+        for back in _code_pages(tx("Tekil parçalar"), [_part_cell(ctx, plan, p, base_url) for p in singles]) if codes else []:
+            place(back)
     for f in doc.foys:
         if f.single or (only is not None and f.part_no != only):
             continue
         atts = _attachments(ctx, f) if plan.drawing_mode != core.DRAWING_NONE else []
-        sheets: list[tuple[Attached, Any]] = []
+        sheets: list[tuple[Attached, Any, list[tuple[float, float] | None]]] = []
         if plan.drawing_mode in (core.DRAWING_PAGES, core.DRAWING_BOTH):
             for a in atts:
                 if a.path is None:
                     continue
                 try:
-                    sheets.append((a, PdfReader(BytesIO(_black_and_white(a.path.read_bytes())))))
+                    data = _black_and_white(a.path.read_bytes())
+                    reader = PdfReader(BytesIO(data))
+                    sheets.append((a, reader, _free_spots(data) if qr == "front" else [None] * len(reader.pages)))
                 except Exception:  # a damaged drawing must not cost the whole document; the sheet still lists it
                     continue
         if backs:
             _on_front(pages)
         pages += [(p, "") for p in PdfReader(BytesIO(_foy_pdf(ctx, plan, f, atts, base_url))).pages]
-        for back in _foy_back(ctx, plan, f, base_url, {a.part_no for a, _ in sheets}) if backs else []:
-            _on_back(pages, back)
-        for a, reader in sheets:
+        for back in _foy_back(ctx, plan, f, base_url, {s[0].part_no for s in sheets}) if codes else []:
+            place(back)
+        for a, reader, spots in sheets:
             stamp = f"{f.part_no} · {tx('ADIM {0}/{1}', a.step_no, a.step_total)} · {a.part_no}"
             url = marks.plan_part_url(base_url, plan.id, a.part_no)
-            for p in reader.pages:
-                if not backs:
-                    pages.append((p, stamp))
-                    continue
-                _on_front(pages)
+            for p, spot in zip(reader.pages, spots):
+                if backs:
+                    _on_front(pages)
+                if spot is not None:
+                    stamps[len(pages)] = (url, spot)
                 pages.append((p, stamp))
-                _on_back(pages, _back_of_drawing(*_size(p), url, a.part_no, tx(marks.done_label(ctx, a.part_no)), tx("Plan {0}", plan.no)))
+                if codes and spot is None:
+                    place(_back_of_drawing(*_size(p), url, a.part_no, tx(marks.done_label(ctx, a.part_no)), tx("Plan {0}", plan.no)))
     if backs:
         _on_front(pages)
     writer = PdfWriter()
@@ -436,6 +509,8 @@ def build(ctx: Context, plan: AssemblyPlan, doc: Doc, base_url: str, only: str |
         added.transfer_rotation_to_content()
         w, h = float(added.mediabox.width), float(added.mediabox.height)
         added.merge_page(_overlay(w, h, title, tx("Sayfa {0} / {1}", i, len(pages)), stamp))
+        if i - 1 in stamps:
+            _put_qr(added, *stamps[i - 1])
     writer.add_metadata({"/Title": tx("Montaj planı {0}", plan.no)})
     return _write(writer, backs)
 
@@ -449,8 +524,9 @@ def _write(writer: PdfWriter, duplex: bool = True) -> bytes:
     return out.getvalue()
 
 
-def drawings_with_qr(ctx: Context, part_nos: list[str], base_url: str) -> bytes | None:
-    """The drawings as they are, in colour, each page with its code on the back. None when no part has a PDF drawing."""
+def drawings_with_qr(ctx: Context, part_nos: list[str], base_url: str, front: bool = False) -> bytes | None:
+    """The drawings in colour, each page with its code on the back, or with `front` on the page itself where it has an
+    empty place and otherwise on the next page. None when no part has a PDF drawing."""
     _fonts()
     writer = PdfWriter()
     for part_no in dict.fromkeys(part_nos):
@@ -461,16 +537,21 @@ def drawings_with_qr(ctx: Context, part_nos: list[str], base_url: str) -> bytes 
         if d is None or v is None or d.ext.lower().lstrip(".") != "pdf" or not Path(v.storage_path).exists():
             continue
         try:
-            reader = PdfReader(v.storage_path)
-            sources = list(reader.pages)
+            data = Path(v.storage_path).read_bytes()
+            sources = list(PdfReader(BytesIO(data)).pages)
+            spots = _free_spots(data) if front else [None] * len(sources)
         except Exception:  # one damaged file must not cost the rest
             continue
         url = marks.part_url(base_url, ctx.project.id, part_no)
-        for p in sources:
+        for p, spot in zip(sources, spots):
             size = _size(p)
-            writer.add_page(p)
-            writer.add_page(_back_of_drawing(*size, url, part_no, tx(marks.done_label(ctx, part_no)), ctx.project.name))
-    return _write(writer) if len(writer.pages) else None
+            added = writer.add_page(p)
+            if spot is not None:
+                added.transfer_rotation_to_content()
+                _put_qr(added, url, spot)
+            else:
+                writer.add_page(_back_of_drawing(*size, url, part_no, tx(marks.done_label(ctx, part_no)), ctx.project.name))
+    return _write(writer, not front) if len(writer.pages) else None
 
 
 @dataclass

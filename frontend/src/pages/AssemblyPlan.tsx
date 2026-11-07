@@ -201,6 +201,7 @@ function printChoices(base: string, name: string, foy: string, fail: (e: unknown
   const one = foy ? `foy=${encodeURIComponent(foy)}` : "";
   const get = (path: string, file: string) => () => { download(`${base}/${path}`, file).catch(fail); };
   return [
+    { label: tx("QR resimde"), hint: tx("Antetin üstündeki boş yere küçük QR basar, sayı ve çizgilerin üstüne binmez. Yer yoksa QR sonraki sayfaya gelir."), run: get(`pdf?qr=front${one && `&${one}`}`, `${name}.pdf`) },
     { label: tx("QR arkada"), hint: tx("Çift taraflı yazdırın: QR kodlar resimlerin arkasına gelir."), run: get(`pdf${one && `?${one}`}`, `${name}.pdf`) },
     { label: tx("QR'sız"), hint: tx("Tek taraflı yazıcı için. Resimlere dokunmaz, arka sayfa eklemez."), run: get(`pdf?qr=none${one && `&${one}`}`, `${name}.pdf`) },
     { label: tx("QR etiketleri"), hint: tx("70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın."), run: get(`codes?layout=labels${one && `&${one}`}`, `${name}_qr_etiket.pdf`) },

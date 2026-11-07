@@ -502,6 +502,8 @@ PDF asks for long-edge double-sided printing. In the **Drawings** page, **Print 
 
 **Other ways to use the codes.** The back of a drawing does not suit every job, so the print menus offer more. None of them changes a drawing:
 
+- **QR on the drawing** prints a small 20 mm code in the empty place right above the title block, on one side of the paper. It never
+  covers numbers or lines. A page with no such place gets its code on the next page.
 - **No QR** prints the plan single-sided, with no back pages or blanks.
 - **QR labels** gives A4 sheets of 24 stickers of 70 x 37 mm, for the part, its box or a drawing that is already printed. Print at 100% scale.
 - **QR list** puts every code on one list to keep at the workplace.

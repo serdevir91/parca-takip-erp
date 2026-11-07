@@ -3075,5 +3075,7 @@
 "Tek taraflı yazıcı için. Resimlere dokunmaz, arka sayfa eklemez.": "For single-sided printers. Leaves the drawings as they are and adds no back pages.",
 "70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın.": "70 x 37 mm, 24 labels per A4 sheet. Stick them on the part, the box or a printed drawing. Print at 100% scale.",
 "Tüm kodlar tek listede. İş başında panoda durur.": "All codes on one list, to keep on a board at the workplace.",
-"Kağıtsız onay: resimle birlikte onay ekranını açar": "Paperless confirmation: opens the confirmation screen with the drawing"
+"Kağıtsız onay: resimle birlikte onay ekranını açar": "Paperless confirmation: opens the confirmation screen with the drawing",
+"QR resimde": "QR on the drawing",
+"Antetin üstündeki boş yere küçük QR basar, sayı ve çizgilerin üstüne binmez. Yer yoksa QR sonraki sayfaya gelir.": "Prints a small QR in the empty place above the title block, never over numbers or lines. With no room, the QR goes on the next page."
 }

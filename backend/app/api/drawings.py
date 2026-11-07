@@ -155,13 +155,14 @@ def project_zip(pid: int, body: ZipIn, background: BackgroundTasks, db: Session 
 
 class PrintIn(BaseModel):
     part_nos: list[str] = Field(min_length=1, max_length=2000)
+    place: Literal["back", "front"] = "back"
 
 
 @router.post("/projects/{pid}/drawings/print")
 def project_print(pid: int, body: PrintIn, request: Request, db: Session = Depends(get_db), user: User = Depends(file_user)) -> Response:
     """One PDF of the chosen parts' drawings for double-sided printing, with a QR code on the back of each page."""
     project = project_or_404(db, pid)
-    data = assembly_pdf.drawings_with_qr(assembly.context(db, project), body.part_nos, assembly_base_url(request))
+    data = assembly_pdf.drawings_with_qr(assembly.context(db, project), body.part_nos, assembly_base_url(request), body.place == "front")
     if data is None:
         raise HTTPException(404, tx("Seçime uyan PDF resim yok"))
     name = quote(f"{svc.safe_filename(project.name)}_resimler_qr.pdf")

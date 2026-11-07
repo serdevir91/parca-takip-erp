@@ -129,7 +129,10 @@ Read this file first. Do not re-scan the whole project.
   `POST /scan/mark` is only a preview; `POST /scan/mark/apply` books. `assembly_scans` (migration 0015) stops a second read from adding
   a plan's quantity again, because an earlier plan may have taken the parts. `assembly_pdf.build` keeps fronts on odd pages with
   `_on_front` and QR pages on even pages with `_on_back`. Frontend route `q/*` renders `pages/Scan.tsx`.
-- QR without the back: `pdf?qr=none` prints single-sided (`backs=False`, no duplex preference). `GET .../plans/{id}/codes` and
+- QR on the drawing: `pdf?qr=front` and `drawings/print` with `place=front`. `_free_spot` renders the page, maps ink to a 1 mm grid and takes
+  the empty 24 mm square nearest the bottom right, in the lower right of the sheet and above `_title_top`, because title block cells can be
+  empty. No spot means a code page after it, never a code over ink. `_put_qr` needs an upright page, so call `transfer_rotation_to_content` first.
+- QR without the back: `pdf?qr=none` prints single-sided (no duplex preference). `GET .../plans/{id}/codes` and
   `POST /projects/{id}/drawings/codes` give `layout=labels` (3 x 8 of 70 x 37 mm) or `layout=list` from `plan_codes` / `part_codes`.
   Codes are the same `/q/` links, so booking rules do not change. `components/PrintMenu.tsx` is the shared menu.
 - `app/cli.py` provides:

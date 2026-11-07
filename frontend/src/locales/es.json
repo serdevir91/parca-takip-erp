@@ -3079,5 +3079,7 @@
 "Tek taraflı yazıcı için. Resimlere dokunmaz, arka sayfa eklemez.": "Para impresión a una cara. No cambia los planos ni añade dorsos.",
 "70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın.": "70 x 37 mm, 24 etiquetas por hoja A4. Péguelas en la pieza, la caja o un plano impreso. Imprima a escala 100 %.",
 "Tüm kodlar tek listede. İş başında panoda durur.": "Todos los códigos en una lista, para tenerla en el puesto de trabajo.",
-"Kağıtsız onay: resimle birlikte onay ekranını açar": "Confirmación sin papel: abre la pantalla de confirmación con el plano"
+"Kağıtsız onay: resimle birlikte onay ekranını açar": "Confirmación sin papel: abre la pantalla de confirmación con el plano",
+"QR resimde": "QR en el plano",
+"Antetin üstündeki boş yere küçük QR basar, sayı ve çizgilerin üstüne binmez. Yer yoksa QR sonraki sayfaya gelir.": "Imprime un QR pequeño en el espacio libre sobre el cajetín, nunca sobre cifras o líneas. Si no hay sitio, el QR pasa a la página siguiente."
 }

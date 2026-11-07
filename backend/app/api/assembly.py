@@ -269,7 +269,7 @@ def _attachment(data: bytes, media: str, name: str) -> Response:
 
 
 @router.get("/{pid}/assembly/plans/{plan_id}/pdf")
-def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, qr: Literal["back", "none"] = "back",
+def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, qr: Literal["back", "front", "none"] = "back",
              db: Session = Depends(get_db), _: User = Depends(view_level)) -> Response:
     project = project_or_404(db, pid)
     _needs_bom(project)
@@ -278,7 +278,7 @@ def plan_pdf(pid: int, plan_id: int, request: Request, foy: str | None = None, q
     doc = ctx.docs[plan.id]
     if foy is not None and doc.foy(foy) is None:
         raise HTTPException(404, tx("Föy bulunamadı"))
-    data = assembly_pdf.build(ctx, plan, doc, base_url(request), foy, qr == "back")
+    data = assembly_pdf.build(ctx, plan, doc, base_url(request), foy, qr)
     return _attachment(data, "application/pdf", f"montaj_plani_{plan.no}{'_' + foy if foy else ''}.pdf")
 
 

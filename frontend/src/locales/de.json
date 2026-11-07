@@ -3077,5 +3077,7 @@
 "Tek taraflı yazıcı için. Resimlere dokunmaz, arka sayfa eklemez.": "Für einseitigen Druck. Lässt die Zeichnungen unverändert und fügt keine Rückseiten hinzu.",
 "70 x 37 mm, A4'te 24 etiket. Parçaya, kutuya veya basılı resme yapıştırın. %100 ölçekle yazdırın.": "70 x 37 mm, 24 Etiketten pro A4-Blatt. Auf Teil, Kiste oder gedruckte Zeichnung kleben. Mit 100 % Skalierung drucken.",
 "Tüm kodlar tek listede. İş başında panoda durur.": "Alle Codes in einer Liste für die Tafel am Arbeitsplatz.",
-"Kağıtsız onay: resimle birlikte onay ekranını açar": "Papierlose Bestätigung: öffnet den Bestätigungsbildschirm mit der Zeichnung"
+"Kağıtsız onay: resimle birlikte onay ekranını açar": "Papierlose Bestätigung: öffnet den Bestätigungsbildschirm mit der Zeichnung",
+"QR resimde": "QR auf der Zeichnung",
+"Antetin üstündeki boş yere küçük QR basar, sayı ve çizgilerin üstüne binmez. Yer yoksa QR sonraki sayfaya gelir.": "Druckt einen kleinen QR in den freien Bereich über dem Schriftfeld, nie über Zahlen oder Linien. Ohne Platz kommt der QR auf die nächste Seite."
 }

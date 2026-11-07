@@ -582,3 +582,87 @@ def test_project_codes_cover_parts_without_a_pdf_drawing(client, admin_headers, 
         assert r.status_code == 200, r.text
         assert part in PdfReader(BytesIO(r.content)).pages[0].extract_text()
     assert client.post(url, json={"part_nos": ["NOPE"]}, headers=admin_headers).status_code == 404
+
+
+def sheet(path, rotate=0, full=False):
+    """A landscape A4 drawing with a frame, a title block in the corner and a view, or nothing but ink."""
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen.canvas import Canvas
+    w, h = landscape(A4)
+    c = Canvas(str(path), pagesize=(w, h))
+    if full:
+        c.rect(0, 0, w, h, stroke=0, fill=1)
+    else:
+        c.rect(10 * mm, 10 * mm, w - 20 * mm, h - 20 * mm)
+        c.rect(w - 130 * mm, 10 * mm, 120 * mm, 40 * mm)
+        c.rect(30 * mm, 90 * mm, 90 * mm, 80 * mm, fill=1)
+    c.save()
+    if rotate:
+        from pypdf import PdfWriter
+        writer = PdfWriter(clone_from=str(path))
+        page = writer.pages[0]
+        page.rotate(rotate)
+        writer.write(str(path))
+    return w, h
+
+
+def test_free_spot_sits_right_above_the_title_block_and_touches_nothing(tmp_path):
+    f = tmp_path / "a.pdf"
+    w, h = sheet(f)
+    x, y = assembly_pdf._free_spot(pdfium.PdfDocument(str(f))[0])
+    mm = 72 / 25.4
+    assert w - 130 * mm < x and x + 20 * mm < w - 10 * mm
+    assert 50 * mm < y < 56 * mm
+    sheet(f, full=True)
+    assert assembly_pdf._free_spot(pdfium.PdfDocument(str(f))[0]) is None
+
+
+@pytest.mark.parametrize("rotate", [0, 90])
+def test_code_on_the_drawing_changes_nothing_but_its_own_empty_square(tmp_path, rotate):
+    from PIL import ImageChops
+    from pypdf import PdfWriter
+    f = tmp_path / "a.pdf"
+    sheet(f, rotate)
+    data = f.read_bytes()
+    spot = assembly_pdf._free_spots(data)[0]
+    writer = PdfWriter()
+    page = writer.add_page(PdfReader(BytesIO(data)).pages[0])
+    page.transfer_rotation_to_content()
+    assembly_pdf._put_qr(page, "http://x/q/P1-A", spot)
+    out = BytesIO()
+    writer.write(out)
+    before = pdfium.PdfDocument(data)[0].render(scale=2).to_pil().convert("L")
+    after = pdfium.PdfDocument(out.getvalue())[0].render(scale=2).to_pil().convert("L")
+    assert before.size == after.size
+    left, top, right, bottom = ImageChops.difference(before, after).getbbox()
+    size = 20 * 72 / 25.4
+    h = before.size[1] / 2
+    assert left / 2 >= spot[0] - 1 and right / 2 <= spot[0] + size + 1
+    assert top / 2 >= h - spot[1] - size - 1 and bottom / 2 <= h - spot[1] + 1
+
+
+def test_plan_with_code_on_the_drawing_is_single_sided_and_full_sheet_falls_to_next_page(client, admin_headers, t01, tmp_path):
+    pid, plan = t01
+    part = "T01_0600_0003"
+    drawing(pid, part, tmp_path)
+    set_plan_mode(plan, "pages")
+    r = client.get(f"/api/projects/{pid}/assembly/plans/{plan}/pdf?qr=front", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    reader = PdfReader(BytesIO(r.content))
+    pages = [p.extract_text() for p in reader.pages]
+    assert sum(f"· {part}" in t for t in pages) == 2
+    assert not any("Bitince okutun" in t and part in t and "Plan" in t for t in pages)
+    img = pdfium.PdfDocument(r.content)[next(i for i, t in enumerate(pages) if f"· {part}" in t)].render(scale=1).to_pil().convert("L")
+    w, h = img.size
+    assert img.crop((w // 2, h // 2, w, h - 40)).point(lambda v: 255 if v < 128 else 0).getbbox() is not None
+    assert all(t.strip() for t in pages)
+    assert "/ViewerPreferences" not in reader.trailer["/Root"]
+    from app import models
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        for d in db.query(models.Drawing).filter_by(part_no=part):
+            sheet(d.versions[0].storage_path, full=True)
+    r = client.post(f"/api/projects/{pid}/drawings/print", json={"part_nos": [part], "place": "front"}, headers=admin_headers)
+    pages = [p.extract_text() for p in PdfReader(BytesIO(r.content)).pages]
+    assert len(pages) == 2 and "Bitince okutun" in pages[1]
