@@ -9,6 +9,7 @@ import ipaddress
 import json
 import logging
 import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -104,25 +105,52 @@ def _broadcast(timeout: float) -> dict[str, dict]:
     return found
 
 
+def _any_cert() -> ssl.SSLContext:
+    """A LAN server's certificate is self-signed. The probe only asks whether a server is there and sends no
+    token; the shell pins the certificate when it connects."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+_PROBE_TLS = _any_cert()
+
+
 def _probe(url: str) -> bool:
     try:
-        with urlopen(f"{url}/api/health", timeout=0.6) as r:
+        with urlopen(f"{url}/api/health", timeout=0.6, context=_PROBE_TLS) as r:
             return json.loads(r.read().decode()).get("status") == "ok"
     except (OSError, ValueError):
         return False
 
 
+def _probe_host(host: str, port: int) -> str | None:
+    """URL of the server on host:port, or None. Tries plain http first, then https: a native server with
+    HTTPS on answers a plain request with an empty reply."""
+    try:
+        socket.create_connection((host, port), timeout=0.6).close()
+    except OSError:
+        return None
+    for scheme in ("http", "https"):
+        url = f"{scheme}://{host}" + ("" if (scheme, port) in (("http", 80), ("https", 443)) else f":{port}")
+        if _probe(url):
+            return url
+    return None
+
+
 def discover(timeout: float = 1.5, ports: tuple[int, ...] = (8000, 80, 8080)) -> list[dict]:
-    """Servers on the LAN: UDP answers first, then a /24 health probe on the usual ports (Docker servers)."""
+    """Servers on the LAN: UDP answers first, then a /24 health probe on the usual ports, over http and https
+    (Docker servers, and native servers when the broadcast does not get through, e.g. Wi-Fi to a wired PC)."""
     found = _broadcast(timeout)
     if not found:
-        urls = [f"http://{h}" + ("" if p == 80 else f":{p}")
-                for ip in _local_ipv4()
-                for h in map(str, ipaddress.ip_network(f"{ip}/24", strict=False).hosts())
-                for p in ports]
+        targets = [(h, p)
+                   for ip in _local_ipv4()
+                   for h in map(str, ipaddress.ip_network(f"{ip}/24", strict=False).hosts())
+                   for p in ports]
         with ThreadPoolExecutor(max_workers=128) as ex:
-            for url, ok in zip(urls, ex.map(_probe, urls)):
-                if ok:
+            for url in ex.map(lambda t: _probe_host(*t), targets):
+                if url:
                     found[url] = {"url": url, "name": url.split("//", 1)[1].split(":")[0], "version": None}
     return sorted(found.values(), key=lambda s: s["url"])
 

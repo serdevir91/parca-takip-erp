@@ -7,8 +7,10 @@ import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +28,8 @@ import org.json.JSONObject;
 
 /**
  * Finds ERP servers on the local network, like the desktop client (backend/app/services/discovery.py):
- * a UDP broadcast that native servers answer, then a /24 probe of /api/health for Docker servers.
+ * a UDP broadcast that native servers answer, then a /24 probe of /api/health over http and https for Docker
+ * servers and for native servers the broadcast does not reach.
  */
 final class Discovery {
     static final int PORT = 47811;
@@ -106,10 +109,19 @@ final class Discovery {
             for (int host = 1; host < 255; host++) {
                 final String ip = (b[0] & 255) + "." + (b[1] & 255) + "." + (b[2] & 255) + "." + host;
                 for (int port : HTTP_PORTS) {
-                    final String url = "http://" + ip + (port == 80 ? "" : ":" + port);
                     pool.execute(() -> {
-                        JSONObject info = check(url, 350);
-                        if (info != null) found.put(url, info);
+                        if (!open(ip, port, 350)) return;
+                        // Plain http first, then https: a server with HTTPS on answers plain http with an
+                        // empty reply, so an http-only probe never finds it when the broadcast is filtered
+                        // (typical between Wi-Fi and a wired PC).
+                        for (String scheme : new String[]{"http", "https"}) {
+                            String url = scheme + "://" + ip + (port == 80 && "http".equals(scheme) ? "" : ":" + port);
+                            JSONObject info = check(url, 350);
+                            if (info != null) {
+                                found.put(url, info);
+                                return;
+                            }
+                        }
                     });
                 }
             }
@@ -120,6 +132,16 @@ final class Discovery {
         } catch (InterruptedException ignored) {
         }
         pool.shutdownNow();
+    }
+
+    /** True when something accepts a TCP connection on ip:port; skips the http and https checks otherwise. */
+    private static boolean open(String ip, int port, int timeoutMs) {
+        try (Socket s = new Socket()) {
+            s.connect(new InetSocketAddress(ip, port), timeoutMs);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** {url, name, version} when `base` is an ERP server, else null. */
