@@ -95,3 +95,4 @@ def ensure_jwt_secret(cfg: Settings) -> None:
         except OSError:  # read-only data dir: the secret lasts until the next restart
             pass
     cfg.jwt_secret = stored
+
