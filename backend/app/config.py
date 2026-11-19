@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     admin_password: str = "admin"
     # Interactive API docs at /api/docs (off by default: they map the whole API without a login)
     api_docs: bool = False
-    app_version: str = "1.9.4"
+    app_version: str = "1.9.5"
     # Optional URL of a JSON file {"version": "x.y.z", "notes": "..."} on the LAN
     update_feed_url: str = ""
     max_upload_mb: int = 2048
@@ -95,4 +95,3 @@ def ensure_jwt_secret(cfg: Settings) -> None:
         except OSError:  # read-only data dir: the secret lasts until the next restart
             pass
     cfg.jwt_secret = stored
-

@@ -1,6 +1,10 @@
 Windows desktop app: download and run `LabERP-Setup-x.y.z.exe`.
 Android app: download and install `LabERP-x.y.z.apk` on the phone (Android 8.0 and later). This file works on every phone; the `-arm64-v8a`, `-armeabi-v7a`, `-x86_64` and `-x86` files are processor-specific builds.
 
+## What's new in 1.9.5
+
+- **Finding the server from a phone.** "Scan network" now also finds a server that uses HTTPS when the phone is on Wi-Fi and the server computer is on a cable. Before, the search came back empty in that case. "Search the network for a server" in the Windows app gets the same fix.
+
 ## What's new in 1.9.4
 
 - **QR on real drawings.** The print choice that puts a QR code on the drawing now handles tinted sheets, screenshots, faint watermarks, shaded 3D views and frames with a zone strip. The code gets a white background, so a phone can read it on a beige or grey sheet.
